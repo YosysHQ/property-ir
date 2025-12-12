@@ -202,10 +202,6 @@ def get_sort(expr: str) -> type:
 
 
 def main():
-    print("Hello from property-ir!")
-
-
-if __name__ == "__main__":
 
     test_expr1 = '(or (and a b) (not (and (not a) c)) d)'
 
@@ -234,5 +230,9 @@ if __name__ == "__main__":
     expr_to_list(test_expr3)
     expr_to_list(test_expr4)
     expr_to_list(test_expr5)
+
+
+
+if __name__ == "__main__":
 
     main()
