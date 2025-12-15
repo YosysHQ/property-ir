@@ -1,8 +1,12 @@
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
-from typing import Literal, List, Optional, Any
+from dataclasses import dataclass, fields
+from typing import Literal, List, Optional, Any, Set, Dict, get_origin, get_args
 from typeguard import typechecked
 import re
+
+
+
+Uninitialized = Literal["uninitialized"]
 
 
 
@@ -28,18 +32,30 @@ class Property(PropertyIrNode):
 
 
 
+@typechecked
+@dataclass
+class Int(PropertyIrNode):
+    value: int
+
+
+@typechecked
+@dataclass
+class IntOrInf(PropertyIrNode):
+    value: int | Literal['$']
+
+
 
 @typechecked
 @dataclass
 class Range(PropertyIrNode):
-    lower_bound: int
-    upper_bound: int | Literal['$']
+    lower_bound: Int
+    upper_bound: IntOrInf
 
 @typechecked
 @dataclass
 class BoundedRange(Range):
-    lower_bound: int
-    upper_bound: int
+    lower_bound: Int
+    upper_bound: Int
 
 
 
@@ -59,11 +75,13 @@ class And(Bool):
 class Or(Bool):
     children: List[Bool]
 
+# not an operation
 @typechecked
 @dataclass
 class Signal(Bool):
     signal_name: str
 
+# not an operation
 @typechecked
 @dataclass
 class Constant(Bool):
@@ -97,42 +115,59 @@ class SeqRepeat(Sequence):
 @typechecked
 @dataclass
 class PropAlways(Property):
-    child1: Optional[Range]
-    child2: Property
+    child1: Optional[Range] | Uninitialized
+    child2: Property | Uninitialized
 
 @typechecked
 @dataclass
 class PropAnd(Property):
-    children: List[Property]
+    children: List[Property] | Uninitialized
 
 @typechecked
 @dataclass
 class PropSeq(Property):
-    child: Sequence
+    child: Sequence | Uninitialized
 
 @typechecked
 @dataclass
 class PropNonOverlappedImplication(Property):
-    child1: Sequence
-    child2: Property
+    child1: Sequence | Uninitialized
+    child2: Property | Uninitialized
 
 
 
 
-def operation_to_class(input: str) -> str:
+def operation_to_class_str(input: str) -> str:
     splitted: List[str] = input.split('-')
     capitalized : List[str] = [str.capitalize(s) for s in splitted]
     return(''.join(capitalized))
 
 
-def class_to_operation(input: str) -> str:
+def class_to_operation_str(input: str) -> str:
     splitted: List[str] = re.split(r'(?=[A-Z])', input)
-    lowercase: List[str] = [str.lower(s) for s in splitted]
+    lowercase: List[str] = [str.lower(s) for s in splitted if s != '']
     return('-'.join(lowercase))
 
 
+def get_op_symbols() -> Dict[str, type]:
+    allowed_sorts = [Bool, Sequence, Property]
+    ops_to_cls: Dict[str, type] = dict()
+    ops_to_sort: Dict[str, type] = dict()
+    
+    for sort in allowed_sorts:
+        for cls in sort.__subclasses__():
+            if cls not in [Constant, Signal]:
+                ops_to_cls[class_to_operation_str(cls.__name__)] = cls
+                ops_to_sort[class_to_operation_str(cls.__name__)] = sort
+
+    return ops_to_cls, ops_to_sort
 
 
+op_to_cls, op_to_sort = get_op_symbols()
+
+
+print(op_to_cls)
+print(op_to_sort)
 
 
 
@@ -182,12 +217,83 @@ def expr_to_list(expr: str) -> List[Any]:
 
 
 
-def get_parse_tree(expr: str) -> List[Any]:
 
-    pass
+@typechecked
+def parse_expression(expr_list: List[Any], expected_sort: Optional[type], signals: Dict[str, Signal], node_refs: Dict[str, PropertyIrNode]) -> PropertyIrNode:
+
+    #if expr_list is str or expr_list is int:
+
+    if len(expr_list) == 0:
+        raise ValueError('Expression must not contain empty list')
+
+    root_symbol: str = expr_list[0]
+
+    if len(expr_list) == 1:
+        if root_symbol in signals:
+            return signals[root_symbol]
+        elif root_symbol in node_refs:
+            return node_refs[root_symbol]
+        elif type(root_symbol) is int:
+            return Int(root_symbol)
+        elif root_symbol == '$':
+            return IntOrInf('$')
+        else:
+            raise ValueError(f'Unexpected symbol {root_symbol}')
+
+    elif root_symbol in op_to_cls:
+        if expected_sort:
+            if expected_sort != op_to_sort[root_symbol]:
+                raise TypeError(f'Mismatch of expected sort {expected_sort} and operation "{root_symbol}" in {expr_list}')
+        root_class: type = op_to_cls[root_symbol]
+
+        print(root_symbol)
+        print(root_class)
+
+        expr_list.pop(0) # remove op symbol
+
+        children = []
+
+        for field in fields(root_class):
+            print(field)
+
+            if get_origin(field.type) is list:
+                list_elem_type: type = get_args(field.type)[0]
+                print("LIST")
+                print(list_elem_type)
+
+                # this assumes that the children list comes last
+                while len(expr_list) > 0:
+                    child_expr = expr_list.pop(0)
+                    print(child_expr)
+                    child_node = parse_expression(child_expr, list_elem_type, signals, node_refs)
+                    children.append(child_node)
+
+            else:
+                child_expected_sort = field.type
+                child_expr = expr_list.pop(0)
+                print(child_expr)
+                child_node = parse_expression(child_expr, child_expected_sort, signals, node_refs)
+                children.append(child_node)
+        
+        root_node = root_class(*children)
+
+        return root_node
 
 
-def parse_expression(expr: str) -> PropertyIrNode:
+
+
+
+    if root_symbol == 'let-rec':
+        pass
+
+
+
+
+
+
+
+
+
     pass
 
 
@@ -224,12 +330,20 @@ def main():
                         (prop-non-overlapped-implication (seq-bool true) prop1)))
                     prop1)"""
 
+    signal_dict = {'a': Signal('a'), 'b': Signal('b'), 'c': Signal('c')}
+
+
+    expr_list1: List[Any] = expr_to_list(test_expr1)
+    expr_list2: List[Any] = expr_to_list(test_expr2)
+    expr_list3: List[Any] = expr_to_list(test_expr3)
+    expr_list4: List[Any] = expr_to_list(test_expr4)
+    expr_list5: List[Any] = expr_to_list(test_expr5)
  
-    expr_to_list(test_expr1)
-    expr_to_list(test_expr2)
-    expr_to_list(test_expr3)
-    expr_to_list(test_expr4)
-    expr_to_list(test_expr5)
+    parse_expression(expr_list1, None, signal_dict, dict())
+    parse_expression(expr_list2, None, signal_dict, dict())
+    parse_expression(expr_list3, None, signal_dict, dict())
+    parse_expression(expr_list4, None, signal_dict, dict())
+    parse_expression(expr_list5, None, signal_dict, dict())
 
 
 
