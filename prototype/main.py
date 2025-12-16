@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, fields
-from typing import Literal, List, Optional, Any, Set, Dict, get_origin, get_args
+from typing import Literal, List, Optional, Any, Set, Dict, get_origin, get_args, Tuple, Union
 from typeguard import typechecked
 import re
 
@@ -115,7 +115,13 @@ class SeqRepeat(Sequence):
 @typechecked
 @dataclass
 class PropAlways(Property):
-    child1: Optional[Range] | Uninitialized
+    child: Property | Uninitialized
+
+
+@typechecked
+@dataclass
+class PropAlwaysRanged(Property):
+    child1: Range | Uninitialized
     child2: Property | Uninitialized
 
 @typechecked
@@ -149,7 +155,8 @@ def class_to_operation_str(input: str) -> str:
     return('-'.join(lowercase))
 
 
-def get_op_symbols() -> Dict[str, type]:
+@typechecked
+def get_op_symbols() -> Tuple[Dict[str, type], Dict[str, type]]:
     allowed_sorts = [Bool, Sequence, Property]
     ops_to_cls: Dict[str, type] = dict()
     ops_to_sort: Dict[str, type] = dict()
@@ -159,11 +166,16 @@ def get_op_symbols() -> Dict[str, type]:
             if cls not in [Constant, Signal]:
                 ops_to_cls[class_to_operation_str(cls.__name__)] = cls
                 ops_to_sort[class_to_operation_str(cls.__name__)] = sort
+    
+    ops_to_cls['range'] = Range
+    ops_to_sort['range'] = Range
 
     return ops_to_cls, ops_to_sort
 
 
-op_to_cls, op_to_sort = get_op_symbols()
+op_symbol_tables = get_op_symbols()
+op_to_cls: Dict[str, type] = op_symbol_tables[0]
+op_to_sort: Dict[str, type] = op_symbol_tables[1]
 
 
 print(op_to_cls)
@@ -219,72 +231,84 @@ def expr_to_list(expr: str) -> List[Any]:
 
 
 @typechecked
-def parse_expression(expr_list: List[Any], expected_sort: Optional[type], signals: Dict[str, Signal], node_refs: Dict[str, PropertyIrNode]) -> PropertyIrNode:
+def parse_expression(expr: List[Any] | str | int, expected_sort: Optional[type], signals: Dict[str, Signal], node_refs: Dict[str, PropertyIrNode]) -> PropertyIrNode:
 
-    #if expr_list is str or expr_list is int:
+    print(f"start with {expr}")
 
-    if len(expr_list) == 0:
-        raise ValueError('Expression must not contain empty list')
-
-    root_symbol: str = expr_list[0]
-
-    if len(expr_list) == 1:
-        if root_symbol in signals:
-            return signals[root_symbol]
-        elif root_symbol in node_refs:
-            return node_refs[root_symbol]
-        elif type(root_symbol) is int:
-            return Int(root_symbol)
-        elif root_symbol == '$':
+    if type(expr) is str or type(expr) is int:
+                
+        if expr in signals:
+            if not expected_sort is Bool:
+                raise TypeError(f'Mismatch of expected sort {expected_sort} and {expr} with sort {Bool} in {expr}')
+            return signals[expr]
+        elif expr in node_refs:
+            return node_refs[expr]
+        elif expr in ['true', 'false']:
+            if not expected_sort is Bool:
+                raise TypeError(f'Mismatch of expected sort {expected_sort} and {expr} with sort {Bool} in {expr}')
+            return Constant(expr)
+        elif expr == '$':
+            if not expected_sort is IntOrInf:
+                raise TypeError(f'Mismatch of expected sort {expected_sort} and {expr} with sort {IntOrInf} in {expr}')
             return IntOrInf('$')
+        elif type(expr) is int:
+            if not (expected_sort is Int or expected_sort is IntOrInf):
+                raise TypeError(f'Mismatch of expected sort {expected_sort} and {expr} with sort {type(expr)} in {expr}')
+            return Int(expr)
         else:
-            raise ValueError(f'Unexpected symbol {root_symbol}')
+            raise ValueError(f'Unexpected symbol {expr}')
 
-    elif root_symbol in op_to_cls:
+    elif len(expr) <= 0:
+        raise ValueError('Expression must not contain empty or singleton list')
+
+    root_symbol: str = expr.pop(0)
+    root_class: type = op_to_cls[root_symbol]
+
+    print(root_symbol)
+    print(root_class)
+
+    # TODO: fix case Union of uninitialized and list
+    if root_symbol in op_to_cls:
         if expected_sort:
-            if expected_sort != op_to_sort[root_symbol]:
-                raise TypeError(f'Mismatch of expected sort {expected_sort} and operation "{root_symbol}" in {expr_list}')
-        root_class: type = op_to_cls[root_symbol]
-
-        print(root_symbol)
-        print(root_class)
-
-        expr_list.pop(0) # remove op symbol
+            expected_sort_list = []
+            if get_origin(expected_sort) is Union:
+                expected_sort_list = get_args(expected_sort)
+            else:
+                expected_sort_list = [expected_sort]
+            if not op_to_sort[root_symbol] in expected_sort_list:
+                raise TypeError(f'Mismatch of expected sort {expected_sort} and operation "{root_symbol}" with sort {op_to_sort[root_symbol]} in {expr}')
 
         children = []
 
         for field in fields(root_class):
-            print(field)
 
-            if get_origin(field.type) is list:
+            if get_origin(field.type) is list or get_args(field.type) is list:
                 list_elem_type: type = get_args(field.type)[0]
-                print("LIST")
-                print(list_elem_type)
+                single_child_list = []
 
                 # this assumes that the children list comes last
-                while len(expr_list) > 0:
-                    child_expr = expr_list.pop(0)
-                    print(child_expr)
+                while len(expr) > 0:
+                    child_expr = expr.pop(0)
                     child_node = parse_expression(child_expr, list_elem_type, signals, node_refs)
-                    children.append(child_node)
+                    single_child_list.append(child_node)
+                children.append(single_child_list)
 
             else:
                 child_expected_sort = field.type
-                child_expr = expr_list.pop(0)
-                print(child_expr)
+                child_expr = expr.pop(0)
                 child_node = parse_expression(child_expr, child_expected_sort, signals, node_refs)
                 children.append(child_node)
         
         root_node = root_class(*children)
 
+        print(root_node)
         return root_node
-
-
 
 
 
     if root_symbol == 'let-rec':
         pass
+        # TODO expr with cycles
 
 
 
@@ -294,7 +318,6 @@ def parse_expression(expr_list: List[Any], expected_sort: Optional[type], signal
 
 
 
-    pass
 
 
 def print_expression(root: PropertyIrNode) -> str:
@@ -312,14 +335,17 @@ def main():
     test_expr1 = '(or (and a b) (not (and (not a) c)) d)'
 
     test_expr2 = """(seq-concat
-                        (seq-repeat 5 (seq-bool a))
+                        (seq-repeat (range 5 5) (seq-bool a))
                         (seq-concat (seq-bool b) (seq-bool c)))"""
     
-    test_expr3 = """(always
+    test_expr3 = """(prop-always-ranged
                         (range 4 $)
                         (prop-seq (seq-bool (not b))))"""
 
-    test_expr4 = """(always (prop-seq (seq-bool (not b))))"""
+    test_expr4 = """(prop-always (prop-and
+                        (prop-seq (seq-bool (not b)))
+                        (prop-seq (seq-bool a))
+                    ))"""
 
     test_expr5 = """(let-rec
                     (prop1 (prop-and
@@ -330,20 +356,29 @@ def main():
                         (prop-non-overlapped-implication (seq-bool true) prop1)))
                     prop1)"""
 
-    signal_dict = {'a': Signal('a'), 'b': Signal('b'), 'c': Signal('c')}
+    signal_dict = {'a': Signal('a'), 'b': Signal('b'), 'c': Signal('c'), 'd': Signal('d')}
 
 
     expr_list1: List[Any] = expr_to_list(test_expr1)
+    print()
     expr_list2: List[Any] = expr_to_list(test_expr2)
+    print()
     expr_list3: List[Any] = expr_to_list(test_expr3)
+    print()
     expr_list4: List[Any] = expr_to_list(test_expr4)
+    print()
     expr_list5: List[Any] = expr_to_list(test_expr5)
+    print()
  
     parse_expression(expr_list1, None, signal_dict, dict())
+    print()
     parse_expression(expr_list2, None, signal_dict, dict())
+    print()
     parse_expression(expr_list3, None, signal_dict, dict())
+    print()
     parse_expression(expr_list4, None, signal_dict, dict())
-    parse_expression(expr_list5, None, signal_dict, dict())
+    print()
+    #parse_expression(expr_list5, None, signal_dict, dict())
 
 
 
