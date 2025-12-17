@@ -6,7 +6,7 @@ import re
 
 
 
-Uninitialized = Literal["uninitialized"]
+Uninitialized = Literal['uninitialized']
 
 
 
@@ -231,7 +231,13 @@ def expr_to_list(expr: str) -> List[Any]:
 
 
 @typechecked
-def parse_expression(expr: List[Any] | str | int, expected_sort: Optional[type], signals: Dict[str, Signal], node_refs: Dict[str, PropertyIrNode]) -> PropertyIrNode:
+def parse_expression(
+    expr: List[Any] | str | int,
+    expected_sort: Optional[type],
+    signals: Dict[str, Signal],
+    node_refs: Dict[str, PropertyIrNode],
+    node_refs_sorts: Dict[str, type],
+    root_node_ref: Optional[PropertyIrNode] = None) -> PropertyIrNode:
 
     print(f"start with {expr}")
 
@@ -262,14 +268,17 @@ def parse_expression(expr: List[Any] | str | int, expected_sort: Optional[type],
         raise ValueError('Expression must not contain empty or singleton list')
 
     root_symbol: str = expr.pop(0)
-    root_class: type = op_to_cls[root_symbol]
-
-    print(root_symbol)
-    print(root_class)
 
     # check if root symbol has correct sort
     # assuming that the expected sort is unambigious (Uninitialized already removed and no Union/List allowed)
     if root_symbol in op_to_cls:
+
+        root_class: type = op_to_cls[root_symbol]
+
+        if not root_node_ref is None:
+            if not type(root_node_ref) is root_class:
+                raise TypeError(f'Mismatch of expected operation {type(root_node_ref)} and actual operation {root_class} at {expr}')
+
         if expected_sort:
             if not op_to_sort[root_symbol] is expected_sort:
                 raise TypeError(f'Mismatch of expected sort {expected_sort} and operation "{root_symbol}" with sort {op_to_sort[root_symbol]} at {expr}')
@@ -297,29 +306,87 @@ def parse_expression(expr: List[Any] | str | int, expected_sort: Optional[type],
                 # this assumes that the children list comes as the last parameter of the root operation
                 while len(expr) > 0:
                     child_expr = expr.pop(0)
-                    child_node = parse_expression(child_expr, list_elem_type, signals, node_refs)
+                    child_node = parse_expression(child_expr, list_elem_type, signals, node_refs, node_refs_sorts)
                     single_child_list.append(child_node)
                 children.append(single_child_list)
 
             else:
                 child_expr = expr.pop(0)
-                child_node = parse_expression(child_expr, child_expected_sort, signals, node_refs)
+                child_node = parse_expression(child_expr, child_expected_sort, signals, node_refs, node_refs_sorts)
                 children.append(child_node)
         
-        root_node = root_class(*children)
 
-        print(root_node)
-        return root_node
+        if root_node_ref is None:
+            root_node = root_class(*children)
+            print(root_node)
+            return root_node
+        else:
+            for index, field in enumerate(fields(root_node_ref)):
+                # set uninitialized children of the root node argument
+                setattr(root_node_ref, field.name, children[index])
+            print(root_node_ref)
+            return root_node_ref
+            
 
 
 
     if root_symbol == 'let-rec':
-        pass
-        # TODO expr with cycles
 
+        if len(expr) < 2:
+            raise ValueError(f'let-rec requires at least 2 parameters, {len(expr)} given in {expr}')
 
+        # get return value identifier
+        return_value_id: str = expr.pop()
 
+        new_node_ids = []
 
+        # create nodes for identifiers
+        for child_definition in expr:
+
+            if len(child_definition) != 3:
+                raise ValueError(f'let-rec requires a definition to consist of 3 parameters, {len(child_definition)} given in {child_definition}')
+
+            child_id = child_definition[0]
+
+            # check that none of the identifiers are already in use
+            if child_id in node_refs or child_id in new_node_ids:
+                raise ValueError(f'Identifier {child_id} already in use in {child_definition}')
+            new_node_ids.append(child_id)
+
+            child_operation = child_definition[1]
+            child_expression = child_definition[2]
+
+            child_class: type = op_to_cls[child_operation]
+            child_sort: type = op_to_sort[child_operation]
+
+            # restrict to only the sorts that can be cyclic
+            # which at the moment are properties
+            # add other sorts later (automata states and property variants)
+            if not child_sort is Property:
+                raise TypeError(f'let-rec with forbidden sort {child_sort} in {child_definition}')
+
+            # set sort dict for identifiers
+            node_refs_sorts[child_id] = child_sort
+
+            # set dict with uninitialized nodes
+            child_param_num = len(fields(child_class))
+            node_refs[child_id] = child_class(*['uninitialized' for i in range(child_param_num)])
+
+        # check that the return value identifier is one of the defined ones
+        if not return_value_id in new_node_ids:
+            raise ValueError(f'let-rec return value identifier {return_value_id} not among the previously defined identifiers {new_node_ids}')
+
+        # recursion for defined subexpressions
+        for [child_id, child_operation, child_expression] in expr:
+            
+            # usually the recursive call would create a new node for the root operation
+            # but we already create that node earlier
+            # give the root node object as an additional optional parameter
+            # the uninitialized children of the root node object are set in the subcall
+            parse_expression(child_expression, node_refs_sorts[child_id], signals, node_refs, node_refs_sorts, node_refs[child_id])
+
+        # return value of return value identifier
+        return node_refs[return_value_id]
 
 
 
@@ -354,14 +421,17 @@ def main():
                         (prop-seq (seq-bool a))
                     ))"""
 
+    # give not sort but root operation of each named subexpression as a parameter
+    # to be able to immediately create the correct node
+    # in case the expression again starts with let-rec
     test_expr5 = """(let-rec
-                    (prop1 (prop-and
-                        (prop-bool a)
-                        (prop-non-overlapped-implication (seq-bool true) prop2)))
-                    (prop2 (prop-and
-                        (prop-bool b)
-                        (prop-non-overlapped-implication (seq-bool true) prop1)))
-                    prop1)"""
+                        (prop1 prop-and (prop-and
+                            (prop-seq (seq-bool a))
+                            (prop-non-overlapped-implication (seq-bool true) prop2)))
+                        (prop2 prop-and (prop-and
+                            (prop-seq (seq-bool a))
+                            (prop-non-overlapped-implication (seq-bool true) prop1)))
+                        prop1)"""
 
     signal_dict = {'a': Signal('a'), 'b': Signal('b'), 'c': Signal('c'), 'd': Signal('d')}
 
@@ -377,15 +447,15 @@ def main():
     expr_list5: List[Any] = expr_to_list(test_expr5)
     print()
  
-    parse_expression(expr_list1, None, signal_dict, dict())
+    parse_expression(expr_list1, None, signal_dict, dict(), dict())
     print()
-    parse_expression(expr_list2, None, signal_dict, dict())
+    parse_expression(expr_list2, None, signal_dict, dict(), dict())
     print()
-    parse_expression(expr_list3, None, signal_dict, dict())
+    parse_expression(expr_list3, None, signal_dict, dict(), dict())
     print()
-    parse_expression(expr_list4, None, signal_dict, dict())
+    parse_expression(expr_list4, None, signal_dict, dict(), dict())
     print()
-    #parse_expression(expr_list5, None, signal_dict, dict())
+    parse_expression(expr_list5, None, signal_dict, dict(), dict())
 
 
 
