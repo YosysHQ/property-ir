@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, fields
 from typing import Literal, List, Optional, Any, Set, Dict, get_origin, get_args, Tuple, Union
@@ -8,12 +10,63 @@ import re
 
 Uninitialized = Literal['uninitialized']
 
+type NodeId = int
 
+class UnionFind[T]:
+    ...
+
+class IrContainer:
+    nodes: dict[NodeId, PropertyIrNode]
+
+    node_names: dict[NodeId, str]
+    next_node_id: int
+
+    merged_nodes: UnionFind[int]
+
+    def __getitem__(self, node_id: int):
+        node_id = self.merged_nodes.find_representative(node_id)
+        ...
 
 class PropertyIrNode(ABC):
+    ir_container: IrContainer
+    node_id: NodeId
     @abstractmethod
     def __init__(self):
         pass
+
+    def sort(self) -> type[PropertyIrNode]:
+        return type(self)
+
+    def check_sort(self, sort: type[PropertyIrNode]):
+        if not isinstance(self, sort):
+            raise TypeError("...")
+
+    def bypass_placeholders(self):
+        raise NotImplementedError("todo...")
+
+class PlaceholderNode(PropertyIrNode):
+    replace_with: PropertyIrNode | None
+    expected_sort: type[PropertyIrNode] | None
+
+    def sort(self) -> type[PropertyIrNode]:
+        if self.expected_sort is None:
+            raise ValueError("...")
+        else:
+            return self.expected_sort
+
+    def check_sort(self, sort: type[PropertyIrNode]):
+        if self.expected_sort is None:
+            self.expected_sort = sort
+        elif not issubclass(self.expected_sort, sort):
+            raise TypeError("...")
+
+    def instantiate_placeholder(self, node: PropertyIrNode):
+        self.check_sort(type(node))
+        self.replace_with = node
+
+
+
+
 
 class Bool(PropertyIrNode):
     @abstractmethod
@@ -43,19 +96,20 @@ class Int(PropertyIrNode):
 class IntOrInf(PropertyIrNode):
     value: int | Literal['$']
 
+type IntOrUnbounded = int | Literal['$']
 
 
 @typechecked
 @dataclass
-class Range(PropertyIrNode):
-    lower_bound: Int
-    upper_bound: IntOrInf
+class Range:
+    lower_bound: int
+    upper_bound: IntOrUnbounded
 
 @typechecked
 @dataclass
 class BoundedRange(Range):
-    lower_bound: Int
-    upper_bound: Int
+    lower_bound: int
+    upper_bound: int # type: ignore
 
 
 
@@ -63,7 +117,7 @@ class BoundedRange(Range):
 @typechecked
 @dataclass
 class Not(Bool):
-    child: Bool
+    child: NodeId
 
 @typechecked
 @dataclass
@@ -173,9 +227,10 @@ def get_op_symbols() -> Tuple[Dict[str, type], Dict[str, type]]:
     return ops_to_cls, ops_to_sort
 
 
-op_symbol_tables = get_op_symbols()
-op_to_cls: Dict[str, type] = op_symbol_tables[0]
-op_to_sort: Dict[str, type] = op_symbol_tables[1]
+op_to_cls: Dict[str, type]
+op_to_sort: Dict[str, type]
+
+op_to_cls, op_to_sort = get_op_symbols()
 
 
 print(op_to_cls)
@@ -184,7 +239,7 @@ print(op_to_sort)
 
 
 
-
+type RawSExpr = list[str | int | RawSExpr]
 
 @typechecked
 def expr_to_list(expr: str) -> List[Any]:
@@ -241,8 +296,18 @@ def parse_expression(
 
     print(f"start with {expr}")
 
-    if type(expr) is str or type(expr) is int:
+    match expr:
+        case str(name):
+            ...
+        case int(literal):
+            ...
+        case ['let-rec', *args]:
+            ...
+        case [str(operation), *args]:
+            ...
                 
+
+    if isinstance(expr, str) or isinstance(expr, int):
         if expr in signals:
             if not expected_sort is Bool:
                 raise TypeError(f'Mismatch of expected sort {expected_sort} and {expr} with sort {Bool} in {expr}')
@@ -282,6 +347,19 @@ def parse_expression(
         if expected_sort:
             if not op_to_sort[root_symbol] is expected_sort:
                 raise TypeError(f'Mismatch of expected sort {expected_sort} and operation "{root_symbol}" with sort {op_to_sort[root_symbol]} at {expr}')
+
+        '''
+
+        (letrec
+            (foo (and a bar)) ; remembers that the expected type of bar (currently a placeholder) is now a bool
+            (bar (or b c)) ; when instantiating the placeholder for bar with the or node, the remembered expected type is checked against the type of or
+
+            (foo2 (and a bar2))
+            (bar2 (seq-concat ...)) ; instantiating bar2's placeholder will produce a type error here
+        )
+
+        '''
+
 
         children: List[Any] = []
 
