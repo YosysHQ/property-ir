@@ -267,26 +267,34 @@ def parse_expression(expr: List[Any] | str | int, expected_sort: Optional[type],
     print(root_symbol)
     print(root_class)
 
-    # TODO: fix case Union of uninitialized and list
+    # check if root symbol has correct sort
+    # assuming that the expected sort is unambigious (Uninitialized already removed and no Union/List allowed)
     if root_symbol in op_to_cls:
         if expected_sort:
-            expected_sort_list = []
-            if get_origin(expected_sort) is Union:
-                expected_sort_list = get_args(expected_sort)
-            else:
-                expected_sort_list = [expected_sort]
-            if not op_to_sort[root_symbol] in expected_sort_list:
-                raise TypeError(f'Mismatch of expected sort {expected_sort} and operation "{root_symbol}" with sort {op_to_sort[root_symbol]} in {expr}')
+            if not op_to_sort[root_symbol] is expected_sort:
+                raise TypeError(f'Mismatch of expected sort {expected_sort} and operation "{root_symbol}" with sort {op_to_sort[root_symbol]} at {expr}')
 
-        children = []
+        children: List[Any] = []
 
         for field in fields(root_class):
 
-            if get_origin(field.type) is list or get_args(field.type) is list:
-                list_elem_type: type = get_args(field.type)[0]
-                single_child_list = []
+            # remove Uninitialized case from expected child sort
+            # this assumes that the child sort is never the Union of several sorts (only Union with Uninitialized)
+            child_expected_sort: type
+            if get_origin(field.type) is Union:
+                child_expected_sort_union = get_args(field.type)
+                without_uninit = [s for s in child_expected_sort_union if not s is Uninitialized]
+                if (len(without_uninit) != 1):
+                    raise TypeError(f'Operation {root_class} has parameter {field.name} with ambiguous sort {without_uninit}')
+                child_expected_sort = without_uninit[0]
+            else:
+                child_expected_sort = field.type
 
-                # this assumes that the children list comes last
+            if get_origin(child_expected_sort) is list:
+                list_elem_type: type = get_args(child_expected_sort)[0]
+                single_child_list: List[list_elem_type] = []
+
+                # this assumes that the children list comes as the last parameter of the root operation
                 while len(expr) > 0:
                     child_expr = expr.pop(0)
                     child_node = parse_expression(child_expr, list_elem_type, signals, node_refs)
@@ -294,7 +302,6 @@ def parse_expression(expr: List[Any] | str | int, expected_sort: Optional[type],
                 children.append(single_child_list)
 
             else:
-                child_expected_sort = field.type
                 child_expr = expr.pop(0)
                 child_node = parse_expression(child_expr, child_expected_sort, signals, node_refs)
                 children.append(child_node)
