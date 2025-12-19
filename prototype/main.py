@@ -1,3 +1,4 @@
+#from __future__ import annotations
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, fields
 from typing import Literal, List, Optional, Any, Set, Dict, get_origin, get_args, Tuple, Union
@@ -7,6 +8,70 @@ import re
 
 
 Uninitialized = Literal['uninitialized']
+
+type NodeId = int
+
+
+@typechecked
+class UnionFind[T]:
+    """Used to keep track of merged nodes. Will only add nodes to the
+    datastructure when they get merged."""
+
+    parents: dict[T, T] = dict()
+    ranks: dict[T, int] = dict()
+    
+    def find(self, elem: T) -> T:
+
+        if not elem in self.parents:
+            return elem
+        
+        parent: T = self.parents[elem]
+        if elem == parent:
+            return elem
+        else:
+            representative = self.find(parent)
+            self.parents[elem] = representative # path compression
+            return representative
+
+
+    def union(self, elem1: T, elem2: T) -> None:
+        
+        if elem1 not in self.parents:
+            self.parents[elem1] = elem1
+            self.ranks[elem1] = 0
+        if elem2 not in self.parents:
+            self.parents[elem2] = elem2
+            self.ranks[elem2] = 0
+
+        repr1: T = self.find(elem1)
+        repr2: T = self.find(elem2)
+
+        # union by rank
+        if self.ranks[repr1] < self.ranks[repr2]:
+            self.parents[repr1] = repr2
+        elif self.ranks[repr2] < self.ranks[repr1]:
+            self.parents[repr2] = repr1
+        else:
+            self.parents[repr1] = repr2
+            self.ranks[repr2] += 1
+
+
+
+
+
+
+#class IrContainer:
+#
+#    nodes: dict[NodeId, PropertyIrNode]
+#
+#    node_names: dict[NodeId, str]
+#    merged_nodes: UnionFind[NodeId]
+#
+#    next_node_id: NodeId
+#
+#    def __getitem__(self, node_id: NodeId):
+#        pass
+
 
 
 
