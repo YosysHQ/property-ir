@@ -97,21 +97,25 @@ class IrContainer:
 
     next_node_id: NodeId = 1
 
-    def add_node(self, node: PropertyIrNode):
+    def _add_node(self, node: PropertyIrNode):
         if node.node_id < self.next_node_id:
             self.nodes[node.node_id] = node
         else:
             raise ValueError(f'Try to add node {node} with id higher than next node id {self.next_node_id}')
 
-
-    def get_next_node_id(self):
+    def _get_next_node_id(self):
         node_id = self.next_node_id
         self.next_node_id += 1
         return node_id
 
+    def add_node_by_kwargs(self, cls: type, kwargs: dict[str, Any]) -> PropertyIrNode:
+        new_node_id = self._get_next_node_id()
+        new_node = cls(node_id=new_node_id, **kwargs)
+        self._add_node(new_node)
+        return new_node
 
     def __getitem__(self, node_id: NodeId) -> PropertyIrNode:
-        node_repr_id: NodeId = merged_nodes.find_representative(node_id)
+        node_repr_id: NodeId = merged_nodes.find(node_id)
         if node_repr_id in nodes:
             return nodes[node_repr_id]
         else:
@@ -121,8 +125,26 @@ class IrContainer:
         return node_id in nodes
 
     def __setitem__(self, node_id: NodeId, value: PropertyIrNode):
-        node_repr_id: NodeId = merged_nodes.find_representative(node_id)
+        if (not node_id in self.nodes):
+            raise ValueError(f'Cannot set node with node id {node_id} because it does not exist')
+        node_repr_id: NodeId = merged_nodes.find(node_id)
         nodes[node_repr_id] = value
+
+
+    def get_node_id_by_name(self, node_name: str):
+        if node_name in self.node_names:
+            node_id: NodeId = node_names[node_name]
+            return merged_nodes.find(node_id)
+        else:
+            raise ValueError(f'Node name {node_name} missing' )
+
+    def merge_nodes(self, node_id1, node_id2):
+        if (not node_id1 in self.nodes):
+            raise ValueError(f'Could not merge {node_id1} and {node_id2} because {node_id1} is missing')
+        if (not node_id2 in self.nodes):
+            raise ValueError(f'Could not merge {node_id1} and {node_id2} because {node_id2} is missing')
+        merged_nodes.union(node_id1, node_id2)
+
 
 
 
@@ -393,7 +415,7 @@ def parse_expression2(
                     raise TypeError(f'Mismatch of expected type {expected_type} and {name} with type {Bool} in {expr}')
                 return Constant(expr)
             elif name in ir_container.node_names:
-                return ir_container.node_names[name]
+                return ir_container.get_node_id_by_name(name)
             else:
                 raise ValueError(f'Unexpected symbol {name}')
 
@@ -445,9 +467,7 @@ def parse_expression2(
                         child_node = parse_expression2(child_expr, child_expected_type, signals, ir_container)
                         kwargs[field.name] = child_node
 
-                kwargs['node_id'] = ir_container.get_next_node_id()
-                root_node = root_class(**kwargs)
-                ir_container.add_node(root_node)
+                root_node: PropertyIrNode = ir_container.add_node_by_kwargs(root_class, kwargs)
 
                 print(root_node)
                 return root_node.node_id
