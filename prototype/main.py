@@ -1,14 +1,12 @@
 #from __future__ import annotations
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, fields
+from dataclasses import dataclass, fields, field
 from typing import Literal, List, Optional, Any, Set, Dict, get_origin, get_args, Tuple, Union, ClassVar
 from typing import get_type_hints
 from typeguard import typechecked
 import re
 
 
-
-Uninitialized = Literal['uninitialized']
 
 type NodeId = int
 type NodeType = Literal[Bool, Sequence, Property]
@@ -86,16 +84,47 @@ class PropertyIrNode(ABC):
 
 
 
+@dataclass
+class PlaceholderNode(PropertyIrNode):
+    replace_with: PropertyIrNode | None
+    expected_type: type[PropertyIrNode] | None
+    signature = ()
+
+    def node_type(self) -> type[PropertyIrNode]:
+        if self.expected_type is None:
+            raise ValueError(f'Placeholder node {self} node type missing')
+        else:
+            return self.expected_type
+
+    def check_type(self, node_type: type[PropertyIrNode]):
+        if self.expected_type is None:
+            self.expected_type = node_type
+        elif not issubclass(self.expected_type, node_type):
+            raise TypeError(f'Placeholder node {self} with type {self.expected_type} cannot be set to type {node_type}')
+        # assuming that the type of a placeholder node does not change = get more refined
+        # (e.g. bounded-range not being a subclass of range, but being disjoint classes)
+
+    def instantiate_placeholder(self, node: PropertyIrNode):
+        self.check_type(type(node))
+        self.replace_with = node
+
+
 
 
 class IrContainer:
 
-    nodes: dict[NodeId, PropertyIrNode] = dict()
+    nodes: dict[NodeId, PropertyIrNode]
 
-    node_names: dict[str, NodeId] = dict()
-    merged_nodes: UnionFind[NodeId] = UnionFind()
+    node_names: dict[str, NodeId]
+    merged_nodes: UnionFind[NodeId]
 
-    next_node_id: NodeId = 1
+    next_node_id: NodeId
+
+    def __init__(self):
+        self.nodes =  dict()
+        self.node_names = dict()
+        self.merged_nodes = UnionFind()
+        self.next_node_id = 1
 
     def _add_node(self, node: PropertyIrNode):
         if node.node_id < self.next_node_id:
@@ -113,6 +142,13 @@ class IrContainer:
         new_node = cls(node_id=new_node_id, **kwargs)
         self._add_node(new_node)
         return new_node
+
+    def add_placeholder_node(self, expected_type: type = None):
+        new_node_id = self._get_next_node_id()
+        new_node = PlaceholderNode(ir_container=self, node_id=new_node_id, expected_type=expected_type, replace_with=None)
+        self._add_node(new_node)
+        return new_node
+
 
     def __getitem__(self, node_id: NodeId) -> PropertyIrNode:
         node_repr_id: NodeId = merged_nodes.find(node_id)
@@ -713,6 +749,7 @@ def main():
     ir_container4 = IrContainer()
     ir_container5 = IrContainer()
 
+
     parse_expression2(expr_list1, None, signal_dict, ir_container1)
     print()
     parse_expression2(expr_list2, None, signal_dict, ir_container2)
@@ -721,7 +758,7 @@ def main():
     print()
     parse_expression2(expr_list4, None, signal_dict, ir_container4)
     print()
-    #parse_expression2(expr_list5, None, signal_dict, dict(), dict())
+    #parse_expression2(expr_list5, None, signal_dict, ir_container5)
 
 
 
