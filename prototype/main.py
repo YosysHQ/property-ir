@@ -468,6 +468,10 @@ def parse_expression2(
 
         case ['let-rec', *args]:
 
+
+
+
+
             pass
 
 
@@ -690,8 +694,6 @@ def print_expression(root: PropertyIrNode) -> str:
 
 
 
-def get_sort(expr: str) -> type:
-    pass
 
 
 
@@ -712,17 +714,46 @@ def main():
                         (prop-seq (seq-bool a))
                     ))"""
 
-    # give not sort but root operation of each named subexpression as a parameter
-    # to be able to immediately create the correct node
-    # in case the expression again starts with let-rec
+
     test_expr5 = """(let-rec
-                        (prop1 prop-and (prop-and
+        (foo (bool-and a bar))
+        (bar (bool-or b c))
+    )"""
+
+    test_expr6 = """(let-rec
+                        (prop1 (prop-and
                             (prop-seq (seq-bool a))
                             (prop-non-overlapped-implication (seq-bool true) prop2)))
-                        (prop2 prop-and (prop-and
+                        (prop2 (prop-and
                             (prop-seq (seq-bool a))
                             (prop-non-overlapped-implication (seq-bool true) prop1)))
                         prop1)"""
+
+    # merging nodes required
+    test_expr7 = """(let-rec
+        (q1 (seq-concat (seq-bool a) q3))
+        (q2 (seq-concat (seq-bool b) q4))
+        (q3 q4)
+        (q4 (seq-bool c))
+        (q5 q3)
+        (seq-concat (seq-bool d) q5)
+    )"""
+
+    # nested let-rec
+    test_expr8 = """(let-rec
+        (q1 (bool-and a b)
+        (q2 (let-rec
+                (p1 (bool-not q1))
+                (p2 q1)
+                (p3 (bool-or q2 c))
+                p3)
+        q2)"""
+
+    # this should cause a type error
+    test_expr9 = """(let-rec
+        (foo2 (bool-and a bar2))
+        (bar2 (seq-concat (seq-bool a) (seq-bool b)))
+    )"""
 
     signal_dict = {'a': Signal('a'), 'b': Signal('b'), 'c': Signal('c'), 'd': Signal('d')}
 
@@ -758,7 +789,7 @@ def main():
     print()
     parse_expression2(expr_list4, None, signal_dict, ir_container4)
     print()
-    #parse_expression2(expr_list5, None, signal_dict, ir_container5)
+    parse_expression2(expr_list5, None, signal_dict, ir_container5)
 
 
 
