@@ -9,6 +9,9 @@ import re
 
 
 type NodeId = int
+#type NodeType = Bool | Sequence | Property
+#type NodeListType = list[NodeType]
+#type LiteralType = bool | int | str | Range | BoundedRange | IntOrUnbounded
 type NodeType = Literal[Bool, Sequence, Property]
 type NodeListType = Literal[list[Bool]] | Literal[list[Sequence]] | Literal[list[Property]]
 type LiteralType = Literal[bool, int, str, Range, BoundedRange, IntOrUnbounded]
@@ -100,10 +103,14 @@ class PlaceholderNode(PropertyIrNode):
 
     def check_type(self, node_type: type[PropertyIrNode]):
         if self.expected_type is None:
-            self.expected_type = node_type
-        elif not issubclass(node_type, self.expected_type):
+            if issubclass(node_type, (Sequence, Property, Bool)):
+                self.expected_type = node_type
+            else:
+                self.expected_type = cls_to_type[node_type]
+        elif not issubclass(self.expected_type, node_type):
             raise TypeError(f'Placeholder node {self} with type {self.expected_type} cannot be set to type {node_type}')
         # assuming that the type of a placeholder node does not change / get more refined (no unification)
+        # TODO: FIX TYPE ERROR HERE
 
     def instantiate_placeholder(self, node: PropertyIrNode):
         self.check_type(type(node))
@@ -139,17 +146,18 @@ class IrContainer:
         self.nodes[new_node_id] = new_node
         return new_node
 
-    def add_placeholder_node(self, expected_type: type = None):
+    def add_placeholder_node(self, name: str, expected_type: Optional[type] = None):
         new_node_id = self._get_next_node_id()
         new_node = PlaceholderNode(ir_container=self, node_id=new_node_id, expected_type=expected_type, replace_with=None)
         self.nodes[new_node_id] = new_node
+        self.node_names[name] = new_node_id
         return new_node
 
 
     def __getitem__(self, node_id: NodeId) -> PropertyIrNode:
-        node_repr_id: NodeId = merged_nodes.find(node_id)
-        if node_repr_id in nodes:
-            return nodes[node_repr_id]
+        node_repr_id: NodeId = self.merged_nodes.find(node_id)
+        if node_repr_id in self.nodes:
+            return self.nodes[node_repr_id]
         else:
             raise ValueError(f'NodeID {node_repr_id} missing' )
 
@@ -159,14 +167,14 @@ class IrContainer:
     def __setitem__(self, node_id: NodeId, value: PropertyIrNode):
         if (not node_id in self.nodes):
             raise ValueError(f'Cannot set node with node id {node_id} because it does not exist')
-        node_repr_id: NodeId = merged_nodes.find(node_id)
-        nodes[node_repr_id] = value
+        node_repr_id: NodeId = self.merged_nodes.find(node_id)
+        self.nodes[node_repr_id] = value
 
 
     def get_node_id_by_name(self, node_name: str):
         if node_name in self.node_names:
-            node_id: NodeId = node_names[node_name]
-            return merged_nodes.find(node_id)
+            node_id: NodeId = self.node_names[node_name]
+            return self.merged_nodes.find(node_id)
         else:
             raise ValueError(f'Node name {node_name} missing' )
 
@@ -176,6 +184,7 @@ class IrContainer:
         if (not node_id2 in self.nodes):
             raise ValueError(f'Could not merge {node_id1} and {node_id2} because {node_id2} is missing')
         merged_nodes.union(node_id1, node_id2)
+        # TODO: HANDLE INSTANTIATED NODES AND CHECK TYPES
 
 
 
@@ -333,23 +342,27 @@ def class_to_operation_str(input: str) -> str:
 
 
 @typechecked
-def get_op_symbols() -> Tuple[Dict[str, type], Dict[str, type]]:
+def get_op_symbols() -> tuple[dict[str, NodeType], dict[str, NodeType], dict[type[PropertyIrNode], NodeType]]:
     allowed_types = [Bool, Sequence, Property]
-    ops_to_cls: dict[str, type] = dict()
-    ops_to_type: dict[str, type] = dict()
+    ops_to_cls: dict[str, NodeType] = dict()
+    ops_to_type: dict[str, NodeType] = dict()
+    cls_to_type: dict[type[PropertyIrNode], NodeType] = dict()
 
     for node_type in allowed_types:
         for cls in node_type.__subclasses__():
-            #if cls not in [Constant, Signal]:
             ops_to_cls[class_to_operation_str(cls.__name__)] = cls
             ops_to_type[class_to_operation_str(cls.__name__)] = node_type
+            cls_to_type[cls] = node_type
 
-    return ops_to_cls, ops_to_type
+    return ops_to_cls, ops_to_type, cls_to_type
 
 
 op_symbol_tables = get_op_symbols()
-op_to_cls: dict[str, type] = op_symbol_tables[0]
-op_to_type: dict[str, type] = op_symbol_tables[1]
+op_to_cls: dict[str, NodeType] = op_symbol_tables[0]
+op_to_type: dict[str, NodeType] = op_symbol_tables[1]
+cls_to_type: dict[type[PropertyIrNode], NodeType] = op_symbol_tables[2]
+
+
 
 
 
@@ -429,6 +442,7 @@ def parse_expression2(
     ir_container: IrContainer) -> NodeId | LiteralType:
 
     print(f"start with {expr}")
+    print(f"expecting type {expected_type}")
 
     match expr:
 
@@ -443,7 +457,14 @@ def parse_expression2(
                     raise TypeError(f'Mismatch of expected type {expected_type} and {name} with type {Bool} in {expr}')
                 return Constant(expr)
             elif name in ir_container.node_names:
-                return ir_container.get_node_id_by_name(name)
+                named_node_id: NodeId = ir_container.get_node_id_by_name(name)
+                named_node: PropertyIrNode = ir_container[named_node_id]
+                if expected_type is not None:
+                    if isinstance(named_node, PlaceholderNode):
+                        named_node.check_type(expected_type)
+                    elif not isinstance(named_node, expected_type):
+                            raise TypeError(f'Mismatch of expected type {expected_type} and {name} with type {type(named_node)} in {expr}')
+                return named_node_id
             else:
                 raise ValueError(f'Unexpected symbol {name}')
 
@@ -458,13 +479,35 @@ def parse_expression2(
             return parse_range(expr)
 
 
-        case ['let-rec', *args]:
+
+        case ['let-rec', *named_subexpressions, return_expression]:
+
+            # create a placeholder node for each new node name
+
+            for (name, subexpr) in named_subexpressions:
+                ir_container.add_placeholder_node(name=name)
+
+            # evaluate each named subexpression
+            # and let each placeholder point to the root of its subexpression
+            # or if the root is a placeholder, merge placeholders
+            for (name, subexpr) in named_subexpressions:
+                subexpr_root_node_id: NodeId = parse_expression2(subexpr, None, signals, ir_container)
+                subexpr_root_node: NodeId = ir_container[subexpr_root_node_id]
+                placeholder_id: NodeId = ir_container.get_node_id_by_name(name)
+                placeholder_node: PlaceholderNode = ir_container[placeholder_id]
+
+                if isinstance(subexpr_root_node, PlaceholderNode):
+                    ir_container.merge_nodes(subexpr_root_node_id, placeholder_id)
+                else:
+                    placeholder_node.instantiate_placeholder(subexpr_root_node)
 
 
 
+            # return value of last expression
+            return parse_expression2(return_expression, None, signals, ir_container)
 
 
-            pass
+
 
 
 
@@ -709,8 +752,9 @@ def main():
 
 
     test_expr5 = """(let-rec
-        (foo (bool-and a bar))
-        (bar (bool-or b c))
+        (foo (and a bar))
+        (bar (or b c))
+        foo
     )"""
 
     test_expr6 = """(let-rec
@@ -734,18 +778,19 @@ def main():
 
     # nested let-rec
     test_expr8 = """(let-rec
-        (q1 (bool-and a b)
+        (q1 (and a b))
         (q2 (let-rec
-                (p1 (bool-not q1))
+                (p1 (not q1))
                 (p2 q1)
-                (p3 (bool-or q2 c))
-                p3)
+                (p3 (or q2 c))
+                p3))
         q2)"""
 
     # this should cause a type error
     test_expr9 = """(let-rec
-        (foo2 (bool-and a bar2))
-        (bar2 (seq-concat (seq-bool a) (seq-bool b)))
+        (foo2 (and a bar2))
+        (bar2 (seq-concat (seq-bool a) (seq-bool b))
+        foo2)
     )"""
 
     signal_dict = {'a': Signal('a'), 'b': Signal('b'), 'c': Signal('c'), 'd': Signal('d')}
@@ -766,12 +811,24 @@ def main():
     print()
     expr_list5: List[Any] = expr_to_list(test_expr5)
     print()
+    expr_list6: List[Any] = expr_to_list(test_expr6)
+    print()
+    expr_list7: List[Any] = expr_to_list(test_expr7)
+    print()
+    expr_list8: List[Any] = expr_to_list(test_expr8)
+    print()
+    expr_list9: List[Any] = expr_to_list(test_expr9)
+    print()
 
     ir_container1 = IrContainer()
     ir_container2 = IrContainer()
     ir_container3 = IrContainer()
     ir_container4 = IrContainer()
     ir_container5 = IrContainer()
+    ir_container6 = IrContainer()
+    ir_container7 = IrContainer()
+    ir_container8 = IrContainer()
+    ir_container9 = IrContainer()
 
 
     parse_expression2(expr_list1, None, signal_dict, ir_container1)
@@ -783,7 +840,14 @@ def main():
     parse_expression2(expr_list4, None, signal_dict, ir_container4)
     print()
     parse_expression2(expr_list5, None, signal_dict, ir_container5)
-
+    print()
+    parse_expression2(expr_list6, None, signal_dict, ir_container6)
+    print()
+    parse_expression2(expr_list7, None, signal_dict, ir_container7)
+    print()
+    #parse_expression2(expr_list8, None, signal_dict, ir_container8)
+    #print()
+    #parse_expression2(expr_list9, None, signal_dict, ir_container9)
 
 
 if __name__ == "__main__":
