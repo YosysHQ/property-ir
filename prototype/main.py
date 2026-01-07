@@ -10,7 +10,8 @@ import re
 
 type NodeId = int
 type NodeType = Literal[Bool, Sequence, Property]
-type LiteralType = Literal[bool, int, str, Range, BoundedRange]
+type NodeListType = Literal[list[Bool]] | Literal[list[Sequence]] | Literal[list[Property]]
+type LiteralType = Literal[bool, int, str, Range, BoundedRange, IntOrUnbounded]
 
 type RawSExpr = list[str | int | RawSExpr]
 
@@ -63,12 +64,12 @@ class UnionFind[T]:
 
 
 
-
+@typechecked
 @dataclass
 class PropertyIrNode(ABC):
     ir_container: 'IrContainer'
     node_id: NodeId
-    signature: ClassVar[tuple[NodeType | LiteralType, ...] | tuple[list[NodeType]]]
+    signature: ClassVar[tuple[NodeType | LiteralType, ...] | tuple[NodeListType]]
 
     @classmethod
     def get_child_fields(cls) -> list[NodeType | LiteralType]:
@@ -84,6 +85,7 @@ class PropertyIrNode(ABC):
 
 
 
+@typechecked
 @dataclass
 class PlaceholderNode(PropertyIrNode):
     replace_with: PropertyIrNode | None
@@ -99,10 +101,9 @@ class PlaceholderNode(PropertyIrNode):
     def check_type(self, node_type: type[PropertyIrNode]):
         if self.expected_type is None:
             self.expected_type = node_type
-        elif not issubclass(self.expected_type, node_type):
+        elif not issubclass(node_type, self.expected_type):
             raise TypeError(f'Placeholder node {self} with type {self.expected_type} cannot be set to type {node_type}')
-        # assuming that the type of a placeholder node does not change = get more refined
-        # (e.g. bounded-range not being a subclass of range, but being disjoint classes)
+        # assuming that the type of a placeholder node does not change / get more refined (no unification)
 
     def instantiate_placeholder(self, node: PropertyIrNode):
         self.check_type(type(node))
@@ -111,6 +112,7 @@ class PlaceholderNode(PropertyIrNode):
 
 
 
+@typechecked
 class IrContainer:
 
     nodes: dict[NodeId, PropertyIrNode]
@@ -126,12 +128,6 @@ class IrContainer:
         self.merged_nodes = UnionFind()
         self.next_node_id = 1
 
-    def _add_node(self, node: PropertyIrNode):
-        if node.node_id < self.next_node_id:
-            self.nodes[node.node_id] = node
-        else:
-            raise ValueError(f'Try to add node {node} with id higher than next node id {self.next_node_id}')
-
     def _get_next_node_id(self):
         node_id = self.next_node_id
         self.next_node_id += 1
@@ -139,14 +135,14 @@ class IrContainer:
 
     def add_node_by_kwargs(self, cls: type, kwargs: dict[str, Any]) -> PropertyIrNode:
         new_node_id = self._get_next_node_id()
-        new_node = cls(node_id=new_node_id, **kwargs)
-        self._add_node(new_node)
+        new_node = cls(ir_container=self, node_id=new_node_id, **kwargs)
+        self.nodes[new_node_id] = new_node
         return new_node
 
     def add_placeholder_node(self, expected_type: type = None):
         new_node_id = self._get_next_node_id()
         new_node = PlaceholderNode(ir_container=self, node_id=new_node_id, expected_type=expected_type, replace_with=None)
-        self._add_node(new_node)
+        self.nodes[new_node_id] = new_node
         return new_node
 
 
@@ -208,14 +204,14 @@ class Property(PropertyIrNode):
 
 @typechecked
 @dataclass
-class IntOrInf():
+class IntOrUnbounded():
     value: int | Literal['$']
 
 @typechecked
 @dataclass
 class Range():
     lower_bound: int
-    upper_bound: IntOrInf
+    upper_bound: IntOrUnbounded
 
 @typechecked
 @dataclass
@@ -248,19 +244,17 @@ class Or(Bool):
 
 
 
-# not an operation
+# literal treated as node type Bool
 @typechecked
 @dataclass
 class Signal():
     signal_name: str
-    signature = (str,)
 
-# not an operation
+# literal treated as node type Bool
 @typechecked
 @dataclass
 class Constant():
     value: bool
-    signature = (bool,)
 
 
 
@@ -270,7 +264,7 @@ class Constant():
 @typechecked
 @dataclass
 class SeqConcat(Sequence):
-    children: list[Sequence]
+    children: list[NodeId]
     signature = (list[Sequence],)
 
 @typechecked
@@ -327,40 +321,35 @@ class PropNonOverlappedImplication(Property):
 
 
 def operation_to_class_str(input: str) -> str:
-    splitted: List[str] = input.split('-')
-    capitalized : List[str] = [str.capitalize(s) for s in splitted]
+    split: list[str] = input.split('-')
+    capitalized : list[str] = [str.capitalize(s) for s in split]
     return(''.join(capitalized))
 
 
 def class_to_operation_str(input: str) -> str:
-    splitted: List[str] = re.split(r'(?=[A-Z])', input)
-    lowercase: List[str] = [str.lower(s) for s in splitted if s != '']
+    split: list[str] = re.split(r'(?=[A-Z])', input)
+    lowercase: list[str] = [str.lower(s) for s in split if s != '']
     return('-'.join(lowercase))
 
 
 @typechecked
 def get_op_symbols() -> Tuple[Dict[str, type], Dict[str, type]]:
     allowed_types = [Bool, Sequence, Property]
-    ops_to_cls: Dict[str, type] = dict()
-    ops_to_type: Dict[str, type] = dict()
+    ops_to_cls: dict[str, type] = dict()
+    ops_to_type: dict[str, type] = dict()
 
     for node_type in allowed_types:
         for cls in node_type.__subclasses__():
-            if cls not in [Constant, Signal]:
-                ops_to_cls[class_to_operation_str(cls.__name__)] = cls
-                ops_to_type[class_to_operation_str(cls.__name__)] = node_type
-
-    #ops_to_cls['range'] = Range
-    #ops_to_cls['bounded-range'] = BoundedRange
-    #ops_to_type['range'] = Range
-    #ops_to_type['bounded-range'] = BoundedRange
+            #if cls not in [Constant, Signal]:
+            ops_to_cls[class_to_operation_str(cls.__name__)] = cls
+            ops_to_type[class_to_operation_str(cls.__name__)] = node_type
 
     return ops_to_cls, ops_to_type
 
 
 op_symbol_tables = get_op_symbols()
-op_to_cls: Dict[str, type] = op_symbol_tables[0]
-op_to_type: Dict[str, type] = op_symbol_tables[1]
+op_to_cls: dict[str, type] = op_symbol_tables[0]
+op_to_type: dict[str, type] = op_symbol_tables[1]
 
 
 
@@ -370,11 +359,14 @@ op_to_type: Dict[str, type] = op_symbol_tables[1]
 
 
 @typechecked
-def expr_to_list(expr: str) -> List[Any]:
+def expr_to_list(expr: str) -> RawSExpr:
+    """Converts the s-expression given as a str to a nested list whose base
+    elements are either str or int (int used only for integers, not for
+    booleans)."""
 
     print(expr)
 
-    tokens: List[str] = re.split(r'[\s]+|(?=[()])|(?<=[()])', expr)
+    tokens: list[str] = re.split(r'[\s]+|(?=[()])|(?<=[()])', expr)
     tokens = [t for t in tokens if t != '']
     if tokens.pop(0) != '(':
             raise ValueError(f"Expression not starting with '('")
@@ -383,8 +375,8 @@ def expr_to_list(expr: str) -> List[Any]:
 
     print(tokens)
 
-    current_list: List[Any] = []
-    stack: List[Any] = []
+    current_list: RawSExpr = []
+    stack: RawSExpr = []
 
     for t in tokens:
         if str.isnumeric(t):
@@ -433,7 +425,7 @@ def parse_range(range_expr: RawSExpr) -> Range | BoundedRange:
 def parse_expression2(
     expr: RawSExpr | str | int,
     expected_type: Optional[type],
-    signals: Dict[str, Signal],
+    signals: dict[str, Signal],
     ir_container: IrContainer) -> NodeId | LiteralType:
 
     print(f"start with {expr}")
@@ -457,7 +449,7 @@ def parse_expression2(
 
         case int(literal):
 
-            if not (expected_sort is int or expected_sort is IntOrInf):
+            if not (expected_type is int or expected_type is IntOrUnbounded):
                 raise TypeError(f'Mismatch of expected type {expected_type} and {literal} with type {type(literal)} in {expr}')
             return literal
 
@@ -484,9 +476,10 @@ def parse_expression2(
 
                 if expected_type:
                     if not op_to_type[root_symbol] is expected_type:
-                        raise TypeError(f'Mismatch of expected type {expected_type} and operation "{root_symbol}" with type {op_to_type[root_symbol]} at {expr}')
+                        raise TypeError(f'Mismatch of expected type {expected_type} and operation "{root_symbol}" with type {op_to_type[root_symbol]} in {expr}')
 
-                kwargs = { "ir_container": ir_container }
+                #kwargs: dict[str, Any] = { "ir_container": ir_container }
+                kwargs: dict[str, Any] = {}
 
                 for (index, field) in enumerate(root_class.get_child_fields()):
 
@@ -549,11 +542,11 @@ def parse_expression(
                 raise TypeError(f'Mismatch of expected sort {expected_sort} and {expr} with sort {Bool} in {expr}')
             return Constant(expr)
         elif expr == '$':
-            if not expected_sort is IntOrInf:
-                raise TypeError(f'Mismatch of expected sort {expected_sort} and {expr} with sort {IntOrInf} in {expr}')
-            return IntOrInf('$')
+            if not expected_sort is IntOrUnbounded:
+                raise TypeError(f'Mismatch of expected sort {expected_sort} and {expr} with sort {IntOrUnbounded} in {expr}')
+            return IntOrUnbounded('$')
         elif type(expr) is int:
-            if not (expected_sort is Int or expected_sort is IntOrInf):
+            if not (expected_sort is Int or expected_sort is IntOrUnbounded):
                 raise TypeError(f'Mismatch of expected sort {expected_sort} and {expr} with sort {type(expr)} in {expr}')
             return Int(expr)
         else:
