@@ -9,9 +9,6 @@ import re
 
 
 type NodeId = int
-#type NodeType = Bool | Sequence | Property
-#type NodeListType = list[NodeType]
-#type LiteralType = bool | int | str | Range | BoundedRange | IntOrUnbounded
 type NodeType = Literal[Bool, Sequence, Property]
 type NodeListType = Literal[list[Bool]] | Literal[list[Sequence]] | Literal[list[Property]]
 type LiteralType = Literal[bool, int, str, Range, BoundedRange, IntOrUnbounded]
@@ -23,8 +20,12 @@ class UnionFind[T]:
     """Used to keep track of merged nodes. Will only add nodes to the
     data structure when they get merged."""
 
-    parents: dict[T, T] = dict()
-    ranks: dict[T, int] = dict()
+    parents: dict[T, T]
+    ranks: dict[T, int]
+
+    def __init__(self):
+        self.parents =  dict()
+        self.ranks = dict()
 
     def find(self, elem: T) -> T:
 
@@ -103,17 +104,13 @@ class PlaceholderNode(PropertyIrNode):
 
     def check_type(self, node_type: type[PropertyIrNode]):
         if self.expected_type is None:
-            if issubclass(node_type, (Sequence, Property, Bool)):
-                self.expected_type = node_type
-            else:
-                self.expected_type = cls_to_type[node_type]
+            self.expected_type = node_type
         elif not issubclass(self.expected_type, node_type):
             raise TypeError(f'Placeholder node {self} with type {self.expected_type} cannot be set to type {node_type}')
         # assuming that the type of a placeholder node does not change / get more refined (no unification)
-        # TODO: FIX TYPE ERROR HERE
 
     def instantiate_placeholder(self, node: PropertyIrNode):
-        self.check_type(type(node))
+        self.check_type(cls_to_type[type(node)])
         self.replace_with = node
 
 
@@ -183,8 +180,21 @@ class IrContainer:
             raise ValueError(f'Could not merge {node_id1} and {node_id2} because {node_id1} is missing')
         if (not node_id2 in self.nodes):
             raise ValueError(f'Could not merge {node_id1} and {node_id2} because {node_id2} is missing')
-        merged_nodes.union(node_id1, node_id2)
-        # TODO: HANDLE INSTANTIATED NODES AND CHECK TYPES
+
+        placeholder_node1: PlaceholderNode = self[node_id1]
+        placeholder_node2: PlaceholderNode = self[node_id2]
+        replacing_node1: Optional[PropertyIrNode] = placeholder_node1.replace_with
+        replacing_node2: Optional[PropertyIrNode] = placeholder_node1.replace_with
+
+        if replacing_node1 is not None and replacing_node2 is not None:
+            if replacing_node1 != replacing_node2:
+                raise ValueError(f'Attempting to merge {node_id1} and {node_id2}, but both are instantiated with different nodes. Is a node name reused?')
+        elif replacing_node1 is not None:
+            placeholder_node2.instantiate_placeholder(replacing_node1)
+        elif replacing_node2 is not None:
+            placeholder_node1.instantiate_placeholder(replacing_node2)
+
+        self.merged_nodes.union(node_id1, node_id2)
 
 
 
@@ -435,7 +445,7 @@ def parse_range(range_expr: RawSExpr) -> Range | BoundedRange:
 
 
 @typechecked
-def parse_expression2(
+def parse_expression(
     expr: RawSExpr | str | int,
     expected_type: Optional[type],
     signals: dict[str, Signal],
@@ -480,18 +490,20 @@ def parse_expression2(
 
 
 
+
         case ['let-rec', *named_subexpressions, return_expression]:
 
             # create a placeholder node for each new node name
-
             for (name, subexpr) in named_subexpressions:
+                if name in ir_container.node_names:
+                    raise ValueError(f'Node name {name} already exists in expression {expr}')
                 ir_container.add_placeholder_node(name=name)
 
             # evaluate each named subexpression
             # and let each placeholder point to the root of its subexpression
             # or if the root is a placeholder, merge placeholders
             for (name, subexpr) in named_subexpressions:
-                subexpr_root_node_id: NodeId = parse_expression2(subexpr, None, signals, ir_container)
+                subexpr_root_node_id: NodeId = parse_expression(subexpr, None, signals, ir_container)
                 subexpr_root_node: NodeId = ir_container[subexpr_root_node_id]
                 placeholder_id: NodeId = ir_container.get_node_id_by_name(name)
                 placeholder_node: PlaceholderNode = ir_container[placeholder_id]
@@ -501,12 +513,8 @@ def parse_expression2(
                 else:
                     placeholder_node.instantiate_placeholder(subexpr_root_node)
 
-
-
             # return value of last expression
-            return parse_expression2(return_expression, None, signals, ir_container)
-
-
+            return parse_expression(return_expression, None, signals, ir_container)
 
 
 
@@ -521,7 +529,6 @@ def parse_expression2(
                     if not op_to_type[root_symbol] is expected_type:
                         raise TypeError(f'Mismatch of expected type {expected_type} and operation "{root_symbol}" with type {op_to_type[root_symbol]} in {expr}')
 
-                #kwargs: dict[str, Any] = { "ir_container": ir_container }
                 kwargs: dict[str, Any] = {}
 
                 for (index, field) in enumerate(root_class.get_child_fields()):
@@ -534,13 +541,13 @@ def parse_expression2(
 
                         # this assumes that a list parameter is never combined with other parameters
                         for child_expr in args:
-                            child_node = parse_expression2(child_expr, list_elem_type, signals, ir_container)
+                            child_node = parse_expression(child_expr, list_elem_type, signals, ir_container)
                             single_child_list.append(child_node)
                         kwargs[field.name] = single_child_list
 
                     else:
                         child_expr = args[index]
-                        child_node = parse_expression2(child_expr, child_expected_type, signals, ir_container)
+                        child_node = parse_expression(child_expr, child_expected_type, signals, ir_container)
                         kwargs[field.name] = child_node
 
                 root_node: PropertyIrNode = ir_container.add_node_by_kwargs(root_class, kwargs)
@@ -560,164 +567,6 @@ def parse_expression2(
 
 
 
-
-@typechecked
-def parse_expression(
-    expr: RawSExpr | str | int,
-    expected_sort: Optional[type],
-    signals: Dict[str, Signal],
-    node_refs: Dict[str, PropertyIrNode],
-    node_refs_sorts: Dict[str, type],
-    root_node_ref: Optional[PropertyIrNode] = None) -> PropertyIrNode:
-
-    print(f"start with {expr}")
-
-    if type(expr) is str or type(expr) is int:
-
-        if expr in signals:
-            if not expected_sort is Bool:
-                raise TypeError(f'Mismatch of expected sort {expected_sort} and {expr} with sort {Bool} in {expr}')
-            return signals[expr]
-        elif expr in node_refs:
-            return node_refs[expr]
-        elif expr in ['true', 'false']:
-            if not expected_sort is Bool:
-                raise TypeError(f'Mismatch of expected sort {expected_sort} and {expr} with sort {Bool} in {expr}')
-            return Constant(expr)
-        elif expr == '$':
-            if not expected_sort is IntOrUnbounded:
-                raise TypeError(f'Mismatch of expected sort {expected_sort} and {expr} with sort {IntOrUnbounded} in {expr}')
-            return IntOrUnbounded('$')
-        elif type(expr) is int:
-            if not (expected_sort is Int or expected_sort is IntOrUnbounded):
-                raise TypeError(f'Mismatch of expected sort {expected_sort} and {expr} with sort {type(expr)} in {expr}')
-            return Int(expr)
-        else:
-            raise ValueError(f'Unexpected symbol {expr}')
-
-    elif len(expr) <= 0:
-        raise ValueError('Expression must not contain empty or singleton list')
-
-    root_symbol: str = expr.pop(0)
-
-    # check if root symbol has correct sort
-    # assuming that the expected sort is unambigious (Uninitialized already removed and no Union/List allowed)
-    if root_symbol in op_to_cls:
-
-        root_class: type = op_to_cls[root_symbol]
-
-        if not root_node_ref is None:
-            if not type(root_node_ref) is root_class:
-                raise TypeError(f'Mismatch of expected operation {type(root_node_ref)} and actual operation {root_class} at {expr}')
-
-        if expected_sort:
-            if not op_to_sort[root_symbol] is expected_sort:
-                raise TypeError(f'Mismatch of expected sort {expected_sort} and operation "{root_symbol}" with sort {op_to_sort[root_symbol]} at {expr}')
-
-        children: List[Any] = []
-
-        for field in fields(root_class):
-
-            # remove Uninitialized case from expected child sort
-            # this assumes that the child sort is never the Union of several sorts (only Union with Uninitialized)
-            child_expected_sort: type
-            if get_origin(field.type) is Union:
-                child_expected_sort_union = get_args(field.type)
-                without_uninit = [s for s in child_expected_sort_union if not s is Uninitialized]
-                if (len(without_uninit) != 1):
-                    raise TypeError(f'Operation {root_class} has parameter {field.name} with ambiguous sort {without_uninit}')
-                child_expected_sort = without_uninit[0]
-            else:
-                child_expected_sort = field.type
-
-            if get_origin(child_expected_sort) is list:
-                list_elem_type: type = get_args(child_expected_sort)[0]
-                single_child_list: List[list_elem_type] = []
-
-                # this assumes that the children list comes as the last parameter of the root operation
-                while len(expr) > 0:
-                    child_expr = expr.pop(0)
-                    child_node = parse_expression(child_expr, list_elem_type, signals, node_refs, node_refs_sorts)
-                    single_child_list.append(child_node)
-                children.append(single_child_list)
-
-            else:
-                child_expr = expr.pop(0)
-                child_node = parse_expression(child_expr, child_expected_sort, signals, node_refs, node_refs_sorts)
-                children.append(child_node)
-
-
-        if root_node_ref is None:
-            root_node = root_class(*children)
-            print(root_node)
-            return root_node
-        else:
-            for index, field in enumerate(fields(root_node_ref)):
-                # set uninitialized children of the root node argument
-                setattr(root_node_ref, field.name, children[index])
-            print(root_node_ref)
-            return root_node_ref
-
-
-
-
-    if root_symbol == 'let-rec':
-
-        if len(expr) < 2:
-            raise ValueError(f'let-rec requires at least 2 parameters, {len(expr)} given in {expr}')
-
-        # get return value identifier
-        return_value_id: str = expr.pop()
-
-        new_node_ids = []
-
-        # create nodes for identifiers
-        for child_definition in expr:
-
-            if len(child_definition) != 3:
-                raise ValueError(f'let-rec requires a definition to consist of 3 parameters, {len(child_definition)} given in {child_definition}')
-
-            child_id = child_definition[0]
-
-            # check that none of the identifiers are already in use
-            if child_id in node_refs or child_id in new_node_ids:
-                raise ValueError(f'Identifier {child_id} already in use in {child_definition}')
-            new_node_ids.append(child_id)
-
-            child_operation = child_definition[1]
-            child_expression = child_definition[2]
-
-            child_class: type = op_to_cls[child_operation]
-            child_sort: type = op_to_sort[child_operation]
-
-            # restrict to only the sorts that can be cyclic
-            # which at the moment are properties
-            # add other sorts later (automata states and property variants)
-            if not child_sort is Property:
-                raise TypeError(f'let-rec with forbidden sort {child_sort} in {child_definition}')
-
-            # set sort dict for identifiers
-            node_refs_sorts[child_id] = child_sort
-
-            # set dict with uninitialized nodes
-            child_param_num = len(fields(child_class))
-            node_refs[child_id] = child_class(*['uninitialized' for i in range(child_param_num)])
-
-        # check that the return value identifier is one of the defined ones
-        if not return_value_id in new_node_ids:
-            raise ValueError(f'let-rec return value identifier {return_value_id} not among the previously defined identifiers {new_node_ids}')
-
-        # recursion for defined subexpressions
-        for [child_id, child_operation, child_expression] in expr:
-
-            # usually the recursive call would create a new node for the root operation
-            # but we already create that node earlier
-            # give the root node object as an additional optional parameter
-            # the uninitialized children of the root node object are set in the subcall
-            parse_expression(child_expression, node_refs_sorts[child_id], signals, node_refs, node_refs_sorts, node_refs[child_id])
-
-        # return value of return value identifier
-        return node_refs[return_value_id]
 
 
 
@@ -766,7 +615,6 @@ def main():
                             (prop-non-overlapped-implication (seq-bool true) prop1)))
                         prop1)"""
 
-    # merging nodes required
     test_expr7 = """(let-rec
         (q1 (seq-concat (seq-bool a) q3))
         (q2 (seq-concat (seq-bool b) q4))
@@ -789,9 +637,8 @@ def main():
     # this should cause a type error
     test_expr9 = """(let-rec
         (foo2 (and a bar2))
-        (bar2 (seq-concat (seq-bool a) (seq-bool b))
-        foo2)
-    )"""
+        (bar2 (seq-concat (seq-bool a) (seq-bool b)))
+        foo2)"""
 
     signal_dict = {'a': Signal('a'), 'b': Signal('b'), 'c': Signal('c'), 'd': Signal('d')}
 
@@ -831,23 +678,26 @@ def main():
     ir_container9 = IrContainer()
 
 
-    parse_expression2(expr_list1, None, signal_dict, ir_container1)
+    parse_expression(expr_list1, None, signal_dict, ir_container1)
     print()
-    parse_expression2(expr_list2, None, signal_dict, ir_container2)
+    parse_expression(expr_list2, None, signal_dict, ir_container2)
     print()
-    parse_expression2(expr_list3, None, signal_dict, ir_container3)
+    parse_expression(expr_list3, None, signal_dict, ir_container3)
     print()
-    parse_expression2(expr_list4, None, signal_dict, ir_container4)
+    parse_expression(expr_list4, None, signal_dict, ir_container4)
     print()
-    parse_expression2(expr_list5, None, signal_dict, ir_container5)
+    parse_expression(expr_list5, None, signal_dict, ir_container5)
     print()
-    parse_expression2(expr_list6, None, signal_dict, ir_container6)
+    parse_expression(expr_list6, None, signal_dict, ir_container6)
     print()
-    parse_expression2(expr_list7, None, signal_dict, ir_container7)
+    parse_expression(expr_list7, None, signal_dict, ir_container7)
     print()
-    #parse_expression2(expr_list8, None, signal_dict, ir_container8)
-    #print()
-    #parse_expression2(expr_list9, None, signal_dict, ir_container9)
+    parse_expression(expr_list8, None, signal_dict, ir_container8)
+    print()
+    #print(ir_container7.nodes)
+    #print(ir_container7.node_names)
+    #print(ir_container7.merged_nodes.parents)
+    #parse_expression(expr_list9, None, signal_dict, ir_container9)
 
 
 if __name__ == "__main__":
