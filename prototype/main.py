@@ -1,6 +1,6 @@
 #from __future__ import annotations
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, fields, field
+from dataclasses import dataclass, fields, field, Field
 from typing import Literal, List, Optional, Any, Set, Dict, get_origin, get_args, Tuple, Union, ClassVar
 from typing import get_type_hints
 from typeguard import typechecked
@@ -8,12 +8,56 @@ import re
 
 
 
+
+
+@typechecked
+@dataclass
+class Int():
+    value: int
+
+@typechecked
+@dataclass
+class IntOrUnbounded():
+    value: int | Literal['$']
+
+@typechecked
+@dataclass
+class Range():
+    lower_bound: int
+    upper_bound: IntOrUnbounded
+
+@typechecked
+@dataclass
+class BoundedRange():
+    lower_bound: int
+    upper_bound: int
+
+# literal treated as node type Bool
+@typechecked
+@dataclass
+class Signal():
+    signal_name: str
+
+# literal treated as node type Bool
+@typechecked
+@dataclass
+class Constant():
+    value: bool
+
+
+
 type NodeId = int
 type NodeType = Literal[Bool, Sequence, Property]
 type NodeListType = Literal[list[Bool]] | Literal[list[Sequence]] | Literal[list[Property]]
-type LiteralType = Literal[bool, int, str, Range, BoundedRange, IntOrUnbounded]
+type LiteralType = Literal[bool, Int, str, Range, BoundedRange, IntOrUnbounded, Signal, Constant]
+type LiteralTypeUnion = bool | Int | str | Range | BoundedRange | IntOrUnbounded | Signal | Constant
 
 type RawSExpr = list[str | int | RawSExpr]
+
+LiteralTypeTuple = (bool, Int, str, Range, BoundedRange, IntOrUnbounded, Signal, Constant)
+
+
+
 
 @typechecked
 class UnionFind[T]:
@@ -76,7 +120,7 @@ class PropertyIrNode(ABC):
     signature: ClassVar[tuple[NodeType | LiteralType, ...] | tuple[NodeListType]]
 
     @classmethod
-    def get_child_fields(cls) -> list[NodeType | LiteralType]:
+    def get_child_fields(cls) -> list[Field[Any]]:
         children: list[NodeType | LiteralType] = []
         for field in fields(cls):
             if field.name not in ['ir_container', 'node_id', 'signature']:
@@ -122,6 +166,7 @@ class IrContainer:
     nodes: dict[NodeId, PropertyIrNode]
 
     node_names: dict[str, NodeId]
+    node_names_instantiated: dict[str, NodeId]
     merged_nodes: UnionFind[NodeId]
 
     next_node_id: NodeId
@@ -129,6 +174,7 @@ class IrContainer:
     def __init__(self):
         self.nodes =  dict()
         self.node_names = dict()
+        self.node_names_instantiated = dict()
         self.merged_nodes = UnionFind()
         self.next_node_id = 1
 
@@ -150,6 +196,72 @@ class IrContainer:
         self.node_names[name] = new_node_id
         return new_node
 
+    def bypass_placeholders(self) -> None:
+        """Remove placeholder nodes by letting their parents point directly to
+        the instantiated nodes they are to be replaced by."""
+
+        replaced_dict: dict[NodeId, NodeId] = dict()
+
+        # for all nodes for all their children
+        for node in self.nodes.values():
+            print(f'START NODE {node}')
+            if isinstance(node, PlaceholderNode):
+                print(f'SKIP PLACEHOLDER')
+                continue
+
+            for index, field in enumerate(node.get_child_fields()):
+
+                child_type: type = type(node).signature[index]
+                if get_origin(child_type) is list:
+
+                    children_list = getattr(node, field.name)
+                    for child_list_index, child_node_id in enumerate(children_list):
+                        if isinstance(child_node_id, LiteralTypeTuple): # skip literal type
+                            continue
+                        child_node = self[child_node_id]
+
+                        # if child is a placeholder
+                        # replace child node id by node id the placeholder (or its representative) points to
+                        if isinstance(child_node, PlaceholderNode):
+                            print(f'CHILD PLACEHOLDER {child_node}')
+                            child_representative_id = self.merged_nodes.find(child_node_id)
+                            child_representative_node = self[child_representative_id]
+                            replacing_node_id: NodeId = child_representative_node.replace_with.node_id
+                            children_list[child_list_index] = replacing_node_id
+                            replaced_dict[child_node_id] = replacing_node_id
+
+                else: # attribute is not a list
+                    child_node_id = getattr(node, field.name)
+                    if isinstance(child_node_id, LiteralTypeTuple): # skip literal type
+                        continue
+                    child_node = self[child_node_id]
+                    if isinstance(child_node, PlaceholderNode):
+                        print(f'CHILD PLACEHOLDER {child_node}')
+                        child_representative_id = self.merged_nodes.find(child_node_id)
+                        child_representative_node = self[child_representative_id]
+                        replacing_node_id: NodeId = child_representative_node.replace_with.node_id
+                        setattr(node, field.name, replacing_node_id)
+                        replaced_dict[child_node_id] = replacing_node_id
+
+
+        # remove all placeholders from container
+        # get them as the values of node_names
+        # store names of replacing nodes
+        #print(self.nodes[1])
+        #print(replaced_dict)
+        #for node_name, placeholder_node_id in self.node_names:
+        #    print(node_name, placeholder_node_id)
+        #    representative_id: NodeId = self.merged_nodes.find(placeholder_node_id)
+        #    print(representative_id)
+        #    replacing_id: NodeId = self.nodes[representative_id].replace_with
+        #    self.node_names_instantiated[node_name] = replacing_id
+        #for placeholder_node_id in set(self.node_names.values()):
+        #    if placeholder_node_id in self.nodes:
+        #        self.nodes.remove(placeholder_node_id)
+
+
+
+        pass
 
     def __getitem__(self, node_id: NodeId) -> PropertyIrNode:
         node_repr_id: NodeId = self.merged_nodes.find(node_id)
@@ -223,26 +335,6 @@ class Property(PropertyIrNode):
 
 @typechecked
 @dataclass
-class IntOrUnbounded():
-    value: int | Literal['$']
-
-@typechecked
-@dataclass
-class Range():
-    lower_bound: int
-    upper_bound: IntOrUnbounded
-
-@typechecked
-@dataclass
-class BoundedRange():
-    lower_bound: int
-    upper_bound: int
-
-
-
-
-@typechecked
-@dataclass
 class Not(Bool):
     child: NodeId
     signature = (Bool,)
@@ -258,22 +350,6 @@ class And(Bool):
 class Or(Bool):
     children: list[NodeId]
     signature = (list[Bool],)
-
-
-
-
-
-# literal treated as node type Bool
-@typechecked
-@dataclass
-class Signal():
-    signal_name: str
-
-# literal treated as node type Bool
-@typechecked
-@dataclass
-class Constant():
-    value: bool
 
 
 
@@ -480,7 +556,7 @@ def parse_expression(
 
         case int(literal):
 
-            if not (expected_type is int or expected_type is IntOrUnbounded):
+            if not (expected_type is Int or expected_type is IntOrUnbounded):
                 raise TypeError(f'Mismatch of expected type {expected_type} and {literal} with type {type(literal)} in {expr}')
             return literal
 
@@ -694,11 +770,18 @@ def main():
     print()
     parse_expression(expr_list8, None, signal_dict, ir_container8)
     print()
-    #print(ir_container7.nodes)
-    #print(ir_container7.node_names)
-    #print(ir_container7.merged_nodes.parents)
+
+    print(ir_container7.nodes)
+    print(ir_container7.node_names)
+    print(ir_container7.merged_nodes.parents)
+
     #parse_expression(expr_list9, None, signal_dict, ir_container9)
 
+    ir_container7.bypass_placeholders()
+
+    print(ir_container7.nodes)
+    print(ir_container7.node_names)
+    print(ir_container7.merged_nodes.parents)
 
 if __name__ == "__main__":
 
