@@ -1,6 +1,7 @@
 from __future__ import annotations
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, fields, field, Field
+import types
 from typing import Literal, List, Optional, Any, Set, Dict, get_origin, get_args, Tuple, Union, ClassVar
 from typing import get_type_hints
 from typeguard import typechecked
@@ -45,17 +46,16 @@ class Constant():
     value: bool
 
 
+@dataclass(frozen=True)
+class NodeId[T: PropertyIrNode]:
+    raw: int
 
-type NodeId = int
-type NodeType = Literal[Bool, Sequence, Property]
-type NodeListType = Literal[list[Bool]] | Literal[list[Sequence]] | Literal[list[Property]]
-type LiteralType = Literal[bool, Int, str, Range, BoundedRange, IntOrUnbounded, Signal, Constant]
-type LiteralTypeUnion = bool | Int | str | Range | BoundedRange | IntOrUnbounded | Signal | Constant
+    def __repr__(self):
+        return f"{type(self).__name__}({self.raw})"
+
+type LiteralType = bool | Int | str | Range | BoundedRange | IntOrUnbounded | Signal | Constant
 
 type RawSExpr = list[str | int | RawSExpr]
-
-LiteralTypeTuple = (bool, Int, str, Range, BoundedRange, IntOrUnbounded, Signal, Constant)
-
 
 
 
@@ -114,6 +114,12 @@ class UnionFind[T]:
         self.parents[elem] = elem
 
 
+def forward_node_id_types(ty: Any) -> type:
+    if hasattr(ty, '__origin__'):
+        if ty.__origin__ is NodeId:
+            return ty.__args__[0]
+        return ty.__origin__[*map(forward_node_id_types, ty.__args__)]
+    return ty
 
 
 
@@ -123,15 +129,33 @@ class UnionFind[T]:
 class PropertyIrNode(ABC):
     ir_container: 'IrContainer'
     node_id: NodeId
-    signature: ClassVar[tuple[NodeType | LiteralType, ...] | tuple[NodeListType]]
+
+    @classmethod
+    def type_class(cls) -> type[PropertyIrNode]:
+        while cls.__base__ is not PropertyIrNode:
+            cls = cls.__base__
+            if cls is None:
+                raise NotImplementedError("type_class called on non-derived class")
+        return cls
 
     @classmethod
     def get_child_fields(cls) -> list[Field[Any]]:
-        children: list[NodeType | LiteralType] = []
+        children = []
         for field in fields(cls):
             if field.name not in ['ir_container', 'node_id', 'signature']:
                 children.append(field)
         return children
+
+
+    @classmethod
+    def signature(cls) -> list[type]:
+        signature = []
+
+        for field in cls.get_child_fields():
+            field_type = get_type_hints(cls)[field.name]
+            signature.append(forward_node_id_types(field_type))
+
+        return signature
 
     @abstractmethod
     def __init__(self):
@@ -144,7 +168,6 @@ class PropertyIrNode(ABC):
 @dataclass
 class PlaceholderNode(PropertyIrNode):
     expected_type: type[PropertyIrNode] | None
-    signature = ()
 
     def node_type(self) -> type[PropertyIrNode]:
         if self.expected_type is None:
@@ -160,13 +183,13 @@ class PlaceholderNode(PropertyIrNode):
         # assuming that the type of a placeholder node does not change / get more refined (no unification)
 
     def instantiate_placeholder(self, node: PropertyIrNode):
-        self.check_type(cls_to_type[node.node_type()])
+        self.check_type(node.node_type().type_class())
         self.ir_container.merge_nodes(self.node_id, node.node_id)
 
 
 
 
-@typechecked
+# @typechecked  # TODO doesn't seem to support add_node_by_kwargs signature
 class IrContainer:
 
     nodes: dict[NodeId, PropertyIrNode]
@@ -175,27 +198,27 @@ class IrContainer:
     node_names_instantiated: dict[str, NodeId]
     merged_nodes: UnionFind[NodeId]
 
-    next_node_id: NodeId
+    next_raw_node_id: int
 
     def __init__(self):
         self.nodes =  dict()
         self.node_names = dict()
         self.node_names_instantiated = dict()
         self.merged_nodes = UnionFind()
-        self.next_node_id = 1
+        self.next_raw_node_id = 1
 
-    def _get_next_node_id(self):
-        node_id = self.next_node_id
-        self.next_node_id += 1
+    def _get_next_node_id(self) -> NodeId:
+        node_id = NodeId(self.next_raw_node_id)
+        self.next_raw_node_id += 1
         return node_id
 
-    def add_node_by_kwargs(self, cls: type, kwargs: dict[str, Any]) -> PropertyIrNode:
+    def add_node_by_kwargs[T: PropertyIrNode](self, cls: type[T], kwargs: dict[str, Any]) -> T:
         new_node_id = self._get_next_node_id()
-        new_node = cls(ir_container=self, node_id=new_node_id, **kwargs)
+        new_node = cls(ir_container=self, node_id=new_node_id, **kwargs) # type: ignore # TODO can this be type checked?
         self.nodes[new_node_id] = new_node
         return new_node
 
-    def add_placeholder_node(self, name: str, expected_type: Optional[type] = None):
+    def add_placeholder_node(self, name: str, expected_type: Optional[type] = None) -> PlaceholderNode:
         new_node_id = self._get_next_node_id()
         new_node = PlaceholderNode(ir_container=self, node_id=new_node_id, expected_type=expected_type)
         self.nodes[new_node_id] = new_node
@@ -218,14 +241,16 @@ class IrContainer:
                 print(f'SKIP PLACEHOLDER')
                 continue
 
+            signature = type(node).signature()
+
             for index, field in enumerate(node.get_child_fields()):
 
-                child_type: type = type(node).signature[index]
+                child_type: type = signature[index]
                 if get_origin(child_type) is list:
 
                     children_list = getattr(node, field.name)
                     for child_list_index, child_node_id in enumerate(children_list):
-                        if isinstance(child_node_id, LiteralTypeTuple): # skip literal type
+                        if isinstance(child_node_id, LiteralType.__value__): # skip literal type
                             continue
                         child_node = self[child_node_id]
 
@@ -238,7 +263,7 @@ class IrContainer:
 
                 else: # attribute is not a list
                     child_node_id = getattr(node, field.name)
-                    if isinstance(child_node_id, LiteralTypeTuple): # skip literal type
+                    if isinstance(child_node_id, LiteralType.__value__): # skip literal type
                         continue
                     child_node = self[child_node_id]
                     if isinstance(child_node, PlaceholderNode):
@@ -257,7 +282,7 @@ class IrContainer:
             raise ValueError(f'NodeID {node_repr_id} missing' )
 
     def __contains__(self, node_id: NodeId) -> bool:
-        return node_id in nodes
+        return node_id in self.nodes
 
     def __setitem__(self, node_id: NodeId, value: PropertyIrNode):
         if (not node_id in self.nodes):
@@ -317,20 +342,17 @@ class Property(PropertyIrNode):
 @typechecked
 @dataclass
 class Not(Bool):
-    child: NodeId
-    signature = (Bool,)
+    child: NodeId[Bool]
 
 @typechecked
 @dataclass
 class And(Bool):
-    children: list[NodeId]
-    signature = (list[Bool],)
+    children: list[NodeId[Bool]]
 
 @typechecked
 @dataclass
 class Or(Bool):
-    children: list[NodeId]
-    signature = (list[Bool],)
+    children: list[NodeId[Bool]]
 
 
 
@@ -340,21 +362,18 @@ class Or(Bool):
 @typechecked
 @dataclass
 class SeqConcat(Sequence):
-    children: list[NodeId]
-    signature = (list[Sequence],)
+    children: list[NodeId[Sequence]]
 
 @typechecked
 @dataclass
 class SeqBool(Sequence):
     child: Bool
-    signature = (Bool,)
 
 @typechecked
 @dataclass
 class SeqRepeat(Sequence):
     child1: Range
-    child2: NodeId
-    signature = (Range, Sequence)
+    child2: NodeId[Sequence]
 
 
 
@@ -363,35 +382,30 @@ class SeqRepeat(Sequence):
 @typechecked
 @dataclass
 class PropAlways(Property):
-    child: NodeId
-    signature = (Property,)
+    child: NodeId[Property]
 
 
 @typechecked
 @dataclass
 class PropAlwaysRanged(Property):
     child1: Range
-    child2: NodeId
-    signature = (Range, Property)
+    child2: NodeId[Property]
 
 @typechecked
 @dataclass
 class PropAnd(Property):
-    children: list[NodeId]
-    signature = (list[Property],)
+    children: list[NodeId[Property]]
 
 @typechecked
 @dataclass
 class PropSeq(Property):
-    child: NodeId
-    signature = (Sequence,)
+    child: NodeId[Sequence]
 
 @typechecked
 @dataclass
 class PropNonOverlappedImplication(Property):
-    child1: NodeId
-    child2: NodeId
-    signature = (Sequence, Property)
+    child1: NodeId[Sequence]
+    child2: NodeId[Property]
 
 
 
@@ -409,26 +423,18 @@ def class_to_operation_str(input: str) -> str:
 
 
 @typechecked
-def get_op_symbols() -> tuple[dict[str, NodeType], dict[str, NodeType], dict[type[PropertyIrNode], NodeType]]:
+def get_op_symbols() -> dict[str, type[PropertyIrNode]]:
     allowed_types = [Bool, Sequence, Property]
-    ops_to_cls: dict[str, NodeType] = dict()
-    ops_to_type: dict[str, NodeType] = dict()
-    cls_to_type: dict[type[PropertyIrNode], NodeType] = dict()
+    ops_to_cls: dict[str, type[PropertyIrNode]] = dict()
 
     for node_type in allowed_types:
-        cls_to_type[node_type] = node_type
         for cls in node_type.__subclasses__():
             ops_to_cls[class_to_operation_str(cls.__name__)] = cls
-            ops_to_type[class_to_operation_str(cls.__name__)] = node_type
-            cls_to_type[cls] = node_type
 
-    return ops_to_cls, ops_to_type, cls_to_type
+    return ops_to_cls
 
 
-op_symbol_tables = get_op_symbols()
-op_to_cls: dict[str, NodeType] = op_symbol_tables[0]
-op_to_type: dict[str, NodeType] = op_symbol_tables[1]
-cls_to_type: dict[type[PropertyIrNode], NodeType] = op_symbol_tables[2]
+op_to_cls: dict[str, type[PropertyIrNode]] = get_op_symbols()
 
 
 
@@ -457,7 +463,7 @@ def expr_to_list(expr: str) -> RawSExpr:
     print(tokens)
 
     current_list: RawSExpr = []
-    stack: RawSExpr = []
+    stack: list[RawSExpr] = []
 
     for t in tokens:
         if str.isnumeric(t):
@@ -494,13 +500,22 @@ def parse_range(range_expr: RawSExpr) -> Range | BoundedRange:
         case ['bounded-range', int(lower_bound), int(upper_bound)]:
             return BoundedRange(lower_bound, upper_bound)
         case ['range', int(lower_bound), int(upper_bound)]:
-            return Range(lower_bound, upper_bound)
+            return Range(lower_bound, IntOrUnbounded(upper_bound))
         case ['range', int(lower_bound), '$']:
-            return Range(lower_bound, '$')
+            return Range(lower_bound, IntOrUnbounded('$'))
         case _:
             raise ValueError(f'Unexpected range expression form {range_expr}')
 
-
+def check_names_sexpr(expr: RawSExpr) -> list[tuple[str, RawSExpr]]:
+    if not isinstance(expr, list):
+        raise ValueError(f"Expected list of named expressions instead of {expr}")
+    for item in expr:
+        match item:
+            case [str(_), _]:
+                continue
+            case _:
+                raise ValueError(f"Expected (name expression) pair instead of {item}")
+    return expr # type: ignore
 
 @typechecked
 def parse_expression(
@@ -523,7 +538,7 @@ def parse_expression(
             elif name in ['true', 'false']:
                 if not expected_type is Bool:
                     raise TypeError(f'Mismatch of expected type {expected_type} and {name} with type {Bool} in {expr}')
-                return Constant(expr)
+                return Constant(expr == 'true')
             elif name in ir_container.node_names:
                 named_node_id: NodeId = ir_container.get_node_id_by_name(name)
                 named_node: PropertyIrNode = ir_container[named_node_id]
@@ -540,7 +555,7 @@ def parse_expression(
 
             if not (expected_type is Int or expected_type is IntOrUnbounded):
                 raise TypeError(f'Mismatch of expected type {expected_type} and {literal} with type {type(literal)} in {expr}')
-            return literal
+            return Int(literal)
 
         case ['range', *args] | ['bounded-range', *args]:
 
@@ -550,6 +565,8 @@ def parse_expression(
 
 
         case ['let-rec', *named_subexpressions, return_expression]:
+
+            named_subexpressions = check_names_sexpr(named_subexpressions)
 
             # create a placeholder node for each new node name
             for (name, subexpr) in named_subexpressions:
@@ -561,10 +578,12 @@ def parse_expression(
             # and let each placeholder point to the root of its subexpression
             # or if the root is a placeholder, merge placeholders
             for (name, subexpr) in named_subexpressions:
-                subexpr_root_node_id: NodeId = parse_expression(subexpr, None, signals, ir_container)
-                subexpr_root_node: NodeId = ir_container[subexpr_root_node_id]
+                subexpr_root_node_id = parse_expression(subexpr, None, signals, ir_container)
+                assert isinstance(subexpr_root_node_id, NodeId) # TODO split parse_expression into sepate node / literal variant
+                subexpr_root_node: PropertyIrNode = ir_container[subexpr_root_node_id]
                 placeholder_id: NodeId = ir_container.get_node_id_by_name(name)
-                placeholder_node: PlaceholderNode = ir_container[placeholder_id]
+                placeholder_node = ir_container[placeholder_id]
+                assert isinstance(placeholder_node, PlaceholderNode)
 
                 placeholder_node.instantiate_placeholder(subexpr_root_node)
 
@@ -579,20 +598,21 @@ def parse_expression(
             if root_symbol in op_to_cls:
 
                 root_class: type = op_to_cls[root_symbol]
+                root_signature = root_class.signature()
 
                 if expected_type:
-                    if not op_to_type[root_symbol] is expected_type:
-                        raise TypeError(f'Mismatch of expected type {expected_type} and operation "{root_symbol}" with type {op_to_type[root_symbol]} in {expr}')
+                    if op_to_cls[root_symbol].type_class() is not expected_type:
+                        raise TypeError(f'Mismatch of expected type {expected_type} and operation "{root_symbol}" with type {op_to_cls[root_symbol].type_class()} in {expr}')
 
                 kwargs: dict[str, Any] = {}
 
                 for (index, field) in enumerate(root_class.get_child_fields()):
 
-                    child_expected_type: type = root_class.signature[index]
+                    child_expected_type: type = root_signature[index]
 
                     if get_origin(child_expected_type) is list:
                         list_elem_type: type = get_args(child_expected_type)[0]
-                        single_child_list: list[list_elem_type] = []
+                        single_child_list = []
 
                         # this assumes that a list parameter is never combined with other parameters
                         for child_expr in args:
@@ -630,7 +650,7 @@ def parse_expression(
 
 
 def print_expression(root: PropertyIrNode) -> str:
-    pass
+    raise NotImplementedError("TODO")
 
 
 
@@ -699,8 +719,6 @@ def main():
 
 
     print(op_to_cls)
-    print()
-    print(op_to_type)
     print()
 
     expr_list1: List[Any] = expr_to_list(test_expr1)
