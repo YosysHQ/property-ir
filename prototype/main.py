@@ -1,4 +1,4 @@
-#from __future__ import annotations
+from __future__ import annotations
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, fields, field, Field
 from typing import Literal, List, Optional, Any, Set, Dict, get_origin, get_args, Tuple, Union, ClassVar
@@ -73,7 +73,7 @@ class UnionFind[T]:
 
     def find(self, elem: T) -> T:
 
-        if not elem in self.parents:
+        if elem not in self.parents:
             return elem
 
         parent: T = self.parents[elem]
@@ -106,6 +106,12 @@ class UnionFind[T]:
             self.parents[repr1] = repr2
             self.ranks[repr2] += 1
 
+    def make_representative(self, elem: T):
+        current_repr = self.find(elem)
+        if current_repr == elem:
+            return
+        self.parents[current_repr] = elem
+        self.parents[elem] = elem
 
 
 
@@ -131,12 +137,12 @@ class PropertyIrNode(ABC):
     def __init__(self):
         pass
 
-
+    def node_type(self) -> type[PropertyIrNode]:
+        return type(self)
 
 @typechecked
 @dataclass
 class PlaceholderNode(PropertyIrNode):
-    replace_with: PropertyIrNode | None
     expected_type: type[PropertyIrNode] | None
     signature = ()
 
@@ -154,8 +160,8 @@ class PlaceholderNode(PropertyIrNode):
         # assuming that the type of a placeholder node does not change / get more refined (no unification)
 
     def instantiate_placeholder(self, node: PropertyIrNode):
-        self.check_type(cls_to_type[type(node)])
-        self.replace_with = node
+        self.check_type(cls_to_type[node.node_type()])
+        self.ir_container.merge_nodes(self.node_id, node.node_id)
 
 
 
@@ -191,7 +197,7 @@ class IrContainer:
 
     def add_placeholder_node(self, name: str, expected_type: Optional[type] = None):
         new_node_id = self._get_next_node_id()
-        new_node = PlaceholderNode(ir_container=self, node_id=new_node_id, expected_type=expected_type, replace_with=None)
+        new_node = PlaceholderNode(ir_container=self, node_id=new_node_id, expected_type=expected_type)
         self.nodes[new_node_id] = new_node
         self.node_names[name] = new_node_id
         return new_node
@@ -200,12 +206,15 @@ class IrContainer:
         """Remove placeholder nodes by letting their parents point directly to
         the instantiated nodes they are to be replaced by."""
 
-        replaced_dict: dict[NodeId, NodeId] = dict()
+        placeholder_ids_to_remove = []
 
         # for all nodes for all their children
         for node in self.nodes.values():
             print(f'START NODE {node}')
             if isinstance(node, PlaceholderNode):
+                representative_id = self.merged_nodes.find(node.node_id)
+                if representative_id != node.node_id:
+                    placeholder_ids_to_remove.append(node.node_id)
                 print(f'SKIP PLACEHOLDER')
                 continue
 
@@ -225,10 +234,7 @@ class IrContainer:
                         if isinstance(child_node, PlaceholderNode):
                             print(f'CHILD PLACEHOLDER {child_node}')
                             child_representative_id = self.merged_nodes.find(child_node_id)
-                            child_representative_node = self[child_representative_id]
-                            replacing_node_id: NodeId = child_representative_node.replace_with.node_id
-                            children_list[child_list_index] = replacing_node_id
-                            replaced_dict[child_node_id] = replacing_node_id
+                            children_list[child_list_index] = child_representative_id
 
                 else: # attribute is not a list
                     child_node_id = getattr(node, field.name)
@@ -238,30 +244,10 @@ class IrContainer:
                     if isinstance(child_node, PlaceholderNode):
                         print(f'CHILD PLACEHOLDER {child_node}')
                         child_representative_id = self.merged_nodes.find(child_node_id)
-                        child_representative_node = self[child_representative_id]
-                        replacing_node_id: NodeId = child_representative_node.replace_with.node_id
-                        setattr(node, field.name, replacing_node_id)
-                        replaced_dict[child_node_id] = replacing_node_id
+                        setattr(node, field.name, child_representative_id)
 
-
-        # remove all placeholders from container
-        # get them as the values of node_names
-        # store names of replacing nodes
-        #print(self.nodes[1])
-        #print(replaced_dict)
-        #for node_name, placeholder_node_id in self.node_names:
-        #    print(node_name, placeholder_node_id)
-        #    representative_id: NodeId = self.merged_nodes.find(placeholder_node_id)
-        #    print(representative_id)
-        #    replacing_id: NodeId = self.nodes[representative_id].replace_with
-        #    self.node_names_instantiated[node_name] = replacing_id
-        #for placeholder_node_id in set(self.node_names.values()):
-        #    if placeholder_node_id in self.nodes:
-        #        self.nodes.remove(placeholder_node_id)
-
-
-
-        pass
+        for placeholder_id in placeholder_ids_to_remove:
+            del self.nodes[placeholder_id]
 
     def __getitem__(self, node_id: NodeId) -> PropertyIrNode:
         node_repr_id: NodeId = self.merged_nodes.find(node_id)
@@ -293,23 +279,18 @@ class IrContainer:
         if (not node_id2 in self.nodes):
             raise ValueError(f'Could not merge {node_id1} and {node_id2} because {node_id2} is missing')
 
-        placeholder_node1: PlaceholderNode = self[node_id1]
-        placeholder_node2: PlaceholderNode = self[node_id2]
-        replacing_node1: Optional[PropertyIrNode] = placeholder_node1.replace_with
-        replacing_node2: Optional[PropertyIrNode] = placeholder_node1.replace_with
+        node1 = self[node_id1]
+        node2 = self[node_id1]
 
-        if replacing_node1 is not None and replacing_node2 is not None:
-            if replacing_node1 != replacing_node2:
-                raise ValueError(f'Attempting to merge {node_id1} and {node_id2}, but both are instantiated with different nodes. Is a node name reused?')
-        elif replacing_node1 is not None:
-            placeholder_node2.instantiate_placeholder(replacing_node1)
-        elif replacing_node2 is not None:
-            placeholder_node1.instantiate_placeholder(replacing_node2)
+        if not (isinstance(node1, PlaceholderNode) or isinstance(node2, PlaceholderNode)):
+            raise ValueError(f'Cannot merge non-placeholder node {node_id1} with non-placeholder node {node_id2}')
 
         self.merged_nodes.union(node_id1, node_id2)
 
-
-
+        if isinstance(node1, PlaceholderNode) and not isinstance(node2, PlaceholderNode):
+            self.merged_nodes.make_representative(node_id1)
+        elif isinstance(node2, PlaceholderNode) and not isinstance(node1, PlaceholderNode):
+            self.merged_nodes.make_representative(node_id2)
 
 
 
@@ -435,6 +416,7 @@ def get_op_symbols() -> tuple[dict[str, NodeType], dict[str, NodeType], dict[typ
     cls_to_type: dict[type[PropertyIrNode], NodeType] = dict()
 
     for node_type in allowed_types:
+        cls_to_type[node_type] = node_type
         for cls in node_type.__subclasses__():
             ops_to_cls[class_to_operation_str(cls.__name__)] = cls
             ops_to_type[class_to_operation_str(cls.__name__)] = node_type
@@ -584,10 +566,7 @@ def parse_expression(
                 placeholder_id: NodeId = ir_container.get_node_id_by_name(name)
                 placeholder_node: PlaceholderNode = ir_container[placeholder_id]
 
-                if isinstance(subexpr_root_node, PlaceholderNode):
-                    ir_container.merge_nodes(subexpr_root_node_id, placeholder_id)
-                else:
-                    placeholder_node.instantiate_placeholder(subexpr_root_node)
+                placeholder_node.instantiate_placeholder(subexpr_root_node)
 
             # return value of last expression
             return parse_expression(return_expression, None, signals, ir_container)
