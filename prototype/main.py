@@ -264,12 +264,9 @@ class IrContainer:
                             graph.node(repr(child_node_id), repr(child_node_id), shape='diamond')
                         graph.edge(repr(node.node_id), repr(child_node_id), field.name)
 
-
-
         for (node_name, node_id) in self.node_names.items():
             graph.node(f'__NODENAME__{node_name}', node_name, shape='plain')
-            graph.edge(f'__NODENAME__{node_name}', repr(node_id), 'name', style='dashed')
-
+            graph.edge(f'__NODENAME__{node_name}', repr(node_id), style='dashed')
 
         graph.render(filename, view=True, format='png')
 
@@ -281,12 +278,15 @@ class IrContainer:
 
         placeholder_ids_to_remove = []
 
-        # for all nodes for all their children
+        for node_name, node_id in self.node_names.items():
+            self.node_names[node_name] = self.merged_nodes.find(node_id)
+
         for node in self.nodes.values():
             print(f'START NODE {node}')
             if isinstance(node, PlaceholderNode):
                 representative_id = self.merged_nodes.find(node.node_id)
                 if representative_id != node.node_id:
+                    print(f'represented by {representative_id}, mark to delete')
                     placeholder_ids_to_remove.append(node.node_id)
                 print(f'SKIP PLACEHOLDER')
                 continue
@@ -302,27 +302,30 @@ class IrContainer:
                     for child_list_index, child_node_id in enumerate(children_list):
                         if isinstance(child_node_id, LiteralType.__value__): # skip literal type
                             continue
-                        child_node = self[child_node_id]
+                        child_node_representative = self[child_node_id]
+                        print(f'child node {child_node_representative}')
 
-                        # if child is a placeholder
-                        # replace child node id by node id the placeholder (or its representative) points to
-                        if isinstance(child_node, PlaceholderNode):
-                            print(f'CHILD PLACEHOLDER {child_node}')
-                            child_representative_id = self.merged_nodes.find(child_node_id)
+                        child_representative_id: NodeId = child_node_representative.node_id
+                        if child_representative_id != child_node_id:
                             children_list[child_list_index] = child_representative_id
 
-                else: # attribute is not a list
+                else: # if child type is not list
                     child_node_id = getattr(node, field.name)
                     if isinstance(child_node_id, LiteralType.__value__): # skip literal type
                         continue
-                    child_node = self[child_node_id]
-                    if isinstance(child_node, PlaceholderNode):
-                        print(f'CHILD PLACEHOLDER {child_node}')
-                        child_representative_id = self.merged_nodes.find(child_node_id)
+
+                    child_node_representative = self[child_node_id]
+                    print(f'child node {child_node_representative}')
+
+                    child_representative_id: NodeId = child_node_representative.node_id
+                    if child_representative_id != child_node_id:
                         setattr(node, field.name, child_representative_id)
 
         for placeholder_id in placeholder_ids_to_remove:
             del self.nodes[placeholder_id]
+
+        self.merged_nodes = UnionFind()
+
 
     def __getitem__(self, node_id: NodeId) -> PropertyIrNode:
         node_repr_id: NodeId = self.merged_nodes.find(node_id)
@@ -817,20 +820,29 @@ def main():
     print()
     parse_expression(expr_list8, None, signal_dict, ir_container8)
     print()
-
-    print(ir_container5.nodes)
-    print(ir_container5.node_names)
-    print(ir_container5.merged_nodes.parents)
-
     #parse_expression(expr_list9, None, signal_dict, ir_container9)
-    ir_container5.show_graph('container5.png')
-    #ir_container7.bypass_placeholders()
 
-    #ir_container7.show_graph('container7_no_placeholders.png')
-
+    #print()
     #print(ir_container7.nodes)
+    #print()
     #print(ir_container7.node_names)
+    #print()
     #print(ir_container7.merged_nodes.parents)
+    #print()
+
+    ir_container7.show_graph('container7')
+    ir_container7.bypass_placeholders()
+
+    #print()
+    #print(ir_container7.nodes)
+    #print()
+    #print(ir_container7.node_names)
+    #print()
+    #print(ir_container7.merged_nodes.parents)
+    #print()
+
+    ir_container7.show_graph('container7_no_placeholders')
+
 
 if __name__ == "__main__":
 
