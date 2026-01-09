@@ -6,6 +6,7 @@ from typing import Literal, List, Optional, Any, Set, Dict, get_origin, get_args
 from typing import get_type_hints
 from typeguard import typechecked
 import re
+from graphviz import Digraph
 
 
 
@@ -127,7 +128,7 @@ def forward_node_id_types(ty: Any) -> type:
 @typechecked
 @dataclass
 class PropertyIrNode(ABC):
-    ir_container: 'IrContainer'
+    ir_container: IrContainer
     node_id: NodeId
 
     @classmethod
@@ -225,6 +226,55 @@ class IrContainer:
         self.node_names[name] = new_node_id
         return new_node
 
+    def show_graph(self, filename: str) -> None:
+
+
+        graph: Digraph = Digraph()
+
+
+        for node in self.nodes.values():
+
+            representative_id = self.merged_nodes.find(node.node_id)
+            if representative_id != node.node_id:
+                graph.edge(repr(node.node_id), repr(representative_id), 'merged', style='dashed')
+
+            if isinstance(node, PlaceholderNode):
+
+                graph.node(repr(node.node_id), repr(node.node_id))
+
+            else: # if node is not a PlaceholderNode
+
+                graph.node(repr(node.node_id), f'{type(node).__name__} {node.node_id}', shape='box')
+
+                signature = type(node).signature()
+
+                for index, field in enumerate(node.get_child_fields()):
+
+                    child_type: type = signature[index]
+                    if get_origin(child_type) is list:
+                        children_list = getattr(node, field.name)
+                        for child_node_id in children_list:
+                            if isinstance(child_node_id, LiteralType.__value__):
+                                graph.node(repr(child_node_id), repr(child_node_id), shape='diamond')
+                            graph.edge(repr(node.node_id), repr(child_node_id), field.name)
+
+                    else: # if child type is not a list
+                        child_node_id = getattr(node, field.name)
+                        if isinstance(child_node_id, LiteralType.__value__):
+                            graph.node(repr(child_node_id), repr(child_node_id), shape='diamond')
+                        graph.edge(repr(node.node_id), repr(child_node_id), field.name)
+
+
+
+        for (node_name, node_id) in self.node_names.items():
+            graph.node(f'__NODENAME__{node_name}', node_name, shape='plain')
+            graph.edge(f'__NODENAME__{node_name}', repr(node_id), 'name', style='dashed')
+
+
+        graph.render(filename, view=True, format='png')
+
+
+
     def bypass_placeholders(self) -> None:
         """Remove placeholder nodes by letting their parents point directly to
         the instantiated nodes they are to be replaced by."""
@@ -305,7 +355,7 @@ class IrContainer:
             raise ValueError(f'Could not merge {node_id1} and {node_id2} because {node_id2} is missing')
 
         node1 = self[node_id1]
-        node2 = self[node_id1]
+        node2 = self[node_id2]
 
         if not (isinstance(node1, PlaceholderNode) or isinstance(node2, PlaceholderNode)):
             raise ValueError(f'Cannot merge non-placeholder node {node_id1} with non-placeholder node {node_id2}')
@@ -313,9 +363,9 @@ class IrContainer:
         self.merged_nodes.union(node_id1, node_id2)
 
         if isinstance(node1, PlaceholderNode) and not isinstance(node2, PlaceholderNode):
-            self.merged_nodes.make_representative(node_id1)
-        elif isinstance(node2, PlaceholderNode) and not isinstance(node1, PlaceholderNode):
             self.merged_nodes.make_representative(node_id2)
+        elif isinstance(node2, PlaceholderNode) and not isinstance(node1, PlaceholderNode):
+            self.merged_nodes.make_representative(node_id1)
 
 
 
@@ -768,17 +818,19 @@ def main():
     parse_expression(expr_list8, None, signal_dict, ir_container8)
     print()
 
-    print(ir_container7.nodes)
-    print(ir_container7.node_names)
-    print(ir_container7.merged_nodes.parents)
+    print(ir_container5.nodes)
+    print(ir_container5.node_names)
+    print(ir_container5.merged_nodes.parents)
 
     #parse_expression(expr_list9, None, signal_dict, ir_container9)
+    ir_container5.show_graph('container5.png')
+    #ir_container7.bypass_placeholders()
 
-    ir_container7.bypass_placeholders()
+    #ir_container7.show_graph('container7_no_placeholders.png')
 
-    print(ir_container7.nodes)
-    print(ir_container7.node_names)
-    print(ir_container7.merged_nodes.parents)
+    #print(ir_container7.nodes)
+    #print(ir_container7.node_names)
+    #print(ir_container7.merged_nodes.parents)
 
 if __name__ == "__main__":
 
