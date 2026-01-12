@@ -1,9 +1,10 @@
 from __future__ import annotations
+from pathlib import Path
 
 from sexpr import parse_expression, tokenize, IrContainer, Signal, RawSExpr
 
 
-
+output_directory: Path = Path('prototype/output')
 
 
 
@@ -124,7 +125,7 @@ def main():
     #print(ir_container7.merged_nodes.parents)
     #print()
 
-    ir_container6.show_graph('container6')
+    ir_container6.show_graph(output_directory / 'container6.png')
     ir_container6.bypass_placeholders()
 
     #print()
@@ -135,7 +136,7 @@ def main():
     #print(ir_container7.merged_nodes.parents)
     #print()
 
-    ir_container6.show_graph('container6_no_placeholders')
+    ir_container6.show_graph(output_directory / 'container6_no_placeholders.png')
 
 
 if __name__ == "__main__":

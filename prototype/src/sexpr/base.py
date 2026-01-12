@@ -4,6 +4,7 @@ from dataclasses import dataclass, fields, Field
 from typing import Literal, Optional, Any, get_origin, get_type_hints
 from typeguard import typechecked
 from graphviz import Digraph
+from pathlib import Path
 
 from .utils import UnionFind
 
@@ -171,7 +172,7 @@ class IrContainer:
         self.node_names[name] = new_node_id
         return new_node
 
-    def show_graph(self, filename: str) -> None:
+    def show_graph(self, output_path: Path) -> None:
 
 
         graph: Digraph = Digraph()
@@ -213,7 +214,10 @@ class IrContainer:
             graph.node(f'__NODENAME__{node_name}', node_name, shape='plain')
             graph.edge(f'__NODENAME__{node_name}', repr(node_id), style='dashed')
 
-        graph.render(filename, view=True, format='png')
+        if not output_path.parent.exists():
+                raise ValueError(f'Output directory {output_path.parent} for graph rendering missing')
+
+        graph.render(filename=output_path.stem, directory=output_path.parent, view=True, format=output_path.suffix.lstrip('.'), cleanup=True)
 
 
 
