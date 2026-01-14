@@ -35,6 +35,9 @@ expr_missing_close_bracket1 =  '(or (and a b) (not (and (not a) c) d)'
 expr_missing_close_bracket2 =  '(or (and a b (not (and (not a) c)) d)'
 
 expr_additional_brackets1 =  '(or ((and a b)) (not (and (not a) c)) d)'
+expr_additional_brackets2 =  '(or (and a (b)) (not (and (not a) c)) d)'
+expr_additional_brackets3 =  '(or (and a b ()) (not (and (not a) c)) d)'
+expr_additional_brackets4 =  '(or (and a b (  )) (not (and (not a) c)) d)'
 
 
 
@@ -63,7 +66,7 @@ def test_tokenize_error_missing_close_bracket(tokenize_input):
 # TODO: where should unnecessary brackets be handled or removed?
 @pytest.mark.xfail(reason='unnecessary brackets not handled yet')
 @pytest.mark.parametrize('tokenize_input',
-    [expr_additional_brackets1])
+    [expr_additional_brackets1, expr_additional_brackets2, expr_additional_brackets3, expr_additional_brackets4])
 def test_tokenize_error_additional_brackets(tokenize_input):
     with pytest.raises(ValueError, match='Unexpected token'):
         tokenize(tokenize_input)
