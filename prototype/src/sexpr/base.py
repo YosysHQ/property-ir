@@ -5,6 +5,7 @@ from typing import Literal, Optional, Any, get_origin, get_type_hints
 from typeguard import typechecked
 from graphviz import Digraph
 from pathlib import Path
+import re
 
 from .utils import UnionFind
 
@@ -33,17 +34,7 @@ class BoundedRange():
     lower_bound: int
     upper_bound: int
 
-# literal treated as node type Bool
-@typechecked
-@dataclass
-class Signal():
-    signal_name: str
 
-# literal treated as node type Bool
-@typechecked
-@dataclass
-class Constant():
-    value: bool
 
 
 
@@ -54,7 +45,7 @@ class NodeId[T: PropertyIrNode]:
     def __repr__(self):
         return f"{type(self).__name__}({self.raw})"
 
-type LiteralType = bool | Int | str | Range | BoundedRange | IntOrUnbounded | Signal | Constant
+type LiteralType = bool | Int | str | Range | BoundedRange | IntOrUnbounded
 
 type RawSExpr = list[str | int | RawSExpr]
 
@@ -76,6 +67,12 @@ def forward_node_id_types(ty: Any) -> type:
 class PropertyIrNode(ABC):
     ir_container: IrContainer
     node_id: NodeId
+
+    @classmethod
+    def op_symbol(cls):
+        split: list[str] = re.split(r'(?=[A-Z])', cls.__name__)
+        lowercase: list[str] = [str.lower(s) for s in split if s != '']
+        return('-'.join(lowercase))
 
     @classmethod
     def type_class(cls) -> type[PropertyIrNode]:
@@ -111,6 +108,11 @@ class PropertyIrNode(ABC):
     def node_type(self) -> type[PropertyIrNode]:
         return type(self)
 
+    def check_type(self, node_type: type[PropertyIrNode]):
+        if not issubclass(self.node_type(), node_type):
+            raise TypeError(f'Placeholder node {self} with type {self.node_type()} cannot be set to type {node_type}')
+
+
 @typechecked
 @dataclass
 class PlaceholderNode(PropertyIrNode):
@@ -125,9 +127,9 @@ class PlaceholderNode(PropertyIrNode):
     def check_type(self, node_type: type[PropertyIrNode]):
         if self.expected_type is None:
             self.expected_type = node_type
-        elif not issubclass(self.expected_type, node_type):
-            raise TypeError(f'Placeholder node {self} with type {self.expected_type} cannot be set to type {node_type}')
-        # assuming that the type of a placeholder node does not change / get more refined (no unification)
+        else:
+            # assuming that the type of a placeholder node does not change / get more refined (no unification)
+            super().check_type(node_type)
 
     def instantiate_placeholder(self, node: PropertyIrNode):
         self.check_type(node.node_type().type_class())
@@ -142,7 +144,7 @@ class IrContainer:
     nodes: dict[NodeId, PropertyIrNode]
 
     node_names: dict[str, NodeId]
-    node_names_instantiated: dict[str, NodeId]
+    global_nodes: dict[str, NodeId]
     merged_nodes: UnionFind[NodeId]
 
     next_raw_node_id: int
@@ -150,7 +152,7 @@ class IrContainer:
     def __init__(self):
         self.nodes =  dict()
         self.node_names = dict()
-        self.node_names_instantiated = dict()
+        self.global_nodes = dict()
         self.merged_nodes = UnionFind()
         self.next_raw_node_id = 1
 
@@ -158,6 +160,9 @@ class IrContainer:
         node_id = NodeId(self.next_raw_node_id)
         self.next_raw_node_id += 1
         return node_id
+
+    def uniquify(self, name: str): # TODO: implement this
+        return name
 
     def add_node_by_kwargs[T: PropertyIrNode](self, cls: type[T], kwargs: dict[str, Any]) -> T:
         new_node_id = self._get_next_node_id()
@@ -171,6 +176,13 @@ class IrContainer:
         self.nodes[new_node_id] = new_node
         self.node_names[name] = new_node_id
         return new_node
+
+    def add_signal_node(self, signal_name: str) -> PropertyIrNode:
+        if signal_name in self.global_nodes:
+            raise ValueError(f'Attempting to add signal with name {signal_name}, but the name is already in use')
+        signal_node = self.add_node_by_kwargs(Signal, dict(signal_name=signal_name))
+        self.global_nodes[signal_name] = signal_node.node_id
+        return signal_node
 
     def show_graph(self, output_path: Path) -> None:
 
@@ -356,3 +368,7 @@ class Property(PropertyIrNode):
 
 
 
+@typechecked
+@dataclass
+class Signal(Bool):
+    signal_name: str

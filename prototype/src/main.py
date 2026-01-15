@@ -35,10 +35,10 @@ def main():
     test_expr6 = """(let-rec
                         (prop1 (prop-and
                             (prop-seq (seq-bool a))
-                            (prop-non-overlapped-implication (seq-bool true) prop2)))
+                            (prop-non-overlapped-implication (seq-bool (constant true)) prop2)))
                         (prop2 (prop-and
                             (prop-seq (seq-bool a))
-                            (prop-non-overlapped-implication (seq-bool true) prop1)))
+                            (prop-non-overlapped-implication (seq-bool (constant true)) prop1)))
                         prop1)"""
 
     test_expr7 = """(let-rec
@@ -66,7 +66,7 @@ def main():
         (bar2 (seq-concat (seq-bool a) (seq-bool b)))
         foo2)"""
 
-    signal_dict = {'a': Signal('a'), 'b': Signal('b'), 'c': Signal('c'), 'd': Signal('d')}
+    #signal_dict = {'a': Signal('a'), 'b': Signal('b'), 'c': Signal('c'), 'd': Signal('d')}
 
 
     expr_list1: RawSExpr = tokenize(test_expr1)
@@ -98,23 +98,28 @@ def main():
     ir_container8 = IrContainer()
     ir_container9 = IrContainer()
 
+    signal_node1 = ir_container1.add_signal_node('a')
+    signal_node2 = ir_container1.add_signal_node('b')
+    signal_node3 = ir_container1.add_signal_node('c')
+    signal_node4 = ir_container1.add_signal_node('d')
 
-    parse_expression(expr_list1, None, signal_dict, ir_container1)
+
+    #parse_expression(expr_list1, None, ir_container1.global_nodes, ir_container1)
     print()
-    parse_expression(expr_list2, None, signal_dict, ir_container2)
-    print()
-    parse_expression(expr_list3, None, signal_dict, ir_container3)
-    print()
-    parse_expression(expr_list4, None, signal_dict, ir_container4)
-    print()
-    parse_expression(expr_list5, None, signal_dict, ir_container5)
-    print()
-    parse_expression(expr_list6, None, signal_dict, ir_container6)
-    print()
-    parse_expression(expr_list7, None, signal_dict, ir_container7)
-    print()
-    parse_expression(expr_list8, None, signal_dict, ir_container8)
-    print()
+    #parse_expression(expr_list2, None, signal_dict, ir_container2)
+    #print()
+    #parse_expression(expr_list3, None, signal_dict, ir_container3)
+    #print()
+    #parse_expression(expr_list4, None, signal_dict, ir_container4)
+    #print()
+    #parse_expression(expr_list5, None, signal_dict, ir_container5)
+    #print()
+    parse_expression(expr_list6, None, ir_container1.global_nodes, ir_container1)
+    #print()
+    #parse_expression(expr_list7, None, signal_dict, ir_container7)
+    #print()
+    #parse_expression(expr_list8, None, signal_dict, ir_container8)
+    #print()
     #parse_expression(expr_list9, None, signal_dict, ir_container9)
 
     #print()
@@ -125,8 +130,8 @@ def main():
     #print(ir_container7.merged_nodes.parents)
     #print()
 
-    ir_container6.show_graph(output_directory / 'container6.png')
-    ir_container6.bypass_placeholders()
+    #ir_container1.show_graph(output_directory / 'container1.png')
+    ir_container1.bypass_placeholders()
 
     #print()
     #print(ir_container7.nodes)
@@ -136,7 +141,7 @@ def main():
     #print(ir_container7.merged_nodes.parents)
     #print()
 
-    ir_container6.show_graph(output_directory / 'container6_no_placeholders.png')
+    #ir_container1.show_graph(output_directory / 'container1_no_placeholders.png')
 
 
 if __name__ == "__main__":

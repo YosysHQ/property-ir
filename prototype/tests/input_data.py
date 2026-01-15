@@ -1,7 +1,5 @@
-from sexpr import Signal
 
 
-signals: dict[str, Signal] = {'a': Signal('a'), 'b': Signal('b'), 'c': Signal('c'), 'd': Signal('d')}
 
 
 expr1 =  '(or (and a b) (not (and (not a) c)) d)'
@@ -26,13 +24,15 @@ expr5 = """(let-rec
     )"""
 
 expr6 = """(let-rec
-                        (prop1 (prop-and
-                            (prop-seq (seq-bool a))
-                            (prop-non-overlapped-implication (seq-bool true) prop2)))
-                        (prop2 (prop-and
-                            (prop-seq (seq-bool a))
-                            (prop-non-overlapped-implication (seq-bool true) prop1)))
-                        prop1)"""
+                (prop1 (prop-and
+                    (prop-seq (seq-bool a))
+                    (prop-non-overlapped-implication (seq-bool (constant true)) prop2)))
+                (prop2 (prop-and
+                    (prop-seq (seq-bool a))
+                    (prop-non-overlapped-implication (seq-bool (constant true)) prop1)))
+                prop1)"""
+
+
 
 expr7 = """(let-rec
         (q1 (seq-concat (seq-bool a) q3))
@@ -87,10 +87,10 @@ tokenized5 = ['let-rec',
 tokenized6 = ['let-rec',
                 ['prop1', ['prop-and',
                     ['prop-seq', ['seq-bool', 'a']],
-                    ['prop-non-overlapped-implication', ['seq-bool', 'true'], 'prop2']]],
+                    ['prop-non-overlapped-implication', ['seq-bool', ['constant', 'true']], 'prop2']]],
                 ['prop2', ['prop-and',
                     ['prop-seq', ['seq-bool', 'a']],
-                    ['prop-non-overlapped-implication', ['seq-bool', 'true'], 'prop1']]],
+                    ['prop-non-overlapped-implication', ['seq-bool', ['constant', 'true']], 'prop1']]],
                 'prop1']
 
 tokenized7 = ['let-rec',

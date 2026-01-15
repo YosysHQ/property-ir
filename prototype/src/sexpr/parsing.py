@@ -6,15 +6,10 @@ import re
 from .base import RawSExpr, LiteralType, NodeId
 from .base import IrContainer, PropertyIrNode, PlaceholderNode
 from .base import Bool, Sequence, Property
-from .base import Int, Range, BoundedRange, IntOrUnbounded, Constant, Signal
+from .base import Int, Range, BoundedRange, IntOrUnbounded, Signal
 from .primitives import *
 
 
-
-def class_to_operation_str(input: str) -> str:
-    split: list[str] = re.split(r'(?=[A-Z])', input)
-    lowercase: list[str] = [str.lower(s) for s in split if s != '']
-    return('-'.join(lowercase))
 
 
 @typechecked
@@ -24,7 +19,7 @@ def get_op_symbols() -> dict[str, type[PropertyIrNode]]:
 
     for node_type in allowed_types:
         for cls in node_type.__subclasses__():
-            ops_to_cls[class_to_operation_str(cls.__name__)] = cls
+            ops_to_cls[cls.op_symbol()] = cls
 
     return ops_to_cls
 
@@ -33,7 +28,7 @@ op_to_cls: dict[str, type[PropertyIrNode]] = get_op_symbols()
 
 
 @typechecked
-def tokenize(expr: str) -> RawSExpr:
+def tokenize(expr: str) -> RawSExpr: # TODO rename to parse_raw_sexpr
     """Converts the s-expression given as a str to a nested list whose base
     elements are either str or int (int used only for integers, not for
     booleans)."""
@@ -76,7 +71,8 @@ def tokenize(expr: str) -> RawSExpr:
 
     return current_list
 
-
+def unparse_raw_sexpr(sexpr: RawSExpr) -> str:
+    raise NotImplementedError # TODO implement me
 
 
 
@@ -93,6 +89,14 @@ def parse_range(range_expr: RawSExpr) -> Range | BoundedRange:
         case _:
             raise ValueError(f'Unexpected range expression form {range_expr}')
 
+def parse_bool(bool_literal: str) -> bool:
+        if bool_literal == 'true':
+            return True
+        elif bool_literal == 'false':
+            return False
+        else:
+            raise TypeError('Expected bool constant instead of {bool_literal}')
+
 def check_names_sexpr(expr: RawSExpr) -> list[tuple[str, RawSExpr]]:
     if not isinstance(expr, list):
         raise ValueError(f"Expected list of named expressions instead of {expr}")
@@ -107,8 +111,8 @@ def check_names_sexpr(expr: RawSExpr) -> list[tuple[str, RawSExpr]]:
 @typechecked
 def parse_expression(
     expr: RawSExpr | str | int,
-    expected_type: Optional[type],
-    signals: dict[str, Signal],
+    expected_type: Optional[type[PropertyIrNode]],
+    local_nodes: dict[str, NodeId],
     ir_container: IrContainer) -> NodeId | LiteralType:
 
     print(f"start with {expr}")
@@ -118,23 +122,14 @@ def parse_expression(
 
         case str(name):
 
-            if name in signals:
-                if not expected_type is Bool:
-                    raise TypeError(f'Mismatch of expected type {expected_type} and {name} with type {Bool} in {expr}')
-                return signals[name]
-            elif name in ['true', 'false']:
-                if not expected_type is Bool:
-                    raise TypeError(f'Mismatch of expected type {expected_type} and {name} with type {Bool} in {expr}')
-                return Constant(expr == 'true')
-            elif name in ir_container.node_names:
-                named_node_id: NodeId = ir_container.get_node_id_by_name(name)
-                named_node: PropertyIrNode = ir_container[named_node_id]
+            if name in local_nodes:
                 if expected_type is not None:
-                    if isinstance(named_node, PlaceholderNode):
-                        named_node.check_type(expected_type)
-                    elif not isinstance(named_node, expected_type):
-                            raise TypeError(f'Mismatch of expected type {expected_type} and {name} with type {type(named_node)} in {expr}')
-                return named_node_id
+                    ir_container[local_nodes[name]].check_type(expected_type)
+                return local_nodes[name]
+            #elif name in ['true', 'false']:  # sexpr: "true", "false"
+            #    if not expected_type is Bool:
+            #        raise TypeError(f'Mismatch of expected type {expected_type} and {name} with type {Bool} in {expr}')
+            #    return Constant(expr == 'true')
             else:
                 raise ValueError(f'Unexpected symbol {name}')
 
@@ -144,9 +139,6 @@ def parse_expression(
                 raise TypeError(f'Mismatch of expected type {expected_type} and {literal} with type {type(literal)} in {expr}')
             return Int(literal)
 
-        case ['range', *args] | ['bounded-range', *args]:
-
-            return parse_range(expr)
 
 
 
@@ -155,29 +147,41 @@ def parse_expression(
 
             named_subexpressions = check_names_sexpr(named_subexpressions)
 
+            inner_local_nodes = dict(local_nodes)
+
             # create a placeholder node for each new node name
             for (name, subexpr) in named_subexpressions:
-                if name in ir_container.node_names:
-                    raise ValueError(f'Node name {name} already exists in expression {expr}')
-                ir_container.add_placeholder_node(name=name)
+                node_name = ir_container.uniquify(name) # returns name if not used otherwise returns f"{name}_{counter}" for a counter value that results in an unused name
+                if name in inner_local_nodes:
+                    raise ValueError # TODO message
+                inner_local_nodes[name] = ir_container.add_placeholder_node(name=node_name).node_id
+
 
             # evaluate each named subexpression
             # and let each placeholder point to the root of its subexpression
             # or if the root is a placeholder, merge placeholders
             for (name, subexpr) in named_subexpressions:
-                subexpr_root_node_id = parse_expression(subexpr, None, signals, ir_container)
+                subexpr_root_node_id = parse_expression(subexpr, None, inner_local_nodes, ir_container)
                 assert isinstance(subexpr_root_node_id, NodeId) # TODO split parse_expression into sepate node / literal variant
                 subexpr_root_node: PropertyIrNode = ir_container[subexpr_root_node_id]
-                placeholder_id: NodeId = ir_container.get_node_id_by_name(name)
+                placeholder_id: NodeId = inner_local_nodes[name]
                 placeholder_node = ir_container[placeholder_id]
                 assert isinstance(placeholder_node, PlaceholderNode)
 
                 placeholder_node.instantiate_placeholder(subexpr_root_node)
 
+            for (name, subexpr) in named_subexpressions:
+                subexpr_id: NodeId = inner_local_nodes[name]
+                subexpr_node = ir_container[subexpr_id]
+                if isinstance(subexpr_node, PlaceholderNode):
+                    raise ValueError # TODO message
+
+
             # return value of last expression
-            return parse_expression(return_expression, None, signals, ir_container)
+            return parse_expression(return_expression, None, inner_local_nodes, ir_container)
 
-
+        case ["true" | "false" as root_symbol]: # "(false)" "(true)"
+            return parse_expression(["constant", root_symbol], expected_type, local_nodes, ir_container)
 
 
         case [str(root_symbol), *args]:
@@ -195,22 +199,41 @@ def parse_expression(
 
                 for (index, field) in enumerate(root_class.get_child_fields()):
 
-                    child_expected_type: type = root_signature[index]
+                    field_type: type = root_signature[index]
 
-                    if get_origin(child_expected_type) is list:
-                        list_elem_type: type = get_args(child_expected_type)[0]
+                    if get_origin(field_type) is list:
+                        list_elem_type: type = get_args(field_type)[0]
+                        assert issubclass(list_elem_type, PropertyIrNode)
                         single_child_list = []
 
                         # this assumes that a list parameter is never combined with other parameters
                         for child_expr in args:
-                            child_node = parse_expression(child_expr, list_elem_type, signals, ir_container)
+                            child_node = parse_expression(child_expr, list_elem_type, local_nodes, ir_container)
                             single_child_list.append(child_node)
                         kwargs[field.name] = single_child_list
 
-                    else:
+                    elif issubclass(field_type, PropertyIrNode):
                         child_expr = args[index]
-                        child_node = parse_expression(child_expr, child_expected_type, signals, ir_container)
+                        child_node = parse_expression(child_expr, field_type, local_nodes, ir_container)
                         kwargs[field.name] = child_node
+
+                    elif issubclass(field_type, bool):
+                        child_expr = args[index]
+                        if isinstance(child_expr, str):
+                            kwargs[field.name] = parse_bool(child_expr)
+                        else:
+                            raise TypeError(f'Expected string representation of bool instead of {child_expr} in {expr}')
+
+                    elif issubclass(field_type, Range | BoundedRange):
+                        child_expr = args[index]
+                        if isinstance(child_expr, list):
+                            parsed_range = parse_range(child_expr)
+                        else:
+                            raise TypeError(f'Expected range expression instead of {child_expr} in {expr}')
+                        if not isinstance(parsed_range, field_type):
+                            raise TypeError(f'Expected {field_type}, but received {parsed_range} in {expr}')
+                        kwargs[field.name] = parsed_range
+
 
                 root_node: PropertyIrNode = ir_container.add_node_by_kwargs(root_class, kwargs)
 
