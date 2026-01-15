@@ -1,4 +1,5 @@
 from __future__ import annotations
+from abc import abstractmethod
 from dataclasses import dataclass
 from typeguard import typechecked
 
@@ -7,6 +8,12 @@ from .base import NodeId, Bool, Sequence, Property, Range
 
 
 # Bool primitives
+
+# literal treated as node type Bool
+@typechecked
+@dataclass
+class Constant(Bool): # "(constant false)" "(constant true)"
+    value: bool
 
 @typechecked
 @dataclass

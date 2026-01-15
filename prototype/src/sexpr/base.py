@@ -1,4 +1,5 @@
 from __future__ import annotations
+import re
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, fields, Field
 from typing import Literal, Optional, Any, get_origin, get_type_hints
@@ -39,11 +40,6 @@ class BoundedRange():
 class Signal():
     signal_name: str
 
-# literal treated as node type Bool
-@typechecked
-@dataclass
-class Constant():
-    value: bool
 
 
 
@@ -76,6 +72,12 @@ def forward_node_id_types(ty: Any) -> type:
 class PropertyIrNode(ABC):
     ir_container: IrContainer
     node_id: NodeId
+
+    @classmethod
+    def op_symbol(cls):
+        split: list[str] = re.split(r'(?=[A-Z])', cls.__name__)
+        lowercase: list[str] = [str.lower(s) for s in split if s != '']
+        return('-'.join(lowercase))
 
     @classmethod
     def type_class(cls) -> type[PropertyIrNode]:
@@ -111,6 +113,11 @@ class PropertyIrNode(ABC):
     def node_type(self) -> type[PropertyIrNode]:
         return type(self)
 
+    def check_type(self, node_type: type[PropertyIrNode]):
+        if not issubclass(self.node_type(), node_type):
+            raise TypeError(f'Placeholder node {self} with type {self.node_type()} cannot be set to type {node_type}')
+
+
 @typechecked
 @dataclass
 class PlaceholderNode(PropertyIrNode):
@@ -125,9 +132,9 @@ class PlaceholderNode(PropertyIrNode):
     def check_type(self, node_type: type[PropertyIrNode]):
         if self.expected_type is None:
             self.expected_type = node_type
-        elif not issubclass(self.expected_type, node_type):
-            raise TypeError(f'Placeholder node {self} with type {self.expected_type} cannot be set to type {node_type}')
-        # assuming that the type of a placeholder node does not change / get more refined (no unification)
+        else:
+            # assuming that the type of a placeholder node does not change / get more refined (no unification)
+            super().check_type(node_type)
 
     def instantiate_placeholder(self, node: PropertyIrNode):
         self.check_type(node.node_type().type_class())
@@ -142,7 +149,7 @@ class IrContainer:
     nodes: dict[NodeId, PropertyIrNode]
 
     node_names: dict[str, NodeId]
-    node_names_instantiated: dict[str, NodeId]
+    global_nodes: dict[str, NodeId]
     merged_nodes: UnionFind[NodeId]
 
     next_raw_node_id: int

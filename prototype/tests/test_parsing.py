@@ -8,6 +8,12 @@ from sexpr.primitives import And, Not, Or, PropAlwaysRanged, PropSeq, SeqBool, S
 
 
 
+def test_raw_sexpr_parsing():
+    # TODO not complete...
+
+    raw_sexpr: RawSExpr = ...
+
+    parse_raw_sexpr(unparse_raw_sexpr(raw_sexpr)) == raw_sexpr
 
 
 literal_valid_list = [
@@ -45,7 +51,7 @@ literal_invalid_range = [
 
 @pytest.mark.parametrize('literal_expr,expec_type,expected', literal_valid_list)
 def test_parse_literals_valid(container, literal_expr, expec_type, expected):
-    result = parse_expression(expr=literal_expr, expected_type=expec_type, signals=signals, ir_container=container)
+    result = parse_expression(expr=literal_expr, expected_type=expec_type, local_nodes=container.global_nodes, ir_container=container)
     assert result == expected
 
 @pytest.mark.xfail(reason='check expected type for range')
