@@ -63,28 +63,28 @@ expr9 = """(let-rec
 
 
 
-tokenized1 =  ['or', ['and', 'a', 'b'], ['not', ['and', ['not', 'a'], 'c']], 'd']
+raw_sexpr1 =  ['or', ['and', 'a', 'b'], ['not', ['and', ['not', 'a'], 'c']], 'd']
 
-tokenized2 = ['seq-concat',
+raw_sexpr2 = ['seq-concat',
                         ['seq-repeat', ['range', '5', '5'], ['seq-bool', 'a']],
                         ['seq-concat', ['seq-bool', 'b'], ['seq-bool', 'c']]]
 
-tokenized3 = ['prop-always-ranged',
+raw_sexpr3 = ['prop-always-ranged',
                         ['range', '4', '$'],
                         ['prop-seq', ['seq-bool', ['not', 'b']]]]
 
-tokenized4 = ['prop-always', ['prop-and',
+raw_sexpr4 = ['prop-always', ['prop-and',
                         ['prop-seq', ['seq-bool', ['not', 'b']]],
                         ['prop-seq', ['seq-bool', 'a']]
                     ]]
 
-tokenized5 = ['let-rec',
+raw_sexpr5 = ['let-rec',
         ['foo', ['and', 'a', 'bar']],
         ['bar', ['or', 'b', 'c']],
         'foo'
     ]
 
-tokenized6 = ['let-rec',
+raw_sexpr6 = ['let-rec',
                 ['prop1', ['prop-and',
                     ['prop-seq', ['seq-bool', 'a']],
                     ['prop-non-overlapped-implication', ['seq-bool', ['constant', 'true']], 'prop2']]],
@@ -93,7 +93,7 @@ tokenized6 = ['let-rec',
                     ['prop-non-overlapped-implication', ['seq-bool', ['constant', 'true']], 'prop1']]],
                 'prop1']
 
-tokenized7 = ['let-rec',
+raw_sexpr7 = ['let-rec',
         ['q1', ['seq-concat', ['seq-bool', 'a'], 'q3']],
         ['q2', ['seq-concat', ['seq-bool', 'b'], 'q4']],
         ['q3', 'q4'],
@@ -102,7 +102,7 @@ tokenized7 = ['let-rec',
         ['seq-concat', ['seq-bool', 'd'], 'q5']
     ]
 
-tokenized8 = ['let-rec',
+raw_sexpr8 = ['let-rec',
         ['q1', ['and', 'a', 'b']],
         ['q2', ['let-rec',
                 ['p1', ['not', 'q1']],
@@ -110,4 +110,12 @@ tokenized8 = ['let-rec',
                 ['p3', ['or', 'q2', 'c']],
                 'p3']],
         'q2']
+
+
+
+
+
+
+
+
 

@@ -1,7 +1,7 @@
 import pytest
 
-from sexpr import parse_expression, parse_literal, tokenize, RawSExpr, IrContainer, Signal
-from input_data import tokenized1, tokenized2, tokenized3, tokenized4, tokenized5, tokenized6, tokenized7, tokenized8
+from sexpr import parse_expression, parse_literal, parse_raw_sexpr, RawSExpr, IrContainer, Signal
+from input_data import raw_sexpr1, raw_sexpr2, raw_sexpr3, raw_sexpr4, raw_sexpr5, raw_sexpr6, raw_sexpr7, raw_sexpr8
 from sexpr.base import Bool, BoundedRange, IntOrUnbounded, NodeId, Property, PropertyIrNode, Range, Sequence
 from sexpr.primitives import And, Not, Or, PropAlwaysRanged, PropSeq, SeqBool, SeqConcat, SeqRepeat, Constant
 
@@ -65,7 +65,7 @@ def test_parse_literals_invalid_range(container, literal_expr, expec_type):
 
 
 def test_parse_expr1(container):
-    root_node_id = parse_expression(expr=tokenized1, expected_type=None, local_nodes=container.global_nodes, ir_container=container)
+    root_node_id = parse_expression(expr=raw_sexpr1, expected_type=None, local_nodes=container.global_nodes, ir_container=container)
     assert isinstance(root_node_id, NodeId)
     root_node: PropertyIrNode = container[root_node_id]
     assert isinstance(root_node, Or)
@@ -90,7 +90,7 @@ def test_parse_expr1(container):
 
 
 def test_parse_expr2(container):
-    root_node_id = parse_expression(expr=tokenized2, expected_type=None, local_nodes=container.global_nodes, ir_container=container)
+    root_node_id = parse_expression(expr=raw_sexpr2, expected_type=None, local_nodes=container.global_nodes, ir_container=container)
     assert isinstance(root_node_id, NodeId)
     root_node: PropertyIrNode = container[root_node_id]
     assert isinstance(root_node, SeqConcat)
@@ -112,7 +112,7 @@ def test_parse_expr2(container):
 
 
 def test_parse_expr3(container):
-    root_node_id = parse_expression(expr=tokenized3, expected_type=None, local_nodes=container.global_nodes, ir_container=container)
+    root_node_id = parse_expression(expr=raw_sexpr3, expected_type=None, local_nodes=container.global_nodes, ir_container=container)
     assert isinstance(root_node_id, NodeId)
     root_node: PropertyIrNode = container[root_node_id]
     assert isinstance(root_node, PropAlwaysRanged)
@@ -127,7 +127,7 @@ def test_parse_expr3(container):
 
 
 
-expr_valid_list = [tokenized4, tokenized5, tokenized6, tokenized7, tokenized8]
+expr_valid_list = [raw_sexpr4, raw_sexpr5, raw_sexpr6, raw_sexpr7, raw_sexpr8]
 
 @pytest.mark.parametrize('expr', expr_valid_list)
 def test_parse_expr_no_error(container, expr):

@@ -1,6 +1,6 @@
-from .parsing import parse_expression, tokenize, parse_literal
+from .parsing import parse_expression, parse_raw_sexpr, parse_literal
 from .base import IrContainer, Signal, RawSExpr
 from .utils import UnionFind
 
 
-__all__ = ["parse_expression", "parse_literal", "tokenize", "IrContainer", "Signal", "RawSExpr", "UnionFind"]
+__all__ = ["parse_expression", "parse_literal", "parse_raw_sexpr", "IrContainer", "Signal", "RawSExpr", "UnionFind"]

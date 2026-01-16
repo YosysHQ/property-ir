@@ -28,7 +28,7 @@ op_to_cls: dict[str, type[PropertyIrNode]] = get_op_symbols()
 
 
 @typechecked
-def tokenize(expr: str) -> RawSExpr: # TODO rename to parse_raw_sexpr
+def parse_raw_sexpr(expr: str) -> RawSExpr:
     """Converts the s-expression given as a str to a nested list whose base
     elements are either str or int (int used only for integers, not for
     booleans)."""

@@ -1,27 +1,27 @@
 import pytest
 
-from sexpr import tokenize
+from sexpr import parse_raw_sexpr
 
 from input_data import expr1, expr2, expr3, expr4, expr5, expr6, expr7, expr8
-from input_data import tokenized1, tokenized2, tokenized3, tokenized4, tokenized5, tokenized6, tokenized7, tokenized8
+from input_data import raw_sexpr1, raw_sexpr2, raw_sexpr3, raw_sexpr4, raw_sexpr5, raw_sexpr6, raw_sexpr7, raw_sexpr8
 
 
 
-tokenize_pairs = [(expr1, tokenized1),
-    (expr2, tokenized2),
-    (expr3, tokenized3),
-    (expr4, tokenized4),
-    (expr5, tokenized5),
-    (expr6, tokenized6),
-    (expr7, tokenized7),
-    (expr8, tokenized8),
+str_raw_sexpr_pairs = [(expr1, raw_sexpr1),
+    (expr2, raw_sexpr2),
+    (expr3, raw_sexpr3),
+    (expr4, raw_sexpr4),
+    (expr5, raw_sexpr5),
+    (expr6, raw_sexpr6),
+    (expr7, raw_sexpr7),
+    (expr8, raw_sexpr8),
 ]
 
 
 
-@pytest.mark.parametrize('tokenize_input,tokenize_expected', tokenize_pairs)
-def test_tokenize_examples(tokenize_input, tokenize_expected):
-    assert tokenize(tokenize_input) == tokenize_expected
+@pytest.mark.parametrize('str_input,raw_sexpr_expected', str_raw_sexpr_pairs)
+def test_tokenize_examples(str_input, raw_sexpr_expected):
+    assert parse_raw_sexpr(str_input) == raw_sexpr_expected
 
 
 
@@ -41,33 +41,33 @@ expr_additional_brackets4 =  '(or (and a b (  )) (not (and (not a) c)) d)'
 
 
 
-@pytest.mark.parametrize('tokenize_input',
+@pytest.mark.parametrize('str_input',
     [expr_missing_open_bracket1,
      expr_missing_open_bracket2])
-def test_tokenize_error_missing_opening_bracket(tokenize_input):
+def test_parse_raw_sexpr_error_missing_opening_bracket(str_input):
     with pytest.raises(ValueError, match='pop from empty'):
-        tokenize(tokenize_input)
+        parse_raw_sexpr(str_input)
 
-def test_tokenize_error_no_starting_bracket():
+def test_parse_raw_sexpr_error_no_starting_bracket():
     with pytest.raises(ValueError, match='not starting'):
-        tokenize(expr_missing_starting_bracket)
+        parse_raw_sexpr(expr_missing_starting_bracket)
 
-def test_tokenize_error_no_ending_bracket():
+def test_parse_raw_sexpr_error_no_ending_bracket():
     with pytest.raises(ValueError, match='not ending'):
-        tokenize(expr_missing_ending_bracket)
+        parse_raw_sexpr(expr_missing_ending_bracket)
 
-@pytest.mark.parametrize('tokenize_input',
+@pytest.mark.parametrize('str_input',
     [expr_missing_close_bracket1,
      expr_missing_close_bracket2])
-def test_tokenize_error_missing_close_bracket(tokenize_input):
+def test_tokenize_error_missing_close_bracket(str_input):
     with pytest.raises(ValueError, match='end of expression'):
-        tokenize(tokenize_input)
+        parse_raw_sexpr(str_input)
 
-# TODO: this is not handled by tokenize, but the error is detected in parse_expression
+# TODO: this is not handled by parse_raw_sexpr, but the error is detected in parse_expression
 @pytest.mark.xfail(reason='unnecessary brackets not handled yet')
-@pytest.mark.parametrize('tokenize_input',
+@pytest.mark.parametrize('str_input',
     [expr_additional_brackets1, expr_additional_brackets2, expr_additional_brackets3, expr_additional_brackets4])
-def test_tokenize_error_additional_brackets(tokenize_input):
+def test_tokenize_error_additional_brackets(str_input):
     with pytest.raises(ValueError, match='Unexpected token'):
-        tokenize(tokenize_input)
+        parse_raw_sexpr(str_input)
 
