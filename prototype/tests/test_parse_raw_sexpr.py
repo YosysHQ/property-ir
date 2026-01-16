@@ -4,6 +4,7 @@ from sexpr import parse_raw_sexpr
 
 from input_data import expr1, expr2, expr3, expr4, expr5, expr6, expr7, expr8
 from input_data import raw_sexpr1, raw_sexpr2, raw_sexpr3, raw_sexpr4, raw_sexpr5, raw_sexpr6, raw_sexpr7, raw_sexpr8
+from sexpr.parsing import unparse_raw_sexpr
 
 
 
@@ -17,6 +18,17 @@ str_raw_sexpr_pairs = [(expr1, raw_sexpr1),
     (expr8, raw_sexpr8),
 ]
 
+
+raw_sexpr_list = [
+    raw_sexpr1,
+    raw_sexpr2,
+    raw_sexpr3,
+    raw_sexpr4,
+    raw_sexpr5,
+    raw_sexpr6,
+    raw_sexpr7,
+    raw_sexpr8
+]
 
 
 @pytest.mark.parametrize('str_input,raw_sexpr_expected', str_raw_sexpr_pairs)
@@ -59,7 +71,7 @@ def test_parse_raw_sexpr_error_no_ending_bracket():
 @pytest.mark.parametrize('str_input',
     [expr_missing_close_bracket1,
      expr_missing_close_bracket2])
-def test_tokenize_error_missing_close_bracket(str_input):
+def test_parse_raw_sexpr_error_missing_close_bracket(str_input):
     with pytest.raises(ValueError, match='end of expression'):
         parse_raw_sexpr(str_input)
 
@@ -67,7 +79,13 @@ def test_tokenize_error_missing_close_bracket(str_input):
 @pytest.mark.xfail(reason='unnecessary brackets not handled yet')
 @pytest.mark.parametrize('str_input',
     [expr_additional_brackets1, expr_additional_brackets2, expr_additional_brackets3, expr_additional_brackets4])
-def test_tokenize_error_additional_brackets(str_input):
+def test_parse_raw_sexpr_error_additional_brackets(str_input):
     with pytest.raises(ValueError, match='Unexpected token'):
         parse_raw_sexpr(str_input)
+
+@pytest.mark.parametrize('raw_sexpr_input', raw_sexpr_list)
+def test_parse_raw_sexpr_roundtrip(raw_sexpr_input):
+    str_expr = unparse_raw_sexpr(raw_sexpr_input)
+    nested_list_expr = parse_raw_sexpr(str_expr)
+    assert raw_sexpr_input == nested_list_expr
 

@@ -69,8 +69,16 @@ def parse_raw_sexpr(expr: str) -> RawSExpr:
 
     return current_list
 
-def unparse_raw_sexpr(sexpr: RawSExpr) -> str:
-    raise NotImplementedError # TODO implement me
+
+def unparse_raw_sexpr(sexpr: RawSExpr | str) -> str:
+
+    if isinstance(sexpr, str):
+        return sexpr
+
+    elif isinstance(sexpr, list):
+        return '(' + ' '.join([unparse_raw_sexpr(subexpr) for subexpr in sexpr]) +')'
+
+    raise TypeError('Unexpected element in RawSExpr {sexpr}')
 
 
 
