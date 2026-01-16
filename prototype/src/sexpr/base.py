@@ -12,16 +12,6 @@ from .utils import UnionFind
 
 
 
-#@typechecked
-#@dataclass
-#class Int():
-#    value: int
-
-#@typechecked
-#@dataclass
-#class IntOrUnbounded():
-#    value: int | Literal['$']
-
 @typechecked
 @dataclass
 class IntOrUnbounded:
@@ -167,8 +157,25 @@ class IrContainer:
         self.next_raw_node_id += 1
         return node_id
 
-    def uniquify(self, name: str): # TODO: implement this
-        return name
+    def uniquify(self, name: str) -> str:
+        if name not in self.node_names:
+            return name
+        else:
+            split_name = name.split('_')
+            if len(split_name) == 1:
+                return self.uniquify(name + '_2')
+            elif len(split_name) > 1:
+                suffix = split_name[-1]
+                if str.isnumeric(suffix):
+                    new_suffix = int(suffix) + 1
+                    new_name = '_'.join(split_name[0:-1]) + '_' + str(new_suffix)
+                    while new_name in self.node_names:
+                        new_suffix += 1
+                        new_name = '_'.join(split_name[0:-1]) + '_' + str(new_suffix)
+                    return new_name
+                else: # suffix is not numeric
+                    return self.uniquify(name + '_2')
+        raise ValueError(f'Could not uniquify name {name}')
 
     def add_node_by_kwargs[T: PropertyIrNode](self, cls: type[T], kwargs: dict[str, Any]) -> T:
         new_node_id = self._get_next_node_id()
