@@ -1,74 +1,64 @@
 import pytest
 
-from sexpr import parse_expression, tokenize, RawSExpr, IrContainer, Signal
+from sexpr import parse_expression, parse_literal, tokenize, RawSExpr, IrContainer, Signal
 from input_data import tokenized1, tokenized2, tokenized3, tokenized4, tokenized5, tokenized6, tokenized7, tokenized8
-from sexpr.base import Bool, BoundedRange, Int, IntOrUnbounded, NodeId, Property, PropertyIrNode, Range, Sequence
+from sexpr.base import Bool, BoundedRange, IntOrUnbounded, NodeId, Property, PropertyIrNode, Range, Sequence
 from sexpr.primitives import And, Not, Or, PropAlwaysRanged, PropSeq, SeqBool, SeqConcat, SeqRepeat, Constant
 
 
 
 
-# these do not occur on their own, only inside an expression
 literal_valid_list = [
-    #(5, Int, Int(5)),
-    #(['bounded-range', 3, 9], BoundedRange, BoundedRange(3,9)),
-    #(['range', 3, 9], Range, Range(3,IntOrUnbounded(9))),
-    #(['range', 3, '$'], Range, Range(3,IntOrUnbounded('$'))),
-    #('true', Bool, Constant(True)),
-    #('false', Bool, Constant(False)),
+    ('5', int, 5),
+    (['bounded-range', '3', '9'], BoundedRange, BoundedRange(3,9)),
+    (['range', '3', '9'], Range, Range(3, IntOrUnbounded(9))),
+    (['range', '3', '$'], Range, Range(3, IntOrUnbounded('$'))),
+    ('true', bool, True),
+    ('false', bool, False),
 ]
 
 wrong_type_literal_list = [
-    (5, Bool),
-    (['bounded-range', 3, 9], Range),
-    (['range', 3, 9], BoundedRange),
-    (['range', 3, '$'], BoundedRange),
-    (['range', 3, '$'], Sequence),
+    ('5', Bool),
+    (['bounded-range', '3', '9'], Range),
+    (['range', '3', '9'], BoundedRange),
+    (['range', '3', '$'], BoundedRange),
+    (['range', '3', '$'], Sequence),
     ('true', Sequence),
-    ('false', Int),
-    ('a', Property)
+    ('false', int),
+    ('a', Property),
+    ('f', bool),
+    ('test', int),
+    ('$', Range),
+    ('-5', int)
 ]
 
-literal_invalid_symbols = [
-    ('f', Bool),
+literal_invalid_expected_types = [
+    ('f', bool),
     ('test', Property),
-    #('$', IntOrUnbounded) # can only occur as part of range; expected_type invalid
+    ('$', IntOrUnbounded)
 ]
 
 literal_invalid_range = [
-    #(['bounded-range', 4, 2], BoundedRange), # expected_type invalid
-    #(['range', 5, 0], Range),
+    (['bounded-range', '4', '2'], BoundedRange),
+    (['range', '5', '0'], Range),
 ]
 
 
+
 @pytest.mark.parametrize('literal_expr,expec_type,expected', literal_valid_list)
-def test_parse_literals_valid(container, literal_expr, expec_type, expected):
-    result = parse_expression(expr=literal_expr, expected_type=expec_type, local_nodes=container.global_nodes, ir_container=container)
+def test_parse_literals_valid(literal_expr, expec_type, expected):
+    result = parse_literal(literal_expr=literal_expr, expected_type=expec_type)
     assert result == expected
 
-@pytest.mark.xfail(reason='check expected type for range')
 @pytest.mark.parametrize('literal_expr,expec_type', wrong_type_literal_list)
-def test_parse_literals_wrong_type(container, literal_expr, expec_type):
+def test_parse_literals_wrong_type(literal_expr, expec_type):
     with pytest.raises(TypeError, match='Mismatch of expected type'):
-        parse_expression(expr=literal_expr, expected_type=expec_type, local_nodes=container.global_nodes, ir_container=container)
+        parse_literal(literal_expr=literal_expr, expected_type=expec_type)
 
-# TODO: ints cannot occur on their own!
-@pytest.mark.xfail(reason='negative values not treated yet')
-def test_parse_int_negative(container):
-    with pytest.raises(ValueError, match='...'):
-        parse_expression(expr=-5, expected_type=None, local_nodes=container.global_nodes, ir_container=container)
-
-@pytest.mark.parametrize('literal_expr,expec_type', literal_invalid_symbols)
-def test_parse_invalid_symbols(container, literal_expr, expec_type):
-    with pytest.raises(ValueError, match='Unexpected symbol'):
-        parse_expression(expr=literal_expr, expected_type=expec_type, local_nodes=container.global_nodes, ir_container=container)
-
-@pytest.mark.xfail(reason='check if upper bound higher or equal lower bound')
 @pytest.mark.parametrize('literal_expr,expec_type', literal_invalid_range)
 def test_parse_literals_invalid_range(container, literal_expr, expec_type):
-    with pytest.raises(TypeError, match='...'):
-        parse_expression(expr=literal_expr, expected_type=expec_type, local_nodes=container.global_nodes, ir_container=container)
-
+    with pytest.raises(ValueError, match='...'):
+        parse_literal(literal_expr=literal_expr, expected_type=expec_type)
 
 
 

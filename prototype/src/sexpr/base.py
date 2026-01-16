@@ -12,15 +12,21 @@ from .utils import UnionFind
 
 
 
-@typechecked
-@dataclass
-class Int():
-    value: int
+#@typechecked
+#@dataclass
+#class Int():
+#    value: int
+
+#@typechecked
+#@dataclass
+#class IntOrUnbounded():
+#    value: int | Literal['$']
 
 @typechecked
 @dataclass
-class IntOrUnbounded():
+class IntOrUnbounded:
     value: int | Literal['$']
+
 
 @typechecked
 @dataclass
@@ -45,9 +51,9 @@ class NodeId[T: PropertyIrNode]:
     def __repr__(self):
         return f"{type(self).__name__}({self.raw})"
 
-type LiteralType = bool | Int | str | Range | BoundedRange | IntOrUnbounded
+type LiteralType = bool | Range | BoundedRange | IntOrUnbounded | int
 
-type RawSExpr = list[str | int | RawSExpr]
+type RawSExpr = list[str | RawSExpr]
 
 
 

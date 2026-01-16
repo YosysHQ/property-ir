@@ -63,7 +63,7 @@ def test_tokenize_error_missing_close_bracket(tokenize_input):
     with pytest.raises(ValueError, match='end of expression'):
         tokenize(tokenize_input)
 
-# TODO: where should unnecessary brackets be handled or removed?
+# TODO: this is not handled by tokenize, but the error is detected in parse_expression
 @pytest.mark.xfail(reason='unnecessary brackets not handled yet')
 @pytest.mark.parametrize('tokenize_input',
     [expr_additional_brackets1, expr_additional_brackets2, expr_additional_brackets3, expr_additional_brackets4])

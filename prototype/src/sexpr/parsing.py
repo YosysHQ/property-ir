@@ -1,12 +1,12 @@
 from __future__ import annotations
-from typing import Optional, Any,get_origin, get_args
+from typing import Optional, Any, TypeAliasType,get_origin, get_args, Literal
 from typeguard import typechecked
 import re
 
 from .base import RawSExpr, LiteralType, NodeId
 from .base import IrContainer, PropertyIrNode, PlaceholderNode
 from .base import Bool, Sequence, Property
-from .base import Int, Range, BoundedRange, IntOrUnbounded, Signal
+from .base import Range, BoundedRange, IntOrUnbounded
 from .primitives import *
 
 
@@ -48,9 +48,7 @@ def tokenize(expr: str) -> RawSExpr: # TODO rename to parse_raw_sexpr
     stack: list[RawSExpr] = []
 
     for t in tokens:
-        if str.isnumeric(t):
-            current_list.append(int(t))
-        elif re.fullmatch(r'[a-zA-Z0-9\-\$]+', t):
+        if re.fullmatch(r'[a-zA-Z0-9\-\$]+', t):
             current_list.append(t)
         elif t == "(":
             stack.append(current_list)
@@ -80,12 +78,16 @@ def parse_range(range_expr: RawSExpr) -> Range | BoundedRange:
 
     match range_expr:
 
-        case ['bounded-range', int(lower_bound), int(upper_bound)]:
-            return BoundedRange(lower_bound, upper_bound)
-        case ['range', int(lower_bound), int(upper_bound)]:
-            return Range(lower_bound, IntOrUnbounded(upper_bound))
-        case ['range', int(lower_bound), '$']:
-            return Range(lower_bound, IntOrUnbounded('$'))
+        case ['bounded-range', str(lower_bound), str(upper_bound)] if str.isnumeric(lower_bound) and str.isnumeric(upper_bound):
+            if int(lower_bound) > int(upper_bound):
+                raise ValueError(f'Lower bound higher than upper bound in range expression {range_expr}')
+            return BoundedRange(int(lower_bound), int(upper_bound))
+        case ['range', str(lower_bound), str(upper_bound)] if str.isnumeric(lower_bound) and str.isnumeric(upper_bound):
+            if int(lower_bound) > int(upper_bound):
+                raise ValueError(f'Lower bound higher than upper bound in range expression {range_expr}')
+            return Range(int(lower_bound), IntOrUnbounded(int(upper_bound)))
+        case ['range', str(lower_bound), '$'] if str.isnumeric(lower_bound):
+            return Range(int(lower_bound), IntOrUnbounded('$'))
         case _:
             raise ValueError(f'Unexpected range expression form {range_expr}')
 
@@ -95,7 +97,41 @@ def parse_bool(bool_literal: str) -> bool:
         elif bool_literal == 'false':
             return False
         else:
-            raise TypeError('Expected bool constant instead of {bool_literal}')
+            raise TypeError(f'Mismatch of expected type bool constant and {bool_literal}')
+
+def parse_int(int_literal: str) -> int | Literal['$']:
+    if str.isnumeric(int_literal):
+        return(int(int_literal))
+    elif int_literal == '$':
+        return '$'
+    else:
+        raise TypeError(f"Mismatch of expected type int or '$' and {int_literal}")
+
+
+def parse_literal(literal_expr: RawSExpr | str, expected_type: type) -> LiteralType:
+
+    if issubclass(expected_type, bool) and isinstance(literal_expr, str):
+        return parse_bool(literal_expr)
+
+    elif issubclass(expected_type, Range | BoundedRange) and isinstance(literal_expr, list):
+        parsed_range = parse_range(literal_expr)
+        if not isinstance(parsed_range, expected_type):
+            raise TypeError(f'Mismatch of expected type {expected_type} and {parsed_range}')
+        return parsed_range
+
+    elif issubclass(expected_type, int)  and isinstance(literal_expr, str):
+        parsed_int = parse_int(literal_expr)
+        if parsed_int == '$':
+            raise TypeError(f"Mismatch of expected type int and '$'")
+        else:
+            return parsed_int
+
+    elif issubclass(expected_type, IntOrUnbounded) and isinstance(literal_expr, str):
+        parsed_int = parse_int(literal_expr)
+        return IntOrUnbounded(parsed_int)
+
+    raise TypeError(f'Mismatch of expected type literal {expected_type} and expression {literal_expr}')
+
 
 def check_names_sexpr(expr: RawSExpr) -> list[tuple[str, RawSExpr]]:
     if not isinstance(expr, list):
@@ -110,10 +146,10 @@ def check_names_sexpr(expr: RawSExpr) -> list[tuple[str, RawSExpr]]:
 
 @typechecked
 def parse_expression(
-    expr: RawSExpr | str | int,
+    expr: RawSExpr | str,
     expected_type: Optional[type[PropertyIrNode]],
     local_nodes: dict[str, NodeId],
-    ir_container: IrContainer) -> NodeId | LiteralType:
+    ir_container: IrContainer) -> NodeId:
 
     print(f"start with {expr}")
     print(f"expecting type {expected_type}")
@@ -126,21 +162,8 @@ def parse_expression(
                 if expected_type is not None:
                     ir_container[local_nodes[name]].check_type(expected_type)
                 return local_nodes[name]
-            #elif name in ['true', 'false']:  # sexpr: "true", "false"
-            #    if not expected_type is Bool:
-            #        raise TypeError(f'Mismatch of expected type {expected_type} and {name} with type {Bool} in {expr}')
-            #    return Constant(expr == 'true')
             else:
                 raise ValueError(f'Unexpected symbol {name}')
-
-        case int(literal):
-
-            if not (expected_type is Int or expected_type is IntOrUnbounded):
-                raise TypeError(f'Mismatch of expected type {expected_type} and {literal} with type {type(literal)} in {expr}')
-            return Int(literal)
-
-
-
 
 
         case ['let-rec', *named_subexpressions, return_expression]:
@@ -153,7 +176,7 @@ def parse_expression(
             for (name, subexpr) in named_subexpressions:
                 node_name = ir_container.uniquify(name) # returns name if not used otherwise returns f"{name}_{counter}" for a counter value that results in an unused name
                 if name in inner_local_nodes:
-                    raise ValueError # TODO message
+                    raise ValueError(f'Node name {name} already in use')
                 inner_local_nodes[name] = ir_container.add_placeholder_node(name=node_name).node_id
 
 
@@ -162,7 +185,7 @@ def parse_expression(
             # or if the root is a placeholder, merge placeholders
             for (name, subexpr) in named_subexpressions:
                 subexpr_root_node_id = parse_expression(subexpr, None, inner_local_nodes, ir_container)
-                assert isinstance(subexpr_root_node_id, NodeId) # TODO split parse_expression into sepate node / literal variant
+                assert isinstance(subexpr_root_node_id, NodeId)
                 subexpr_root_node: PropertyIrNode = ir_container[subexpr_root_node_id]
                 placeholder_id: NodeId = inner_local_nodes[name]
                 placeholder_node = ir_container[placeholder_id]
@@ -174,7 +197,7 @@ def parse_expression(
                 subexpr_id: NodeId = inner_local_nodes[name]
                 subexpr_node = ir_container[subexpr_id]
                 if isinstance(subexpr_node, PlaceholderNode):
-                    raise ValueError # TODO message
+                    raise ValueError(f'Subexpression ({name} {subexpr}) in let-rec expression corresponds to uninstantiated node')
 
 
             # return value of last expression
@@ -207,32 +230,21 @@ def parse_expression(
                         single_child_list = []
 
                         # this assumes that a list parameter is never combined with other parameters
+                        # and always contains NodeIds (no literals allowed)
                         for child_expr in args:
-                            child_node = parse_expression(child_expr, list_elem_type, local_nodes, ir_container)
-                            single_child_list.append(child_node)
+                            child_node_id = parse_expression(child_expr, list_elem_type, local_nodes, ir_container)
+                            single_child_list.append(child_node_id)
                         kwargs[field.name] = single_child_list
 
                     elif issubclass(field_type, PropertyIrNode):
                         child_expr = args[index]
-                        child_node = parse_expression(child_expr, field_type, local_nodes, ir_container)
-                        kwargs[field.name] = child_node
+                        child_node_id = parse_expression(child_expr, field_type, local_nodes, ir_container)
+                        kwargs[field.name] = child_node_id
 
-                    elif issubclass(field_type, bool):
+                    elif issubclass(field_type, LiteralType.__value__):
                         child_expr = args[index]
-                        if isinstance(child_expr, str):
-                            kwargs[field.name] = parse_bool(child_expr)
-                        else:
-                            raise TypeError(f'Expected string representation of bool instead of {child_expr} in {expr}')
-
-                    elif issubclass(field_type, Range | BoundedRange):
-                        child_expr = args[index]
-                        if isinstance(child_expr, list):
-                            parsed_range = parse_range(child_expr)
-                        else:
-                            raise TypeError(f'Expected range expression instead of {child_expr} in {expr}')
-                        if not isinstance(parsed_range, field_type):
-                            raise TypeError(f'Expected {field_type}, but received {parsed_range} in {expr}')
-                        kwargs[field.name] = parsed_range
+                        parsed_literal = parse_literal(child_expr, field_type)
+                        kwargs[field.name] = parsed_literal
 
 
                 root_node: PropertyIrNode = ir_container.add_node_by_kwargs(root_class, kwargs)

@@ -66,11 +66,11 @@ expr9 = """(let-rec
 tokenized1 =  ['or', ['and', 'a', 'b'], ['not', ['and', ['not', 'a'], 'c']], 'd']
 
 tokenized2 = ['seq-concat',
-                        ['seq-repeat', ['range', 5, 5], ['seq-bool', 'a']],
+                        ['seq-repeat', ['range', '5', '5'], ['seq-bool', 'a']],
                         ['seq-concat', ['seq-bool', 'b'], ['seq-bool', 'c']]]
 
 tokenized3 = ['prop-always-ranged',
-                        ['range', 4, '$'],
+                        ['range', '4', '$'],
                         ['prop-seq', ['seq-bool', ['not', 'b']]]]
 
 tokenized4 = ['prop-always', ['prop-and',
