@@ -141,6 +141,7 @@ class IrContainer:
 
     node_names: dict[str, NodeId]
     global_nodes: dict[str, NodeId]
+    root_nodes: list[NodeId]
     merged_nodes: UnionFind[NodeId]
 
     next_raw_node_id: int
@@ -149,6 +150,7 @@ class IrContainer:
         self.nodes =  dict()
         self.node_names = dict()
         self.global_nodes = dict()
+        self.root_nodes = list()
         self.merged_nodes = UnionFind()
         self.next_raw_node_id = 1
 
@@ -196,6 +198,12 @@ class IrContainer:
         signal_node = self.add_node_by_kwargs(Signal, dict(signal_name=signal_name))
         self.global_nodes[signal_name] = signal_node.node_id
         return signal_node
+
+    def make_root_node(self, node_id: NodeId):
+        if node_id not in self.nodes:
+            raise ValueError(f'Cannot add missing node {node_id} to root nodes')
+        self.root_nodes.append(node_id)
+
 
     def show_graph(self, output_path: Path) -> None:
 
@@ -254,6 +262,10 @@ class IrContainer:
 
         for node_name, node_id in self.node_names.items():
             self.node_names[node_name] = self.merged_nodes.find(node_id)
+
+        for (index, node_id) in enumerate(self.root_nodes):
+            self.root_nodes[index] = self.merged_nodes.find(node_id)
+
 
         for node in self.nodes.values():
             print(f'START NODE {node}')

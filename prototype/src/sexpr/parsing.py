@@ -265,3 +265,33 @@ def parse_expression(
 
         case _:
             raise ValueError(f'Unexpected expression form {expr}')
+
+
+
+def parse_document(document: RawSExpr, ir_container: IrContainer):
+
+    match(document):
+        case ['document', *statements]:
+
+            for statement in statements:
+
+                match(statement):
+
+                    case ['add-signals', *signal_list]:
+                        for signal_name in signal_list:
+                            if not isinstance(signal_name, str):
+                                raise ValueError(f"Expected signal name instead of {signal_name} in statement {statement}")
+                            ir_container.add_signal_node(signal_name)
+
+                    case ['parse-sexpr', list(expression)]:
+                        root_node_id = parse_expression(expr=expression, expected_type=None, local_nodes=ir_container.global_nodes, ir_container=ir_container)
+                        ir_container.make_root_node(root_node_id)
+
+                    case _:
+                        raise ValueError(f'Unexpected statement form {statement}')
+
+        case _:
+            raise ValueError(f'Unexpected document form {document}')
+
+
+

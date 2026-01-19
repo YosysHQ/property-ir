@@ -1,6 +1,7 @@
 import pytest
+from pathlib import Path
 
-from sexpr import parse_expression, parse_literal, parse_raw_sexpr, RawSExpr, IrContainer, Signal
+from sexpr import parse_expression, parse_literal, parse_raw_sexpr, RawSExpr, IrContainer, Signal, parse_document
 from input_data import raw_sexpr1, raw_sexpr2, raw_sexpr3, raw_sexpr4, raw_sexpr5, raw_sexpr6, raw_sexpr7, raw_sexpr8
 from sexpr.base import Bool, BoundedRange, IntOrUnbounded, NodeId, Property, PropertyIrNode, Range, Sequence
 from sexpr.primitives import And, Not, Or, PropAlwaysRanged, PropSeq, SeqBool, SeqConcat, SeqRepeat, Constant
@@ -133,3 +134,55 @@ expr_valid_list = [raw_sexpr4, raw_sexpr5, raw_sexpr6, raw_sexpr7, raw_sexpr8]
 def test_parse_expr_no_error(container, expr):
     root_node_id = parse_expression(expr=expr, expected_type=None, local_nodes=container.global_nodes, ir_container=container)
     assert root_node_id is not None
+
+
+
+
+def wrap_in_document(expr: RawSExpr) -> RawSExpr:
+    return ['document',
+        ['add-signals', 'a', 'b'],
+        ['add-signals', 'c', 'd'],
+        ['parse-sexpr', expr]
+    ]
+
+def wrap_multiple_expr_in_document(expr_list: list[RawSExpr]) -> RawSExpr:
+    parse_expr_list = [['parse-sexpr', expr] for expr in expr_list]
+    return ['document', ['add-signals', 'a', 'b', 'c', 'd']] + parse_expr_list
+
+
+
+@pytest.mark.parametrize('expr', expr_valid_list)
+def test_parse_doc_no_error(empty_container, expr):
+    parse_document(wrap_in_document(expr), ir_container=empty_container)
+    assert len(empty_container.root_nodes) == 1
+
+def test_parse_document_multiple_expressions(empty_container):
+    parse_document(wrap_multiple_expr_in_document(expr_valid_list), ir_container=empty_container)
+    assert len(empty_container.root_nodes) == 5
+    #empty_container.show_graph(output_path=Path('prototype/output/test.png'))
+
+
+def test_parse_document_expr1(empty_container):
+    parse_document(wrap_in_document(raw_sexpr1), ir_container=empty_container)
+    root_node_id = empty_container.root_nodes[0]
+    assert isinstance(root_node_id, NodeId)
+    root_node: PropertyIrNode = empty_container[root_node_id]
+    assert isinstance(root_node, Or)
+    children_ids = root_node.children
+    child1 = empty_container[children_ids[0]]
+    child2 = empty_container[children_ids[1]]
+    child3 = empty_container[children_ids[2]]
+    assert isinstance(child1, And)
+    assert isinstance(child2, Not)
+    assert isinstance(child3, Signal)
+    child1_child1 = empty_container[child1.children[0]]
+    child1_child2 = empty_container[child1.children[1]]
+    assert isinstance(child1_child1, Signal)
+    assert isinstance(child1_child2, Signal)
+    child2_child = empty_container[child2.child]
+    assert isinstance(child2_child, And)
+    child2_child_children_ids = child2_child.children
+    child2_child_child1 = empty_container[child2_child_children_ids[0]]
+    assert isinstance(child2_child_child1, Not)
+    assert isinstance(empty_container[child2_child_children_ids[1]], Signal)
+    assert isinstance(empty_container[child2_child_child1.child], Signal)

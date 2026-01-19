@@ -10,3 +10,9 @@ def container():
     container.add_signal_node('c')
     container.add_signal_node('d')
     return container
+
+
+@pytest.fixture
+def empty_container():
+    container = IrContainer()
+    return container
