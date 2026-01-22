@@ -186,3 +186,11 @@ def test_parse_document_expr1(empty_container):
     assert isinstance(child2_child_child1, Not)
     assert isinstance(empty_container[child2_child_children_ids[1]], Signal)
     assert isinstance(empty_container[child2_child_child1.child], Signal)
+
+
+
+@pytest.mark.parametrize('expr', expr_valid_list)
+def test_parse_document_roundtrip_no_error(empty_container, expr):
+    parse_document(wrap_in_document(expr), ir_container=empty_container)
+    output_expr: RawSExpr = empty_container.generate_raw_sexpr(node_id=None)
+    parse_document(output_expr, ir_container=IrContainer())

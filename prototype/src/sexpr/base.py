@@ -18,6 +18,9 @@ from .utils import UnionFind
 class IntOrUnbounded:
     value: int | Literal['$']
 
+    def get_raw_sexpr_repr(self) -> str:
+        return str(self.value)
+
 
 @typechecked
 @dataclass
@@ -25,11 +28,17 @@ class Range():
     lower_bound: int
     upper_bound: IntOrUnbounded
 
+    def get_raw_sexpr_repr(self) -> RawSExpr:
+        return ['range', str(self.lower_bound), self.upper_bound.get_raw_sexpr_repr()]
+
 @typechecked
 @dataclass
 class BoundedRange():
     lower_bound: int
     upper_bound: int
+
+    def get_raw_sexpr_repr(self) -> RawSExpr:
+        return ['bounded-range', str(self.lower_bound), str(self.upper_bound)]
 
 
 
@@ -134,6 +143,28 @@ class PlaceholderNode(PropertyIrNode):
 
 
 
+class Bool(PropertyIrNode):
+    @abstractmethod
+    def __init__(self):
+        pass
+
+class Sequence(PropertyIrNode):
+    @abstractmethod
+    def __init__(self):
+        pass
+
+class Property(PropertyIrNode):
+    @abstractmethod
+    def __init__(self):
+        pass
+
+
+
+@typechecked
+@dataclass
+class Signal(Bool):
+    signal_name: str
+
 
 # @typechecked  # TODO doesn't seem to support add_node_by_kwargs signature
 class IrContainer:
@@ -161,7 +192,15 @@ class IrContainer:
         return node_id
 
     def _generate_literal_raw_sexpr(self, literal: LiteralType) -> RawSExpr | str:
-        return [str(literal)] # TODO
+        if isinstance(literal, str):
+            return literal
+        elif isinstance(literal, bool):
+            return str.lower(str(literal))
+        elif isinstance(literal, int):
+            return str(literal)
+        elif isinstance(literal, Range | BoundedRange | IntOrUnbounded):
+            return literal.get_raw_sexpr_repr()
+        raise TypeError(f'Unexpected type {type(literal)} of literal {literal} while generating s-expression of container {self}')
 
     def generate_raw_sexpr(self, node_id: Optional[NodeId]) -> RawSExpr:
 
@@ -171,18 +210,22 @@ class IrContainer:
             raise ValueError(f'Cannot generate s-expression for missing node {node_id} of container {self}')
 
         id_to_node_name: dict[NodeId, str] = dict()
-        for (name, node_id) in self.node_names.items():
-            id_to_node_name[self.merged_nodes.find(node_id)] = name
+        for (name, named_node_id) in self.node_names.items():
+            id_to_node_name[self.merged_nodes.find(named_node_id)] = name
             # if there are several names for a node, one is chosen arbitrarily
             # to be used consistently
+
+        # overwrite chosen names by those one used in global_nodes (includes signals)
+        for (name, named_node_id) in self.global_nodes.items():
+            id_to_node_name[self.merged_nodes.find(named_node_id)] = name
+
+        print(id_to_node_name)
 
         node_expr_list: RawSExpr = list()
 
         visited_nodes: set[NodeId] = set()
 
-        signals_to_add: set[NodeId] = set()
-
-        # TODO treatment of signals
+        signals_to_add: set[str] = set()
 
         if node_id is not None:
             visit_next = deque([node_id])
@@ -190,7 +233,7 @@ class IrContainer:
             visit_next = deque(self.root_nodes)
 
         # search through reachable nodes from given node or all root nodes of the container
-        # and generate expr for each node visited, skip if already visited
+        # and generate expr for each node visited, skip if already visited or signal
         # (can happen if root nodes are part of the same strongly connected component or several edges point to a child)
         while len(visit_next) != 0:
             current_node_id = visit_next.popleft()
@@ -216,6 +259,9 @@ class IrContainer:
 
             if isinstance(current_node, PlaceholderNode):
                 raise ValueError(f'Cannot generate s-expression for container {self} with uninstantiated node {current_node.node_id}')
+            elif isinstance(current_node, Signal):
+                signals_to_add.add(current_node.signal_name)
+                continue
 
             current_node_expr: RawSExpr = [current_node.op_symbol()]
             signature = type(current_node).signature()
@@ -233,22 +279,20 @@ class IrContainer:
 
 
             for child_elem in collected_children:
-                if isinstance(child_elem, LiteralType.__value__):
-                    assert(isinstance(child_elem, LiteralType.__value__))
-                    current_node_expr.append(self._generate_literal_raw_sexpr(child_elem)) # type: ignore
-                elif isinstance(child_elem, NodeId):
+                if isinstance(child_elem, NodeId):
                     child_repr_id = self.merged_nodes.find(child_elem)
                     if child_repr_id not in id_to_node_name:
                         child_new_name = self.uniquify('_node_id_' + str(child_repr_id.raw))
                         id_to_node_name[child_repr_id] = child_new_name
                     current_node_expr.append(id_to_node_name[child_repr_id])
                     visit_next.append(child_repr_id)
+                elif isinstance(child_elem, LiteralType.__value__):
+                    current_node_expr.append(self._generate_literal_raw_sexpr(child_elem))
                 else:
                     raise TypeError(f'Unexpected child type of {child_elem} while generating s-expression for node {current_node}')
 
 
             node_expr_list.append([current_node_name, current_node_expr])
-
 
 
         result_expr: RawSExpr = ['let-rec']
@@ -259,11 +303,13 @@ class IrContainer:
         else:
             result_expr.append(id_to_node_name[self.merged_nodes.find(self.root_nodes[0])])
 
-        # TODO add other root node statements
-        # TODO add signals
+        signals_expr = ['add-signals'] + list(signals_to_add)
 
+        # TODO add other root node statements?
 
-        return result_expr
+        result_document = ['document', signals_expr, ['parse-sexpr', result_expr]]
+
+        return result_document
 
 
 
@@ -483,25 +529,3 @@ def operation_to_class_str(input: str) -> str:
 
 
 
-
-class Bool(PropertyIrNode):
-    @abstractmethod
-    def __init__(self):
-        pass
-
-class Sequence(PropertyIrNode):
-    @abstractmethod
-    def __init__(self):
-        pass
-
-class Property(PropertyIrNode):
-    @abstractmethod
-    def __init__(self):
-        pass
-
-
-
-@typechecked
-@dataclass
-class Signal(Bool):
-    signal_name: str
