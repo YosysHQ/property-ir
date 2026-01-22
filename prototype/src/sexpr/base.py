@@ -1,7 +1,8 @@
 from __future__ import annotations
 from abc import ABC, abstractmethod
+from collections import deque
 from dataclasses import dataclass, fields, Field
-from typing import Literal, Optional, Any, get_origin, get_type_hints
+from typing import Literal, Optional, Any, get_origin, get_type_hints, get_args
 from typeguard import typechecked
 from graphviz import Digraph
 from pathlib import Path
@@ -41,7 +42,7 @@ class NodeId[T: PropertyIrNode]:
     def __repr__(self):
         return f"{type(self).__name__}({self.raw})"
 
-type LiteralType = bool | Range | BoundedRange | IntOrUnbounded | int
+type LiteralType = bool | Range | BoundedRange | IntOrUnbounded | int | str
 
 type RawSExpr = list[str | RawSExpr]
 
@@ -158,6 +159,113 @@ class IrContainer:
         node_id = NodeId(self.next_raw_node_id)
         self.next_raw_node_id += 1
         return node_id
+
+    def _generate_literal_raw_sexpr(self, literal: LiteralType) -> RawSExpr | str:
+        return [str(literal)] # TODO
+
+    def generate_raw_sexpr(self, node_id: Optional[NodeId]) -> RawSExpr:
+
+        if len(self.root_nodes) == 0:
+            raise ValueError(f'Cannot generate s-expression for empty container {self}')
+        if node_id is not None and node_id not in self.nodes:
+            raise ValueError(f'Cannot generate s-expression for missing node {node_id} of container {self}')
+
+        id_to_node_name: dict[NodeId, str] = dict()
+        for (name, node_id) in self.node_names.items():
+            id_to_node_name[self.merged_nodes.find(node_id)] = name
+            # if there are several names for a node, one is chosen arbitrarily
+            # to be used consistently
+
+        node_expr_list: RawSExpr = list()
+
+        visited_nodes: set[NodeId] = set()
+
+        signals_to_add: set[NodeId] = set()
+
+        # TODO treatment of signals
+
+        if node_id is not None:
+            visit_next = deque([node_id])
+        else:
+            visit_next = deque(self.root_nodes)
+
+        # search through reachable nodes from given node or all root nodes of the container
+        # and generate expr for each node visited, skip if already visited
+        # (can happen if root nodes are part of the same strongly connected component or several edges point to a child)
+        while len(visit_next) != 0:
+            current_node_id = visit_next.popleft()
+
+            print(f'current node id {current_node_id}')
+            print(f'visit next {visit_next}')
+
+            current_repr_id = self.merged_nodes.find(current_node_id)
+            if current_repr_id in visited_nodes:
+                continue
+
+            visited_nodes.add(current_repr_id)
+
+            if current_repr_id not in id_to_node_name:
+                new_name = self.uniquify('_node_id_' + str(current_repr_id.raw))
+                current_node_expr = [new_name]
+                id_to_node_name[current_repr_id] = new_name
+                # there can be no name clashes within the newly generated name names
+                # because they all have a different node id and uniquify can only append _{number}
+
+            current_node_name: str = id_to_node_name[current_repr_id]
+            current_node = self.nodes[current_repr_id]
+
+            if isinstance(current_node, PlaceholderNode):
+                raise ValueError(f'Cannot generate s-expression for container {self} with uninstantiated node {current_node.node_id}')
+
+            current_node_expr: RawSExpr = [current_node.op_symbol()]
+            signature = type(current_node).signature()
+
+            collected_children: list[NodeId | LiteralType] = list()
+
+            for index, field in enumerate(current_node.get_child_fields()):
+
+                field_type: type = signature[index]
+
+                if get_origin(field_type) is list:
+                    collected_children += getattr(current_node, field.name)
+                else:
+                    collected_children.append(getattr(current_node, field.name))
+
+
+            for child_elem in collected_children:
+                if isinstance(child_elem, LiteralType.__value__):
+                    assert(isinstance(child_elem, LiteralType.__value__))
+                    current_node_expr.append(self._generate_literal_raw_sexpr(child_elem)) # type: ignore
+                elif isinstance(child_elem, NodeId):
+                    child_repr_id = self.merged_nodes.find(child_elem)
+                    if child_repr_id not in id_to_node_name:
+                        child_new_name = self.uniquify('_node_id_' + str(child_repr_id.raw))
+                        id_to_node_name[child_repr_id] = child_new_name
+                    current_node_expr.append(id_to_node_name[child_repr_id])
+                    visit_next.append(child_repr_id)
+                else:
+                    raise TypeError(f'Unexpected child type of {child_elem} while generating s-expression for node {current_node}')
+
+
+            node_expr_list.append([current_node_name, current_node_expr])
+
+
+
+        result_expr: RawSExpr = ['let-rec']
+        result_expr += node_expr_list
+
+        if node_id is not None:
+            result_expr.append(id_to_node_name[self.merged_nodes.find(node_id)])
+        else:
+            result_expr.append(id_to_node_name[self.merged_nodes.find(self.root_nodes[0])])
+
+        # TODO add other root node statements
+        # TODO add signals
+
+
+        return result_expr
+
+
 
     def uniquify(self, name: str) -> str:
         if name not in self.node_names:
