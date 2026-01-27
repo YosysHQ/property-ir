@@ -166,15 +166,47 @@ class Signal(Bool):
     signal_name: str
 
 
+
+
+
+class Declaration():
+    @abstractmethod
+    def __init__(self):
+        pass
+
+@dataclass
+class SignalDeclaration(Declaration):
+    node_name: str
+    node_id: NodeId[Any]
+
+@dataclass
+class NamedExpressionDeclaration(Declaration):
+    node_name: str
+    node_id: NodeId[Any]
+
+@dataclass
+class NamedRecursiveDeclaration(Declaration):
+    node_names: dict[str, NodeId[Any]]
+
+@dataclass
+class UnnamedExpressionDeclaration(Declaration):
+    node_id: NodeId[Any]
+
+
+
 # @typechecked  # TODO doesn't seem to support add_node_by_kwargs signature
 class IrContainer:
 
     nodes: dict[NodeId, PropertyIrNode]
 
-    node_names: dict[str, NodeId]
-    global_nodes: dict[str, NodeId]
-    root_nodes: list[NodeId]
+    # TODO local node names need to be restriction of global node names
+    # TODO bypass placeholders needs to update all attributes
+    node_names: dict[str, NodeId] # local and global node names
+    global_nodes: dict[str, NodeId] # contains signals and declared node names
+    top_level_nodes: list[NodeId] # containes global nodes and roots of unnamed expressions
     merged_nodes: UnionFind[NodeId]
+
+    declarations: list[Declaration]
 
     next_raw_node_id: int
 
@@ -182,7 +214,8 @@ class IrContainer:
         self.nodes =  dict()
         self.node_names = dict()
         self.global_nodes = dict()
-        self.root_nodes = list()
+        self.top_level_nodes = list()
+        self.declarations = list()
         self.merged_nodes = UnionFind()
         self.next_raw_node_id = 1
 
@@ -202,12 +235,20 @@ class IrContainer:
             return literal.get_raw_sexpr_repr()
         raise TypeError(f'Unexpected type {type(literal)} of literal {literal} while generating s-expression of container {self}')
 
-    def generate_raw_sexpr(self, node_id: Optional[NodeId]) -> RawSExpr:
+    def output_container(self) -> RawSExpr:
+        return []
 
-        if len(self.root_nodes) == 0:
-            raise ValueError(f'Cannot generate s-expression for empty container {self}')
-        if node_id is not None and node_id not in self.nodes:
+    def generate_raw_sexpr(self, node_id: NodeId, declared_nodes: dict[NodeId, str]) -> RawSExpr | str:
+
+        #if len(self.root_nodes) == 0:
+        #    raise ValueError(f'Cannot generate s-expression for empty container {self}')
+        #if node_id is not None and node_id not in self.nodes:
+        if node_id not in self.nodes:
             raise ValueError(f'Cannot generate s-expression for missing node {node_id} of container {self}')
+
+        input_repr_id = self.merged_nodes.find(node_id)
+        if input_repr_id in declared_nodes:
+            return declared_nodes[input_repr_id]
 
         id_to_node_name: dict[NodeId, str] = dict()
         for (name, named_node_id) in self.node_names.items():
@@ -215,8 +256,9 @@ class IrContainer:
             # if there are several names for a node, one is chosen arbitrarily
             # to be used consistently
 
-        # overwrite chosen names by those one used in global_nodes (includes signals)
-        for (name, named_node_id) in self.global_nodes.items():
+        # overwrite chosen names by those one used in argument declared_nodes
+        #for (name, named_node_id) in self.global_nodes.items():
+        for (named_node_id, name) in declared_nodes.items():
             id_to_node_name[self.merged_nodes.find(named_node_id)] = name
 
         print(id_to_node_name)
@@ -225,15 +267,15 @@ class IrContainer:
 
         visited_nodes: set[NodeId] = set()
 
-        signals_to_add: set[str] = set()
+        #signals_to_add: set[str] = set()
 
-        if node_id is not None:
-            visit_next = deque([node_id])
-        else:
-            visit_next = deque(self.root_nodes)
+        #if node_id is not None:
+        visit_next = deque([node_id])
+        #else:
+        #    visit_next = deque(self.root_nodes)
 
         # search through reachable nodes from given node or all root nodes of the container
-        # and generate expr for each node visited, skip if already visited or signal
+        # and generate expr for each node visited, skip if already visited or declared
         # (can happen if root nodes are part of the same strongly connected component or several edges point to a child)
         while len(visit_next) != 0:
             current_node_id = visit_next.popleft()
@@ -244,6 +286,10 @@ class IrContainer:
             current_repr_id = self.merged_nodes.find(current_node_id)
             if current_repr_id in visited_nodes:
                 continue
+
+            # TODO: should this be allowed to happen and we just continue outputting?
+            if (current_repr_id not in declared_nodes and current_repr_id in self.global_nodes):
+                raise ValueError(f'Encountered undeclared global node {current_repr_id} while generating raw s-expression for node {node_id} with declared nodes {declared_nodes}')
 
             visited_nodes.add(current_repr_id)
 
@@ -260,7 +306,7 @@ class IrContainer:
             if isinstance(current_node, PlaceholderNode):
                 raise ValueError(f'Cannot generate s-expression for container {self} with uninstantiated node {current_node.node_id}')
             elif isinstance(current_node, Signal):
-                signals_to_add.add(current_node.signal_name)
+                #signals_to_add.add(current_node.signal_name)
                 continue
 
             current_node_expr: RawSExpr = [current_node.op_symbol()]
@@ -297,19 +343,22 @@ class IrContainer:
 
         result_expr: RawSExpr = ['let-rec']
         result_expr += node_expr_list
+        result_expr.append(id_to_node_name[self.merged_nodes.find(node_id)])
 
-        if node_id is not None:
-            result_expr.append(id_to_node_name[self.merged_nodes.find(node_id)])
-        else:
-            result_expr.append(id_to_node_name[self.merged_nodes.find(self.root_nodes[0])])
+        return result_expr
 
-        signals_expr = ['add-signals'] + list(signals_to_add)
+        #if node_id is not None:
+        #    result_expr.append(id_to_node_name[self.merged_nodes.find(node_id)])
+        #else:
+        #    result_expr.append(id_to_node_name[self.merged_nodes.find(self.root_nodes[0])])
 
-        # TODO add other root node statements?
+        #signals_expr = ['add-signals'] + list(signals_to_add)
 
-        result_document = ['document', signals_expr, ['parse-sexpr', result_expr]]
+        ## TODO add other root node statements?
 
-        return result_document
+        #result_document = ['document', signals_expr, ['parse-sexpr', result_expr]]
+
+        #return result_document
 
 
 
@@ -350,13 +399,25 @@ class IrContainer:
         if signal_name in self.global_nodes:
             raise ValueError(f'Attempting to add signal with name {signal_name}, but the name is already in use')
         signal_node = self.add_node_by_kwargs(Signal, dict(signal_name=signal_name))
-        self.global_nodes[signal_name] = signal_node.node_id
+        #self.global_nodes[signal_name] = signal_node.node_id
         return signal_node
 
-    def make_root_node(self, node_id: NodeId):
+    def make_top_level_node(self, node_id: NodeId):
         if node_id not in self.nodes:
-            raise ValueError(f'Cannot add missing node {node_id} to root nodes')
-        self.root_nodes.append(node_id)
+            raise ValueError(f'Cannot add missing node {node_id} to top-level nodes')
+        self.top_level_nodes.append(node_id)
+
+    def add_declaration(self, declaration: Declaration):
+        if isinstance(declaration, SignalDeclaration | NamedExpressionDeclaration):
+            if declaration.node_name in self.global_nodes:
+                raise ValueError(f'Attempting redeclaration of global node name {declaration.node_id}')
+            self.global_nodes[declaration.node_name] = declaration.node_id
+        elif isinstance(declaration, NamedRecursiveDeclaration):
+            for node_name, node_id in declaration.node_names.items():
+                if node_name in self.global_nodes:
+                    raise ValueError(f'Attempting redeclaration of global node name {node_id}')
+                self.global_nodes[node_name] = node_id
+        self.declarations.append(declaration)
 
 
     def show_graph(self, output_path: Path) -> None:
@@ -417,8 +478,8 @@ class IrContainer:
         for node_name, node_id in self.node_names.items():
             self.node_names[node_name] = self.merged_nodes.find(node_id)
 
-        for (index, node_id) in enumerate(self.root_nodes):
-            self.root_nodes[index] = self.merged_nodes.find(node_id)
+        for (index, node_id) in enumerate(self.top_level_nodes):
+            self.top_level_nodes[index] = self.merged_nodes.find(node_id)
 
 
         for node in self.nodes.values():

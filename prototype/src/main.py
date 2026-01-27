@@ -1,7 +1,8 @@
 from __future__ import annotations
 from pathlib import Path
 
-from sexpr import parse_expression, parse_raw_sexpr, IrContainer, Signal, RawSExpr
+from sexpr import parse_expression, parse_raw_sexpr, IrContainer, Signal, RawSExpr, unparse_raw_sexpr
+from sexpr.base import SignalDeclaration
 
 
 output_directory: Path = Path('prototype/output')
@@ -103,8 +104,22 @@ def main():
     signal_node3 = ir_container1.add_signal_node('c')
     signal_node4 = ir_container1.add_signal_node('d')
 
+    signal_dict = {signal_node1.node_id: 'a', signal_node2.node_id: 'b', signal_node3.node_id: 'c', signal_node4.node_id: 'd'}
 
-    #parse_expression(expr_list1, None, ir_container1.global_nodes, ir_container1)
+    print()
+
+    unparsed_expr1 = unparse_raw_sexpr(expr_list1)
+    print(unparsed_expr1)
+
+    unparsed_expr2 = unparse_raw_sexpr(expr_list2)
+    print(unparsed_expr2)
+
+    ir_container1.add_declaration(SignalDeclaration('a', signal_node1.node_id))
+    ir_container1.add_declaration(SignalDeclaration('b', signal_node2.node_id))
+    ir_container1.add_declaration(SignalDeclaration('c', signal_node3.node_id))
+    ir_container1.add_declaration(SignalDeclaration('d', signal_node4.node_id))
+
+    root_node_id1 = parse_expression(expr_list6, None, ir_container1.global_nodes, ir_container1)
     print()
     #parse_expression(expr_list2, None, signal_dict, ir_container2)
     #print()
@@ -114,13 +129,29 @@ def main():
     #print()
     #parse_expression(expr_list5, None, signal_dict, ir_container5)
     #print()
-    parse_expression(expr_list6, None, ir_container1.global_nodes, ir_container1)
+    #parse_expression(expr_list6, None, ir_container1.global_nodes, ir_container1)
     #print()
     #parse_expression(expr_list7, None, signal_dict, ir_container7)
     #print()
     #parse_expression(expr_list8, None, signal_dict, ir_container8)
     #print()
     #parse_expression(expr_list9, None, signal_dict, ir_container9)
+
+    #ir_container1.show_graph(output_directory / 'container1.png')
+
+    ir_container1.make_top_level_node(root_node_id1)
+    #print(ir_container1.root_nodes)
+    print(ir_container1.generate_raw_sexpr(root_node_id1, declared_nodes=signal_dict))
+
+    #print()
+    #print(ir_container7.nodes)
+    #print()
+    #print(ir_container7.node_names)
+    #print()
+    #print(ir_container7.merged_nodes.parents)
+    #print()
+
+    #ir_container1.bypass_placeholders()
 
     #print()
     #print(ir_container7.nodes)
@@ -131,17 +162,6 @@ def main():
     #print()
 
     #ir_container1.show_graph(output_directory / 'container1.png')
-    ir_container1.bypass_placeholders()
-
-    #print()
-    #print(ir_container7.nodes)
-    #print()
-    #print(ir_container7.node_names)
-    #print()
-    #print(ir_container7.merged_nodes.parents)
-    #print()
-
-    #ir_container1.show_graph(output_directory / 'container1_no_placeholders.png')
 
 
 if __name__ == "__main__":

@@ -7,6 +7,7 @@ from .base import RawSExpr, LiteralType, NodeId
 from .base import IrContainer, PropertyIrNode, PlaceholderNode
 from .base import Bool, Sequence, Property
 from .base import Range, BoundedRange, IntOrUnbounded
+from .base import UnnamedExpressionDeclaration, NamedExpressionDeclaration, SignalDeclaration, NamedRecursiveDeclaration
 from .primitives import *
 
 
@@ -281,11 +282,14 @@ def parse_document(document: RawSExpr, ir_container: IrContainer):
                         for signal_name in signal_list:
                             if not isinstance(signal_name, str):
                                 raise ValueError(f"Expected signal name instead of {signal_name} in statement {statement}")
-                            ir_container.add_signal_node(signal_name)
+                            signal_node = ir_container.add_signal_node(signal_name)
+                            ir_container.make_top_level_node(signal_node.node_id)
+                            ir_container.add_declaration(SignalDeclaration(signal_name, signal_node.node_id))
 
                     case ['parse-sexpr', list(expression)]:
                         root_node_id = parse_expression(expr=expression, expected_type=None, local_nodes=ir_container.global_nodes, ir_container=ir_container)
-                        ir_container.make_root_node(root_node_id)
+                        ir_container.make_top_level_node(root_node_id)
+                        ir_container.add_declaration(UnnamedExpressionDeclaration(root_node_id))
 
                     case _:
                         raise ValueError(f'Unexpected statement form {statement}')
