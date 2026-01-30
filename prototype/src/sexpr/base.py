@@ -200,12 +200,12 @@ class IrContainer:
     nodes: dict[NodeId, PropertyIrNode]
 
     # TODO local node names need to be restriction of global node names
-    # TODO bypass placeholders needs to update all attributes
+
     node_names: dict[str, NodeId] # local and global node names
-    global_nodes: dict[str, NodeId] # contains signals and declared node names
-    top_level_nodes: list[NodeId] # containes global nodes and roots of unnamed expressions
+    global_nodes: dict[str, NodeId] # contains signals and other declared node names
     merged_nodes: UnionFind[NodeId]
 
+    # all declarations that were added to the container in the order they were added
     declarations: list[Declaration]
 
     next_raw_node_id: int
@@ -214,7 +214,6 @@ class IrContainer:
         self.nodes =  dict()
         self.node_names = dict()
         self.global_nodes = dict()
-        self.top_level_nodes = list()
         self.declarations = list()
         self.merged_nodes = UnionFind()
         self.next_raw_node_id = 1
@@ -236,13 +235,33 @@ class IrContainer:
         raise TypeError(f'Unexpected type {type(literal)} of literal {literal} while generating s-expression of container {self}')
 
     def output_container(self) -> RawSExpr:
-        return []
+        """Output the complete contents of the container as a property ir document
+        s-expression.
+        """
+        # TODO implement
+
+        # result_document = []
+        # declaration_exprs = []
+
+        # for declaration in self. declaration : ...
+
+        #signals_expr = ['add-signals'] + list(signals_to_add)
+
+        #result_document = ['document', signals_expr, ['parse-sexpr', result_expr]]
+
+        #return result_document
+
+        raise NotImplementedError("TODO")
+
 
     def generate_raw_sexpr(self, node_id: NodeId, declared_nodes: dict[NodeId, str]) -> RawSExpr | str:
+        """With the given node_id as the root, output the graph reachable from it as an s-expression
+        in the form of a let-rec with one line per node. Unnamed nodes get a new unique local name based on their id.
+        The nodes in declared_nodes are output as their provided name (usually previously declared global node names)
+        and not further expanded. The dict is expected to use representative node ids of merged nodes."""
 
-        #if len(self.root_nodes) == 0:
-        #    raise ValueError(f'Cannot generate s-expression for empty container {self}')
-        #if node_id is not None and node_id not in self.nodes:
+        # TODO handle declare-rec
+
         if node_id not in self.nodes:
             raise ValueError(f'Cannot generate s-expression for missing node {node_id} of container {self}')
 
@@ -256,23 +275,16 @@ class IrContainer:
             # if there are several names for a node, one is chosen arbitrarily
             # to be used consistently
 
-        # overwrite chosen names by those one used in argument declared_nodes
-        #for (name, named_node_id) in self.global_nodes.items():
+        # overwrite chosen names by those used in declared_nodes
         for (named_node_id, name) in declared_nodes.items():
             id_to_node_name[self.merged_nodes.find(named_node_id)] = name
 
         print(id_to_node_name)
 
         node_expr_list: RawSExpr = list()
-
         visited_nodes: set[NodeId] = set()
 
-        #signals_to_add: set[str] = set()
-
-        #if node_id is not None:
         visit_next = deque([node_id])
-        #else:
-        #    visit_next = deque(self.root_nodes)
 
         # search through reachable nodes from given node or all root nodes of the container
         # and generate expr for each node visited, skip if already visited or declared
@@ -305,8 +317,9 @@ class IrContainer:
 
             if isinstance(current_node, PlaceholderNode):
                 raise ValueError(f'Cannot generate s-expression for container {self} with uninstantiated node {current_node.node_id}')
+            elif isinstance(current_node, Signal) and current_repr_id not in declared_nodes:
+                raise ValueError(f'Cannot generate s-expression for container {self} starting from node id {node_id} with reachable undeclared signal id {current_repr_id}')
             elif isinstance(current_node, Signal):
-                #signals_to_add.add(current_node.signal_name)
                 continue
 
             current_node_expr: RawSExpr = [current_node.op_symbol()]
@@ -347,22 +360,13 @@ class IrContainer:
 
         return result_expr
 
-        #if node_id is not None:
-        #    result_expr.append(id_to_node_name[self.merged_nodes.find(node_id)])
-        #else:
-        #    result_expr.append(id_to_node_name[self.merged_nodes.find(self.root_nodes[0])])
-
-        #signals_expr = ['add-signals'] + list(signals_to_add)
-
-        ## TODO add other root node statements?
-
-        #result_document = ['document', signals_expr, ['parse-sexpr', result_expr]]
-
-        #return result_document
 
 
 
     def uniquify(self, name: str) -> str:
+        """Given a node name, returns a unique name with that prefix that is not
+        used by the container (globally or locally)."""
+
         if name not in self.node_names:
             return name
         else:
@@ -399,15 +403,11 @@ class IrContainer:
         if signal_name in self.global_nodes:
             raise ValueError(f'Attempting to add signal with name {signal_name}, but the name is already in use')
         signal_node = self.add_node_by_kwargs(Signal, dict(signal_name=signal_name))
-        #self.global_nodes[signal_name] = signal_node.node_id
         return signal_node
 
-    def make_top_level_node(self, node_id: NodeId):
-        if node_id not in self.nodes:
-            raise ValueError(f'Cannot add missing node {node_id} to top-level nodes')
-        self.top_level_nodes.append(node_id)
-
     def add_declaration(self, declaration: Declaration):
+        """Adds the declaration to the container and sets global node names accordingly."""
+
         if isinstance(declaration, SignalDeclaration | NamedExpressionDeclaration):
             if declaration.node_name in self.global_nodes:
                 raise ValueError(f'Attempting redeclaration of global node name {declaration.node_id}')
@@ -422,9 +422,7 @@ class IrContainer:
 
     def show_graph(self, output_path: Path) -> None:
 
-
         graph: Digraph = Digraph()
-
 
         for node in self.nodes.values():
 
@@ -471,15 +469,23 @@ class IrContainer:
 
     def bypass_placeholders(self) -> None:
         """Remove placeholder nodes by letting their parents point directly to
-        the instantiated nodes they are to be replaced by."""
+        the instantiated nodes they are to be replaced by.
+        Updates node_names, global_nodes, and declarations accordingly."""
 
         placeholder_ids_to_remove = []
 
         for node_name, node_id in self.node_names.items():
             self.node_names[node_name] = self.merged_nodes.find(node_id)
 
-        for (index, node_id) in enumerate(self.top_level_nodes):
-            self.top_level_nodes[index] = self.merged_nodes.find(node_id)
+        for node_name, node_id in self.global_nodes.items():
+            self.global_nodes[node_name] = self.merged_nodes.find(node_id)
+
+        for declaration in self.declarations:
+            if isinstance(declaration, SignalDeclaration | NamedExpressionDeclaration | UnnamedExpressionDeclaration):
+                declaration.node_id = self.merged_nodes.find(declaration.node_id)
+            elif isinstance(declaration, NamedRecursiveDeclaration):
+                for node_name, node_id in declaration.node_names.items():
+                    declaration.node_names[node_name] = self.merged_nodes.find(node_id)
 
 
         for node in self.nodes.values():
@@ -544,7 +550,7 @@ class IrContainer:
         node_repr_id: NodeId = self.merged_nodes.find(node_id)
         self.nodes[node_repr_id] = value
 
-
+    # TODO this is not used, do we need it at all?
     def get_node_id_by_name(self, node_name: str):
         if node_name in self.node_names:
             node_id: NodeId = self.node_names[node_name]
@@ -572,9 +578,6 @@ class IrContainer:
             self.merged_nodes.make_representative(node_id1)
 
 
-
-    def print_expression(self, root: PropertyIrNode) -> str:
-        raise NotImplementedError("TODO")
 
 
 def operation_to_class_str(input: str) -> str:

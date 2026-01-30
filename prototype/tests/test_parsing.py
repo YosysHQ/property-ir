@@ -3,7 +3,7 @@ from pathlib import Path
 
 from sexpr import parse_expression, parse_literal, parse_raw_sexpr, RawSExpr, IrContainer, Signal, parse_document
 from input_data import raw_sexpr1, raw_sexpr2, raw_sexpr3, raw_sexpr4, raw_sexpr5, raw_sexpr6, raw_sexpr7, raw_sexpr8
-from sexpr.base import Bool, BoundedRange, IntOrUnbounded, NodeId, Property, PropertyIrNode, Range, Sequence
+from sexpr.base import Bool, BoundedRange, IntOrUnbounded, NodeId, Property, PropertyIrNode, Range, Sequence, UnnamedExpressionDeclaration
 from sexpr.primitives import And, Not, Or, PropAlwaysRanged, PropSeq, SeqBool, SeqConcat, SeqRepeat, Constant
 
 
@@ -154,18 +154,18 @@ def wrap_multiple_expr_in_document(expr_list: list[RawSExpr]) -> RawSExpr:
 @pytest.mark.parametrize('expr', expr_valid_list)
 def test_parse_doc_no_error(empty_container, expr):
     parse_document(wrap_in_document(expr), ir_container=empty_container)
-    assert len(empty_container.top_level_nodes) == 5
+    assert len(empty_container.declarations) == 5
 
 def test_parse_document_multiple_expressions(empty_container):
     parse_document(wrap_multiple_expr_in_document(expr_valid_list), ir_container=empty_container)
-    assert len(empty_container.top_level_nodes) == 9
-    #empty_container.show_graph(output_path=Path('prototype/output/test.png'))
+    assert len(empty_container.declarations) == 9
 
 
 def test_parse_document_expr1(empty_container):
     parse_document(wrap_in_document(raw_sexpr1), ir_container=empty_container)
-    root_node_id = empty_container.top_level_nodes[4]
-    assert isinstance(root_node_id, NodeId)
+    declaration = empty_container.declarations[4]
+    assert isinstance(declaration, UnnamedExpressionDeclaration)
+    root_node_id = declaration.node_id
     root_node: PropertyIrNode = empty_container[root_node_id]
     assert isinstance(root_node, Or)
     children_ids = root_node.children
@@ -198,5 +198,7 @@ def test_parse_document_roundtrip_no_error(empty_container, expr):
         empty_container.declarations[2].node_id: empty_container.declarations[2].node_name,
         empty_container.declarations[3].node_id: empty_container.declarations[3].node_name
     }
-    output_expr: RawSExpr = empty_container.generate_raw_sexpr(node_id=empty_container.top_level_nodes[4], declared_nodes=declared_nodes)
+    declaration = empty_container.declarations[4]
+    assert isinstance(declaration, UnnamedExpressionDeclaration)
+    output_expr: RawSExpr = empty_container.generate_raw_sexpr(node_id=declaration.node_id, declared_nodes=declared_nodes)
     parse_document(wrap_in_document(output_expr), ir_container=IrContainer())
