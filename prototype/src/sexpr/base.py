@@ -408,15 +408,21 @@ class IrContainer:
     def add_declaration(self, declaration: Declaration):
         """Adds the declaration to the container and sets global node names accordingly."""
 
+        name_id_pairs: list[tuple[str, NodeId[Any]]] = []
+
         if isinstance(declaration, SignalDeclaration | NamedExpressionDeclaration):
-            if declaration.node_name in self.global_nodes:
-                raise ValueError(f'Attempting redeclaration of global node name {declaration.node_id}')
-            self.global_nodes[declaration.node_name] = declaration.node_id
+            name_id_pairs.append((declaration.node_name, declaration.node_id))
         elif isinstance(declaration, NamedRecursiveDeclaration):
             for node_name, node_id in declaration.node_names.items():
-                if node_name in self.global_nodes:
-                    raise ValueError(f'Attempting redeclaration of global node name {node_id}')
-                self.global_nodes[node_name] = node_id
+                name_id_pairs.append((node_name, node_id))
+
+        for node_name, node_id in name_id_pairs:
+            if node_name in self.global_nodes:
+                raise ValueError(f'Attempting redeclaration of global node name {node_id}')
+            self.global_nodes[node_name] = node_id
+            if node_name in self.node_names:
+                self.node_names[self.uniquify(node_name)] = self.node_names[node_name]
+            self.node_names[node_name] = node_id
         self.declarations.append(declaration)
 
 

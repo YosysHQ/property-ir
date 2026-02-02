@@ -34,12 +34,14 @@ def test_uniquify3(container):
     assert '1111_3' in container.node_names
     assert '1111_4' in container.node_names
 
-def test_uniquify4(container):
+def test_uniquify4(empty_container):
+    container = empty_container
     container.add_placeholder_node(name=container.uniquify(''))
     container.add_placeholder_node(name=container.uniquify(''))
     assert len(container.node_names) == 2
 
-def test_uniquify5(container):
+def test_uniquify5(empty_container):
+    container = empty_container
     container.add_placeholder_node(name=container.uniquify('1111_22'))
     container.add_placeholder_node(name=container.uniquify('1111_22'))
     container.add_placeholder_node(name=container.uniquify('1111_35'))
