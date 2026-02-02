@@ -199,14 +199,16 @@ class IrContainer:
 
     nodes: dict[NodeId, PropertyIrNode]
 
-    # TODO local node names need to be restriction of global node names
-
-    node_names: dict[str, NodeId] # local and global node names
+    node_names: dict[str, NodeId] # local and global node names; pairs are superset of global node names
     global_nodes: dict[str, NodeId] # contains signals and other declared node names
-    merged_nodes: UnionFind[NodeId]
+    merged_nodes: UnionFind[NodeId] # nodes that are equivalent through naming; each union must contain only one non-placeholder
 
     # all declarations that were added to the container in the order they were added
     declarations: list[Declaration]
+
+    source_nodes: dict[str, NodeId] # def-only = signal nodes
+    inner_nodes: dict[str, NodeId] # def/use = declare/declare-rec named global nodes
+    sink_nodes: list[NodeId] # use-only = unnamed expression roots
 
     next_raw_node_id: int
 
@@ -216,6 +218,9 @@ class IrContainer:
         self.global_nodes = dict()
         self.declarations = list()
         self.merged_nodes = UnionFind()
+        self.source_nodes = dict()
+        self.inner_nodes = dict()
+        self.sink_nodes = list()
         self.next_raw_node_id = 1
 
     def _get_next_node_id(self) -> NodeId:
@@ -410,11 +415,18 @@ class IrContainer:
 
         name_id_pairs: list[tuple[str, NodeId[Any]]] = []
 
-        if isinstance(declaration, SignalDeclaration | NamedExpressionDeclaration):
+        if isinstance(declaration, SignalDeclaration):
             name_id_pairs.append((declaration.node_name, declaration.node_id))
+            self.source_nodes[declaration.node_name] = declaration.node_id
+        elif isinstance(declaration, NamedExpressionDeclaration):
+            name_id_pairs.append((declaration.node_name, declaration.node_id))
+            self.inner_nodes[declaration.node_name] = declaration.node_id
         elif isinstance(declaration, NamedRecursiveDeclaration):
             for node_name, node_id in declaration.node_names.items():
                 name_id_pairs.append((node_name, node_id))
+                self.inner_nodes[node_name] = node_id
+        elif isinstance(declaration, UnnamedExpressionDeclaration):
+            self.sink_nodes.append(declaration.node_id)
 
         for node_name, node_id in name_id_pairs:
             if node_name in self.global_nodes:
@@ -423,6 +435,7 @@ class IrContainer:
             if node_name in self.node_names:
                 self.node_names[self.uniquify(node_name)] = self.node_names[node_name]
             self.node_names[node_name] = node_id
+
         self.declarations.append(declaration)
 
 
@@ -480,11 +493,12 @@ class IrContainer:
 
         placeholder_ids_to_remove = []
 
-        for node_name, node_id in self.node_names.items():
-            self.node_names[node_name] = self.merged_nodes.find(node_id)
+        for node_dict in [self.node_names, self.global_nodes, self.inner_nodes, self.source_nodes]:
+            for node_name, node_id in node_dict.items():
+                node_dict[node_name] = self.merged_nodes.find(node_id)
 
-        for node_name, node_id in self.global_nodes.items():
-            self.global_nodes[node_name] = self.merged_nodes.find(node_id)
+        for index, node_id in enumerate(self.sink_nodes):
+            self.sink_nodes[index] = self.merged_nodes.find(node_id)
 
         for declaration in self.declarations:
             if isinstance(declaration, SignalDeclaration | NamedExpressionDeclaration | UnnamedExpressionDeclaration):
