@@ -1,5 +1,6 @@
 from __future__ import annotations
 from typing import Optional, Any, TypeAliasType,get_origin, get_args, Literal
+from _pytest.mark import expression
 from typeguard import typechecked
 import re
 
@@ -142,7 +143,7 @@ def parse_literal(literal_expr: RawSExpr | str, expected_type: type) -> LiteralT
     raise TypeError(f'Mismatch of expected type literal {expected_type} and expression {literal_expr}')
 
 
-def check_names_sexpr(expr: RawSExpr) -> list[tuple[str, RawSExpr]]:
+def check_names_sexpr(expr: RawSExpr) -> list[tuple[str, RawSExpr | str]]:
     if not isinstance(expr, list):
         raise ValueError(f"Expected list of named expressions instead of {expr}")
     for item in expr:
@@ -152,6 +153,7 @@ def check_names_sexpr(expr: RawSExpr) -> list[tuple[str, RawSExpr]]:
             case _:
                 raise ValueError(f"Expected (name expression) pair instead of {item}")
     return expr # type: ignore
+
 
 @typechecked
 def parse_expression(
@@ -268,8 +270,78 @@ def parse_expression(
             raise ValueError(f'Unexpected expression form {expr}')
 
 
+@typechecked
+def parse_declare_rec(expression_list: list[RawSExpr], ir_container: IrContainer) -> dict[str, NodeId]:
+    """Parses a declare-rec expression, adds its nodes to the given ir_container,
+    and returns a dict of new global nodes that are specified with the declare keyword within the expression.
+    This method is separate from parse_expression because not only a single NodeId is returned.
+    """
 
+    local_nodes = ir_container.global_nodes
+
+    new_global_names = []
+    new_global_nodes: dict[str, NodeId] = dict()
+
+    inner_local_nodes: dict[str, NodeId] = dict(local_nodes)
+
+    named_subexpressions: list[tuple[str, RawSExpr | str]] = list()
+
+    # collect all named expression and keep track of new global names
+    for expr in expression_list:
+        match(expr):
+            case [str(name), list(subexpr)] | [str(name), str(subexpr)]:
+                named_subexpressions.append((name, subexpr))
+            case ['declare', str(name), list(subexpr)] | ['declare', str(name), str(subexpr)]:
+                named_subexpressions.append((name, subexpr))
+                new_global_names.append(name)
+            case _:
+                raise ValueError(f"Expected (name expression) or (declare name expression) in let-rec instead of {expr}")
+
+
+    # TODO: can the following code be deduplicated nicely?
+    # the following is identical with let-rec parsing in parse_expression
+
+    # create a placeholder node for each new node name
+    for (name, subexpr) in named_subexpressions:
+        node_name = ir_container.uniquify(name) # returns name if not used otherwise returns f"{name}_{counter}" for a counter value that results in an unused name
+        if name in inner_local_nodes:
+            raise ValueError(f'Node name {name} already in use')
+        inner_local_nodes[name] = ir_container.add_placeholder_node(name=node_name).node_id
+
+
+    # evaluate each named subexpression
+    # and let each placeholder point to the root of its subexpression
+    # or if the root is a placeholder, merge placeholders
+    for (name, subexpr) in named_subexpressions:
+        subexpr_root_node_id = parse_expression(subexpr, None, inner_local_nodes, ir_container)
+        assert isinstance(subexpr_root_node_id, NodeId)
+        subexpr_root_node: PropertyIrNode = ir_container[subexpr_root_node_id]
+        placeholder_id: NodeId = inner_local_nodes[name]
+        placeholder_node = ir_container[placeholder_id]
+        assert isinstance(placeholder_node, PlaceholderNode)
+
+        placeholder_node.instantiate_placeholder(subexpr_root_node)
+
+    for (name, subexpr) in named_subexpressions:
+        subexpr_id: NodeId = inner_local_nodes[name]
+        subexpr_node = ir_container[subexpr_id]
+        if isinstance(subexpr_node, PlaceholderNode):
+            raise ValueError(f'Subexpression ({name} {subexpr}) in let-rec expression corresponds to uninstantiated node')
+
+    # here ends the part that is identical to let-rec parsing
+
+    # collect all global nodes specified with declare to return
+    for name in new_global_names:
+        new_global_nodes[name] = inner_local_nodes[name]
+
+    return new_global_nodes
+
+
+@typechecked
 def parse_document(document: RawSExpr, ir_container: IrContainer):
+    """Parses a document of property IR statements and adds it to the given ir_container.
+    Adds declarations to the container (which in turn updates the global nodes).
+    """
 
     match(document):
         case ['document', *statements]:
@@ -288,6 +360,14 @@ def parse_document(document: RawSExpr, ir_container: IrContainer):
                     case ['parse-sexpr', list(expression)]:
                         root_node_id = parse_expression(expr=expression, expected_type=None, local_nodes=ir_container.global_nodes, ir_container=ir_container)
                         ir_container.add_declaration(UnnamedExpressionDeclaration(root_node_id))
+
+                    case ['declare', str(node_name), list(expression)]:
+                        root_node_id = parse_expression(expr=expression, expected_type=None, local_nodes=ir_container.global_nodes, ir_container=ir_container)
+                        ir_container.add_declaration(NamedExpressionDeclaration(node_name, root_node_id))
+
+                    case ['declare-rec', *expression_list]:
+                        root_nodes_dict = parse_declare_rec(expression_list, ir_container) # type:ignore # TODO can this be typechecked?
+                        ir_container.add_declaration(NamedRecursiveDeclaration(root_nodes_dict))
 
                     case _:
                         raise ValueError(f'Unexpected statement form {statement}')

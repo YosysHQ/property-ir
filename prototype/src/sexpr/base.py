@@ -411,7 +411,9 @@ class IrContainer:
         return signal_node
 
     def add_declaration(self, declaration: Declaration):
-        """Adds the declaration to the container and sets global node names accordingly."""
+        """Adds the declaration to the container and sets global node names accordingly.
+        If an identical local name in node_names exists and points to a different node,
+        that local name is renamed."""
 
         name_id_pairs: list[tuple[str, NodeId[Any]]] = []
 
@@ -429,11 +431,14 @@ class IrContainer:
             self.sink_nodes.append(declaration.node_id)
 
         for node_name, node_id in name_id_pairs:
+            if node_id not in self.nodes:
+                raise ValueError(f'Cannot add declaration for non-existent node {node_id}')
             if node_name in self.global_nodes:
-                raise ValueError(f'Attempting redeclaration of global node name {node_id}')
+                raise ValueError(f'Attempting redeclaration of global node name {node_name}')
             self.global_nodes[node_name] = node_id
-            if node_name in self.node_names:
-                self.node_names[self.uniquify(node_name)] = self.node_names[node_name]
+            if node_name in self.node_names: # reset local name if it exists and points to a different node
+                if self.node_names[node_name] != node_id:
+                    self.node_names[self.uniquify(node_name)] = self.node_names[node_name]
             self.node_names[node_name] = node_id
 
         self.declarations.append(declaration)

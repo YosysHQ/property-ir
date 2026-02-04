@@ -3,6 +3,7 @@ from pathlib import Path
 
 from sexpr import parse_expression, parse_literal, parse_raw_sexpr, RawSExpr, IrContainer, Signal, parse_document
 from input_data import raw_sexpr1, raw_sexpr2, raw_sexpr3, raw_sexpr4, raw_sexpr5, raw_sexpr6, raw_sexpr7, raw_sexpr8
+from input_data import raw_sexpr6_declare, raw_sexpr6_declare_rec, raw_sexpr5_declare_rec
 from sexpr.base import Bool, BoundedRange, IntOrUnbounded, NodeId, Property, PropertyIrNode, Range, Sequence, UnnamedExpressionDeclaration
 from sexpr.primitives import And, Not, Or, PropAlwaysRanged, PropSeq, SeqBool, SeqConcat, SeqRepeat, Constant
 
@@ -150,6 +151,20 @@ def wrap_multiple_expr_in_document(expr_list: list[RawSExpr]) -> RawSExpr:
     return ['document', ['add-signals', 'a', 'b', 'c', 'd']] + parse_expr_list
 
 
+def wrap_statement_in_document(expr: RawSExpr) -> RawSExpr:
+    return ['document',
+        ['add-signals', 'a', 'b'],
+        ['add-signals', 'c', 'd'],
+        expr
+    ]
+
+def wrap_multiple_statements_in_document(expr_list: list[RawSExpr]) -> RawSExpr:
+    return ['document',
+        ['add-signals', 'a', 'b'],
+        ['add-signals', 'c', 'd'],
+    ] + expr_list
+
+
 
 @pytest.mark.parametrize('expr', expr_valid_list)
 def test_parse_doc_no_error(empty_container, expr):
@@ -202,3 +217,87 @@ def test_parse_document_roundtrip_no_error(empty_container, expr):
     assert isinstance(declaration, UnnamedExpressionDeclaration)
     output_expr: RawSExpr = empty_container.generate_raw_sexpr(node_id=declaration.node_id, declared_nodes=declared_nodes)
     parse_document(wrap_in_document(output_expr), ir_container=IrContainer())
+
+
+
+
+def test_expr6_declare(empty_container):
+    container = empty_container
+    parse_document(wrap_statement_in_document(raw_sexpr6_declare), ir_container=container)
+    #output_directory: Path = Path('./output')
+    #container.show_graph(output_directory / 'dec_expr6.png')
+    assert 'global-node-name1' in container.global_nodes
+    assert len(container.global_nodes) == 5 # 4 signal nodes + 1 declared node
+    assert len(container.declarations) == 5 # 4 signal declarations + 1 declare-rec
+    assert len(container.source_nodes) == 4 # 4 signal nodes
+    assert len(container.inner_nodes) == 1 # 1 declared node
+    assert len(container.sink_nodes) == 0
+
+def test_expr6_declare_rec(empty_container):
+    container = empty_container
+    parse_document(wrap_statement_in_document(raw_sexpr6_declare_rec), ir_container=container)
+    #output_directory: Path = Path('./output')
+    #container.show_graph(output_directory / 'dec_rec_expr6.png')
+    assert 'prop1' in container.global_nodes
+    assert 'prop2' in container.global_nodes
+    assert len(container.global_nodes) == 6 # 4 signal nodes + 2 declared nodes
+    assert len(container.declarations) == 5 # 4 signal declarations + 1 declare-rec
+    assert len(container.source_nodes) == 4 # 4 signal nodes
+    assert len(container.inner_nodes) == 2 # 2 declared nodes
+    assert len(container.sink_nodes) == 0
+
+def test_expr6_1_declare_rec(empty_container):
+    container = empty_container
+    parse_document(wrap_multiple_statements_in_document([['parse-sexpr', raw_sexpr1], raw_sexpr6_declare_rec]), ir_container=container)
+    #output_directory: Path = Path('./output')
+    #container.show_graph(output_directory / 'dec_rec_expr6_1.png')
+    assert 'prop1' in container.global_nodes
+    assert 'prop2' in container.global_nodes
+    assert len(container.global_nodes) == 6 # 4 signal nodes + 2 declared nodes
+    assert len(container.declarations) == 6 # 4 signal declarations + 1 declare-rec + 1 unnamed root
+    assert len(container.source_nodes) == 4 # 4 signal nodes
+    assert len(container.inner_nodes) == 2 # 2 declared nodes
+    assert len(container.sink_nodes) == 1 # 1 unnamed root
+
+
+def test_expr5_6_declare_rec(empty_container):
+    container = empty_container
+    parse_document(wrap_multiple_statements_in_document([raw_sexpr5_declare_rec, raw_sexpr6_declare_rec]), ir_container=container)
+    #output_directory: Path = Path('./output')
+    #container.show_graph(output_directory / 'dec_rec_expr6_6.png')
+    assert 'prop1' in container.global_nodes
+    assert 'prop2' in container.global_nodes
+    assert 'foo' in container.global_nodes
+    assert 'bar' in container.global_nodes
+    assert len(container.global_nodes) == 8 # 4 signal nodes + 4 declared nodes
+    assert len(container.declarations) == 6 # 4 signal declarations + 2 declare-rec
+    assert len(container.source_nodes) == 4 # 4 signal nodes
+    assert len(container.inner_nodes) == 4 # 4 declared nodes
+    assert len(container.sink_nodes) == 0 # 0 unnamed roots
+    assert len(container.node_names) == 8 # 8 global names
+
+
+def test_expr6_6_declare_rec(empty_container):
+    container = empty_container
+    parse_document(wrap_multiple_statements_in_document([['parse-sexpr', raw_sexpr6], raw_sexpr6_declare_rec]), ir_container=container)
+    #output_directory: Path = Path('./output')
+    #container.show_graph(output_directory / 'dec_rec_expr6_6.png')
+    assert 'prop1' in container.global_nodes
+    assert 'prop2' in container.global_nodes
+    assert len(container.global_nodes) == 6 # 4 signal nodes + 2 declared nodes
+    assert len(container.declarations) == 6 # 4 signal declarations + 1 declare-rec + 1 unnamed root
+    assert len(container.source_nodes) == 4 # 4 signal nodes
+    assert len(container.inner_nodes) == 2 # 2 declared nodes
+    assert len(container.sink_nodes) == 1 # 1 unnamed root
+    # the global nodes get new local names because they are already in use after the let-rec expr, then later the local names of let-rec
+    # get renamed when the global node names are set in add_declaration
+    #assert len(container.node_names) == 8 # 6 global names + 2 local names + 2 local names because of renaming = 10
+
+
+def test_expr6_6_declare_rec_illegal_name_resuse(empty_container):
+    # attempting the reuse of a global node name in a let-rec as a local name results in an error
+    # because of the ambiguity which node should be used (like in nested let-rec expressions, where this case is excluded as well)
+    # is this the desired behavior?
+    container = empty_container
+    with pytest.raises(ValueError, match='already in use'):
+        parse_document(wrap_multiple_statements_in_document([raw_sexpr6_declare_rec, ['parse-sexpr', raw_sexpr6]]), ir_container=container)
