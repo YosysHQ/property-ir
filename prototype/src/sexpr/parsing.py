@@ -144,15 +144,57 @@ def parse_literal(literal_expr: RawSExpr | str, expected_type: type) -> LiteralT
 
 
 def check_names_sexpr(expr: RawSExpr) -> list[tuple[str, RawSExpr | str]]:
+    named_subexpressions: list[tuple[str, RawSExpr | str]] = list()
     if not isinstance(expr, list):
         raise ValueError(f"Expected list of named expressions instead of {expr}")
     for item in expr:
         match item:
-            case [str(_), _]:
-                continue
+            case [str(first), second]:
+                named_subexpressions.append((first, second))
             case _:
                 raise ValueError(f"Expected (name expression) pair instead of {item}")
-    return expr # type: ignore
+    return named_subexpressions
+
+
+@typechecked
+def process_named_subexpressions(local_nodes: dict[str, NodeId], named_subexpressions, ir_container: IrContainer) -> dict[str, NodeId]:
+    """Parse a list of possibly mutually recursive expressions of the form
+    (name expression) as it occurs in let-rec and declare-rec.
+    This method exists to deduplicate the common code of parsing these two.
+    local_nodes contains the already defined names (globally and locally earlier in a surrounding expression).
+    Returns a dict of newly defined (local) node names.
+    (Some of the new node names might be global, but this information is not available here, and the global names are updated
+    later via add_declaration in parse_document.)
+    """
+
+    inner_local_nodes: dict[str, NodeId] = dict(local_nodes)
+
+    # create a placeholder node for each new node name
+    for (name, subexpr) in named_subexpressions:
+        node_name = ir_container.uniquify(name) # returns name if not used otherwise returns f"{name}_{counter}" for a counter value that results in an unused name
+        if name in inner_local_nodes:
+            raise ValueError(f'Node name {name} already in use')
+        inner_local_nodes[name] = ir_container.add_placeholder_node(name=node_name).node_id
+
+    # evaluate each named subexpression
+    # and let each placeholder point to the root of its subexpression
+    # or if the root is a placeholder, merge placeholders
+    for (name, subexpr) in named_subexpressions:
+        subexpr_root_node_id = parse_expression(subexpr, None, inner_local_nodes, ir_container)
+        assert isinstance(subexpr_root_node_id, NodeId)
+        subexpr_root_node: PropertyIrNode = ir_container[subexpr_root_node_id]
+        placeholder_id: NodeId = inner_local_nodes[name]
+        placeholder_node = ir_container[placeholder_id]
+        assert isinstance(placeholder_node, PlaceholderNode)
+
+        placeholder_node.instantiate_placeholder(subexpr_root_node)
+
+    for (name, subexpr) in named_subexpressions:
+        subexpr_id: NodeId = inner_local_nodes[name]
+        subexpr_node = ir_container[subexpr_id]
+        if isinstance(subexpr_node, PlaceholderNode):
+            raise ValueError(f'Subexpression ({name} {subexpr}) in let-rec expression corresponds to uninstantiated node')
+    return inner_local_nodes
 
 
 @typechecked
@@ -181,37 +223,8 @@ def parse_expression(
 
             named_subexpressions = check_names_sexpr(named_subexpressions)
 
-            inner_local_nodes = dict(local_nodes)
+            inner_local_nodes: dict[str, NodeId] = process_named_subexpressions(local_nodes, named_subexpressions, ir_container)
 
-            # create a placeholder node for each new node name
-            for (name, subexpr) in named_subexpressions:
-                node_name = ir_container.uniquify(name) # returns name if not used otherwise returns f"{name}_{counter}" for a counter value that results in an unused name
-                if name in inner_local_nodes:
-                    raise ValueError(f'Node name {name} already in use')
-                inner_local_nodes[name] = ir_container.add_placeholder_node(name=node_name).node_id
-
-
-            # evaluate each named subexpression
-            # and let each placeholder point to the root of its subexpression
-            # or if the root is a placeholder, merge placeholders
-            for (name, subexpr) in named_subexpressions:
-                subexpr_root_node_id = parse_expression(subexpr, None, inner_local_nodes, ir_container)
-                assert isinstance(subexpr_root_node_id, NodeId)
-                subexpr_root_node: PropertyIrNode = ir_container[subexpr_root_node_id]
-                placeholder_id: NodeId = inner_local_nodes[name]
-                placeholder_node = ir_container[placeholder_id]
-                assert isinstance(placeholder_node, PlaceholderNode)
-
-                placeholder_node.instantiate_placeholder(subexpr_root_node)
-
-            for (name, subexpr) in named_subexpressions:
-                subexpr_id: NodeId = inner_local_nodes[name]
-                subexpr_node = ir_container[subexpr_id]
-                if isinstance(subexpr_node, PlaceholderNode):
-                    raise ValueError(f'Subexpression ({name} {subexpr}) in let-rec expression corresponds to uninstantiated node')
-
-
-            # return value of last expression
             return parse_expression(return_expression, None, inner_local_nodes, ir_container)
 
         case ["true" | "false" as root_symbol]: # "(false)" "(true)"
@@ -282,11 +295,9 @@ def parse_declare_rec(expression_list: list[RawSExpr], ir_container: IrContainer
     new_global_names = []
     new_global_nodes: dict[str, NodeId] = dict()
 
-    inner_local_nodes: dict[str, NodeId] = dict(local_nodes)
-
     named_subexpressions: list[tuple[str, RawSExpr | str]] = list()
 
-    # collect all named expression and keep track of new global names
+    # collect all named expressions and keep track of new global names
     for expr in expression_list:
         match(expr):
             case [str(name), list(subexpr)] | [str(name), str(subexpr)]:
@@ -297,38 +308,7 @@ def parse_declare_rec(expression_list: list[RawSExpr], ir_container: IrContainer
             case _:
                 raise ValueError(f"Expected (name expression) or (declare name expression) in let-rec instead of {expr}")
 
-
-    # TODO: can the following code be deduplicated nicely?
-    # the following is identical with let-rec parsing in parse_expression
-
-    # create a placeholder node for each new node name
-    for (name, subexpr) in named_subexpressions:
-        node_name = ir_container.uniquify(name) # returns name if not used otherwise returns f"{name}_{counter}" for a counter value that results in an unused name
-        if name in inner_local_nodes:
-            raise ValueError(f'Node name {name} already in use')
-        inner_local_nodes[name] = ir_container.add_placeholder_node(name=node_name).node_id
-
-
-    # evaluate each named subexpression
-    # and let each placeholder point to the root of its subexpression
-    # or if the root is a placeholder, merge placeholders
-    for (name, subexpr) in named_subexpressions:
-        subexpr_root_node_id = parse_expression(subexpr, None, inner_local_nodes, ir_container)
-        assert isinstance(subexpr_root_node_id, NodeId)
-        subexpr_root_node: PropertyIrNode = ir_container[subexpr_root_node_id]
-        placeholder_id: NodeId = inner_local_nodes[name]
-        placeholder_node = ir_container[placeholder_id]
-        assert isinstance(placeholder_node, PlaceholderNode)
-
-        placeholder_node.instantiate_placeholder(subexpr_root_node)
-
-    for (name, subexpr) in named_subexpressions:
-        subexpr_id: NodeId = inner_local_nodes[name]
-        subexpr_node = ir_container[subexpr_id]
-        if isinstance(subexpr_node, PlaceholderNode):
-            raise ValueError(f'Subexpression ({name} {subexpr}) in let-rec expression corresponds to uninstantiated node')
-
-    # here ends the part that is identical to let-rec parsing
+    inner_local_nodes: dict[str, NodeId] = process_named_subexpressions(local_nodes, named_subexpressions, ir_container)
 
     # collect all global nodes specified with declare to return
     for name in new_global_names:
