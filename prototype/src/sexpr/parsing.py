@@ -161,10 +161,10 @@ def process_named_subexpressions(local_nodes: dict[str, NodeId], named_subexpres
     """Parse a list of possibly mutually recursive expressions of the form
     (name expression) as it occurs in let-rec and declare-rec.
     This method exists to deduplicate the common code of parsing these two.
-    local_nodes contains the already defined names (globally and locally earlier in a surrounding expression).
-    Returns a dict of newly defined (local) node names.
-    (Some of the new node names might be global, but this information is not available here, and the global names are updated
-    later via add_declaration in parse_document.)
+    local_nodes contains the already defined names (globally and locally earlier
+    in a surrounding expression). Returns a dict of newly defined (local) node names.
+    (Some of the new node names might be global, but this information is not available here,
+    and the global names are updated later via add_declaration in parse_document.)
     """
 
     inner_local_nodes: dict[str, NodeId] = dict(local_nodes)
@@ -221,9 +221,9 @@ def parse_expression(
 
         case ['let-rec', *named_subexpressions, return_expression]:
 
-            named_subexpressions = check_names_sexpr(named_subexpressions)
+            checked_named_subexpressions: list[tuple[str, RawSExpr | str]] = check_names_sexpr(named_subexpressions)
 
-            inner_local_nodes: dict[str, NodeId] = process_named_subexpressions(local_nodes, named_subexpressions, ir_container)
+            inner_local_nodes: dict[str, NodeId] = process_named_subexpressions(local_nodes, checked_named_subexpressions, ir_container)
 
             return parse_expression(return_expression, None, inner_local_nodes, ir_container)
 
