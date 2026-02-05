@@ -219,6 +219,28 @@ def test_parse_document_roundtrip_no_error(empty_container, expr):
     parse_document(wrap_in_document(output_expr), ir_container=IrContainer())
 
 
+@pytest.mark.parametrize('expr', expr_valid_list)
+def test_generate_raw_sexpr_node_defs_no_error(empty_container, expr):
+    parse_document(wrap_in_document(expr), ir_container=empty_container)
+    declared_nodes = {
+        empty_container.declarations[0].node_id: empty_container.declarations[0].node_name,
+        empty_container.declarations[1].node_id: empty_container.declarations[1].node_name,
+        empty_container.declarations[2].node_id: empty_container.declarations[2].node_name,
+        empty_container.declarations[3].node_id: empty_container.declarations[3].node_name
+    }
+    declaration = empty_container.declarations[4]
+    assert isinstance(declaration, UnnamedExpressionDeclaration)
+    output_expr_list = empty_container.generate_raw_sexpr_node_defs(node_list=[declaration.node_id], declared_nodes=declared_nodes, node_names_to_use=dict())
+    output_expr: RawSExpr = empty_container.generate_raw_sexpr(node_id=declaration.node_id, declared_nodes=declared_nodes)
+    output_expr2: RawSExpr = empty_container.generate_raw_sexpr_unnamed_root(node_id=declaration.node_id, declared_nodes=declared_nodes)
+    print(output_expr_list)
+    print()
+    print(output_expr)
+    print(output_expr2)
+    output_document = empty_container.output_container()
+    print(output_document)
+    #assert False
+    parse_document(output_document, ir_container=IrContainer())
 
 
 def test_expr6_declare(empty_container):
