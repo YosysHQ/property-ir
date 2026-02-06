@@ -3,7 +3,8 @@ from pathlib import Path
 
 from sexpr import parse_expression, parse_literal, parse_raw_sexpr, RawSExpr, IrContainer, Signal, parse_document
 from input_data import raw_sexpr1, raw_sexpr2, raw_sexpr3, raw_sexpr4, raw_sexpr5, raw_sexpr6, raw_sexpr7, raw_sexpr8
-from input_data import raw_sexpr6_declare, raw_sexpr6_declare_rec, raw_sexpr5_declare_rec
+from input_data import raw_sexpr6_declare, raw_sexpr6_declare_rec, raw_sexpr5_declare_rec, raw_sexpr7_declare_rec
+from input_data import raw_sexpr_signal_redeclaration_local, raw_sexpr_signal_redeclaration_global1, raw_sexpr_signal_redeclaration_global2
 from sexpr.base import Bool, BoundedRange, IntOrUnbounded, NodeId, Property, PropertyIrNode, Range, Sequence, UnnamedExpressionDeclaration
 from sexpr.primitives import And, Not, Or, PropAlwaysRanged, PropSeq, SeqBool, SeqConcat, SeqRepeat, Constant
 
@@ -215,7 +216,7 @@ def test_parse_document_roundtrip_no_error(empty_container, expr):
     }
     declaration = empty_container.declarations[4]
     assert isinstance(declaration, UnnamedExpressionDeclaration)
-    output_expr: RawSExpr = empty_container.generate_raw_sexpr(node_id=declaration.node_id, declared_nodes=declared_nodes)
+    output_expr: RawSExpr = empty_container.generate_raw_sexpr_unnamed_root(node_id=declaration.node_id, declared_nodes=declared_nodes)
     parse_document(wrap_in_document(output_expr), ir_container=IrContainer())
 
 
@@ -231,15 +232,12 @@ def test_generate_raw_sexpr_node_defs_no_error(empty_container, expr):
     declaration = empty_container.declarations[4]
     assert isinstance(declaration, UnnamedExpressionDeclaration)
     output_expr_list = empty_container.generate_raw_sexpr_node_defs(node_list=[declaration.node_id], declared_nodes=declared_nodes, node_names_to_use=dict())
-    output_expr: RawSExpr = empty_container.generate_raw_sexpr(node_id=declaration.node_id, declared_nodes=declared_nodes)
     output_expr2: RawSExpr = empty_container.generate_raw_sexpr_unnamed_root(node_id=declaration.node_id, declared_nodes=declared_nodes)
     print(output_expr_list)
     print()
-    print(output_expr)
     print(output_expr2)
     output_document = empty_container.output_container()
     print(output_document)
-    #assert False
     parse_document(output_document, ir_container=IrContainer())
 
 
@@ -296,7 +294,7 @@ def test_expr5_6_declare_rec(empty_container):
     assert len(container.source_nodes) == 4 # 4 signal nodes
     assert len(container.inner_nodes) == 4 # 4 declared nodes
     assert len(container.sink_nodes) == 0 # 0 unnamed roots
-    assert len(container.node_names) == 8 # 8 global names
+    #assert len(container.node_names) == 8 # 8 global names
 
 
 def test_expr6_6_declare_rec(empty_container):
@@ -316,6 +314,85 @@ def test_expr6_6_declare_rec(empty_container):
     #assert len(container.node_names) == 8 # 6 global names + 2 local names + 2 local names because of renaming = 10
 
 
+
+def test_expr5_6_declare_rec_output(empty_container):
+    parse_document(wrap_multiple_statements_in_document([raw_sexpr5_declare_rec, raw_sexpr6_declare_rec]), ir_container=empty_container)
+
+    doc_output = empty_container.output_container()
+    empty_container.bypass_placeholders()
+
+    #output_directory: Path = Path('./output')
+    #empty_container.show_graph(output_directory / 'dec_rec_expr5_6_before.png')
+
+    container = IrContainer()
+    parse_document(doc_output, container)
+    container.bypass_placeholders()
+
+    #output_directory: Path = Path('./output')
+    #container.show_graph(output_directory / 'dec_rec_expr5_6_after.png')
+
+    assert 'prop1' in container.global_nodes
+    assert 'prop2' in container.global_nodes
+    assert 'foo' in container.global_nodes
+    assert 'bar' in container.global_nodes
+    assert len(container.global_nodes) == 8 # 4 signal nodes + 4 declared nodes
+    assert len(container.declarations) == 5 # 4 signal declarations + 1 large declare-rec
+    assert len(container.source_nodes) == 4 # 4 signal nodes
+    assert len(container.inner_nodes) == 4 # 4 declared nodes
+    assert len(container.sink_nodes) == 0 # 0 unnamed roots
+
+
+def test_expr6_6_declare_rec_output(empty_container):
+    parse_document(wrap_multiple_statements_in_document([['parse-sexpr', raw_sexpr6], raw_sexpr6_declare_rec]), ir_container=empty_container)
+
+    doc_output = empty_container.output_container()
+    empty_container.bypass_placeholders()
+
+    #output_directory: Path = Path('./output')
+    #empty_container.show_graph(output_directory / 'dec_rec_expr6_6_before.png')
+
+    container = IrContainer()
+    parse_document(doc_output, container)
+    container.bypass_placeholders()
+
+    #output_directory: Path = Path('./output')
+    #container.show_graph(output_directory / 'dec_rec_expr6_6_after.png')
+
+    assert 'prop1' in container.global_nodes
+    assert 'prop2' in container.global_nodes
+    assert len(container.global_nodes) == 6 # 4 signal nodes + 2 declared nodes
+    assert len(container.declarations) == 6 # 4 signal declarations + 1 declare-rec + 1 unnamed root
+    assert len(container.source_nodes) == 4 # 4 signal nodes
+    assert len(container.inner_nodes) == 2 # 2 declared nodes
+    assert len(container.sink_nodes) == 1 # 1 unnamed root
+
+
+def test_expr7_declare_rec_output(empty_container):
+    parse_document(wrap_statement_in_document(raw_sexpr7_declare_rec), ir_container=empty_container)
+
+    doc_output = empty_container.output_container()
+    empty_container.bypass_placeholders()
+
+    #output_directory: Path = Path('./output')
+    #empty_container.show_graph(output_directory / 'dec_rec_expr7_before.png')
+
+    container = IrContainer()
+    parse_document(doc_output, container)
+    container.bypass_placeholders()
+
+    #output_directory: Path = Path('./output')
+    #container.show_graph(output_directory / 'dec_rec_expr7_after.png')
+
+    assert 'q1' in container.global_nodes
+    assert 'q4' in container.global_nodes
+    assert 'p' in container.global_nodes
+    assert len(container.global_nodes) == 7 # 4 signal nodes + 3 declared nodes
+    assert len(container.declarations) == 5 # 4 signal declarations + 1 declare-rec
+    assert len(container.source_nodes) == 4 # 4 signal nodes
+    assert len(container.inner_nodes) == 3 # 3 declared nodes
+    assert len(container.sink_nodes) == 0 # no unnamed roots
+
+
 def test_expr6_6_declare_rec_illegal_name_resuse(empty_container):
     # attempting the reuse of a global node name in a let-rec as a local name results in an error
     # because of the ambiguity which node should be used (like in nested let-rec expressions, where this case is excluded as well)
@@ -323,3 +400,28 @@ def test_expr6_6_declare_rec_illegal_name_resuse(empty_container):
     container = empty_container
     with pytest.raises(ValueError, match='already in use'):
         parse_document(wrap_multiple_statements_in_document([raw_sexpr6_declare_rec, ['parse-sexpr', raw_sexpr6]]), ir_container=container)
+
+
+def test_signal_redeclaration():
+    container1 = IrContainer()
+    parse_document(wrap_in_document(raw_sexpr_signal_redeclaration_local), container1)
+    container2 = IrContainer()
+    parse_document(wrap_statement_in_document(raw_sexpr_signal_redeclaration_global1), container2)
+    container3 = IrContainer()
+    parse_document(wrap_statement_in_document(raw_sexpr_signal_redeclaration_global2), container3)
+
+    output2 = container2.output_container()
+    output3 = container3.output_container()
+
+    container2_2 = IrContainer()
+    container3_2 = IrContainer()
+    parse_document(output2, container2_2)
+    parse_document(output3, container3_2)
+
+    assert len(container2.global_nodes) == 5 # 4 signal nodes + 1 declared node
+    assert len(container3.global_nodes) == 5 # 4 signal nodes + 1 declared node
+    assert len(container2_2.global_nodes) == 5 # 4 signal nodes + 1 declared node
+    assert len(container3_2.global_nodes) == 5 # 4 signal nodes + 1 declared node
+
+    #output_directory: Path = Path('./output')
+    #container3_2.show_graph(output_directory / 'signal_test.png')

@@ -341,7 +341,7 @@ def parse_document(document: RawSExpr, ir_container: IrContainer):
                         root_node_id = parse_expression(expr=expression, expected_type=None, local_nodes=ir_container.global_nodes, ir_container=ir_container)
                         ir_container.add_declaration(UnnamedExpressionDeclaration(root_node_id))
 
-                    case ['declare', str(node_name), list(expression)]:
+                    case ['declare', str(node_name), list(expression)] | ['declare', str(node_name), str(expression)]:
                         root_node_id = parse_expression(expr=expression, expected_type=None, local_nodes=ir_container.global_nodes, ir_container=ir_container)
                         ir_container.add_declaration(NamedExpressionDeclaration(node_name, root_node_id))
 

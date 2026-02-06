@@ -254,42 +254,51 @@ class IrContainer:
             inner_nodes_expr = self.generate_raw_sexpr_inner_nodes()
             statements.append(inner_nodes_expr)
 
-        declared_nodes: dict[NodeId, str] = {value: key for (key, value) in self.global_nodes.items()}
+        declared_nodes: dict[NodeId, str] = {self.merged_nodes.find(node_id): name for (name, node_id) in self.global_nodes.items()}
         for node_id in self.sink_nodes:
-            statements.append(['parse-sexpr', self.generate_raw_sexpr(node_id=node_id, declared_nodes=declared_nodes)])
+            statements.append(['parse-sexpr', self.generate_raw_sexpr_unnamed_root(node_id=node_id, declared_nodes=declared_nodes)])
 
         return ['document', *statements]
 
 
     def generate_raw_sexpr_inner_nodes(self) -> RawSExpr:
         """Generates one large declare-rec expression for all inner nodes (added with declare/declare-rec).
-        Expects that all source node names can be used.
+        Expects that all source node names can be used (have been declared earlier).
+        Unnamed nodes get a new unique local name based on their id. Declared nodes use their global name(s) and nodes
+        with only local names use one of those consistently (chosen aribitrarily).
         """
 
         inner_node_reprs: set[NodeId] = {self.merged_nodes.find(node_id) for node_id in self.inner_nodes.values()}
 
         declared_nodes = {self.merged_nodes.find(node_id): name for (name, node_id) in self.source_nodes.items()}
-        node_names_to_use = {self.merged_nodes.find(node_id): name for (name, node_id) in self.global_nodes.items() if node_id not in declared_nodes}
+        global_names_to_use = {self.merged_nodes.find(node_id): name for (name, node_id) in self.global_nodes.items() if self.merged_nodes.find(node_id) not in declared_nodes}
 
-        processed_names = set(declared_nodes.values()).union(node_names_to_use.values())
+        processed_names = set(declared_nodes.values()).union(global_names_to_use.values())
         all_global_names = set(self.global_nodes.keys())
         unprocessed_names = all_global_names.difference(processed_names)
 
+        node_names_to_use = {self.merged_nodes.find(node_id): name for (name, node_id) in self.node_names.items() if self.merged_nodes.find(node_id) not in declared_nodes}
+        node_names_to_use |= global_names_to_use
+
         node_expr_defs: dict[str, RawSExpr] = self.generate_raw_sexpr_node_defs(inner_node_reprs, declared_nodes, node_names_to_use)
 
+        print(f'node_expr_defs while generating inner nodes expr: {node_expr_defs}')
+
         output_expr: RawSExpr = ['declare-rec']
-        for (name, expr) in node_expr_defs:
+        for (name, expr) in node_expr_defs.items():
             if name in self.global_nodes:
                 output_expr.append(['declare', name, expr])
             else:
                 output_expr.append([name, expr])
 
+        print(f'unprocessed_names {unprocessed_names}')
+
         for name in unprocessed_names:
             node_id = self.merged_nodes.find(self.global_nodes[name])
             used_name = declared_nodes[node_id]
             if used_name is None:
-                used_name = node_names_to_use[node_id]
-            output_expr.append([name, used_name])
+                used_name = global_names_to_use[node_id]
+            output_expr.append(['declare', name, used_name])
 
         return output_expr
 
@@ -298,9 +307,9 @@ class IrContainer:
     def generate_raw_sexpr_node_defs(self, node_list: set[NodeId], declared_nodes: dict[NodeId, str], node_names_to_use: dict[NodeId, str]) -> dict[str, RawSExpr]:
         """Generates a list of node definitions of the form (name expression) for all nodes reachable from those in node_list.
         The nodes in declared_nodes are not output or further expanded, and when appearing as children, they are named as
-        in declared_nodes. The generated node expressions are named with a new unique name, or, if present, use
+        in declared_nodes. The generated node expressions get a new unique local name, or, if present, use
         node_names_to_use instead. These two dicts need to consist of disjoint node sets.
-        No uninstantiated placeholder nodes are allowed and all used signal nodes need to be contained in declared_nodes.
+        No uninstantiated placeholder nodes are allowed and all encountered signal nodes need to be contained in declared_nodes.
         """
 
         node_reprs: set[NodeId] = {self.merged_nodes.find(node_id) for node_id in node_list}
@@ -333,8 +342,8 @@ class IrContainer:
         while len(visit_next) != 0:
             current_node_id = visit_next.popleft()
 
-            print(f'current node id {current_node_id}')
-            print(f'visit next {visit_next}')
+            #print(f'current node id {current_node_id}')
+            #print(f'visit next {visit_next}')
 
             current_repr_id = self.merged_nodes.find(current_node_id)
             if current_repr_id in visited_nodes or current_repr_id in declared_nodes:
@@ -381,19 +390,20 @@ class IrContainer:
 
     def generate_raw_sexpr_unnamed_root(self, node_id: NodeId, declared_nodes: dict[NodeId, str]) -> RawSExpr | str:
         """With the given node_id as the root, output the graph reachable from it as an s-expression
-        in the form of a let-rec with one line per node. All nodes get a new unique local name based on their id.
+        in the form of a let-rec with one line per node. Unnamed nodes get a new unique local name based on their id.
         The nodes in declared_nodes are output as their provided name (usually previously declared global node names)
         and not further expanded. The dict declared_nodes is expected to use representative node ids of merged nodes."""
 
-        # TODO use local names of node_names instead  of giving new names to all nodes
-        # TODO should there be a warning if a global node is not in declared_nodes?
+        node_names_to_use: dict[NodeId, str] = {self.merged_nodes.find(node_id): name
+            for (name, node_id) in self.node_names.items()
+            if self.merged_nodes.find(node_id) not in declared_nodes}
 
         repr_id = self.merged_nodes.find(node_id)
 
         if repr_id in declared_nodes:
             raise ValueError(f'Cannot generate s-expression for declared node {declared_nodes[repr_id]} with id {repr_id}')
 
-        node_expr_defs: dict[str, RawSExpr] = self.generate_raw_sexpr_node_defs(set([repr_id]), declared_nodes, dict())
+        node_expr_defs: dict[str, RawSExpr] = self.generate_raw_sexpr_node_defs(set([repr_id]), declared_nodes, node_names_to_use)
 
         output_expr: RawSExpr = ['let-rec']
         for (name, expr) in node_expr_defs.items():
@@ -404,115 +414,6 @@ class IrContainer:
         output_expr.append(return_node_name)
 
         return output_expr
-
-
-    def generate_raw_sexpr(self, node_id: NodeId, declared_nodes: dict[NodeId, str]) -> RawSExpr | str:
-        """With the given node_id as the root, output the graph reachable from it as an s-expression
-        in the form of a let-rec with one line per node. Unnamed nodes get a new unique local name based on their id.
-        The nodes in declared_nodes are output as their provided name (usually previously declared global node names)
-        and not further expanded. The dict declared_nodes is expected to use representative node ids of merged nodes."""
-
-        # TODO handle declare-rec
-
-        if node_id not in self.nodes:
-            raise ValueError(f'Cannot generate s-expression for missing node {node_id} of container {self}')
-
-        input_repr_id = self.merged_nodes.find(node_id)
-        if input_repr_id in declared_nodes:
-            return declared_nodes[input_repr_id]
-
-        id_to_node_name: dict[NodeId, str] = dict()
-        for (name, named_node_id) in self.node_names.items():
-            id_to_node_name[self.merged_nodes.find(named_node_id)] = name
-            # if there are several names for a node, one is chosen arbitrarily
-            # to be used consistently
-
-        # overwrite chosen names by those used in declared_nodes
-        for (named_node_id, name) in declared_nodes.items():
-            id_to_node_name[self.merged_nodes.find(named_node_id)] = name
-
-        global_node_ids: set[NodeId] = set([self.merged_nodes.find(node_id) for node_id in self.global_nodes.values()])
-
-        print(id_to_node_name)
-
-        node_expr_list: RawSExpr = list()
-        visited_nodes: set[NodeId] = set()
-
-        visit_next = deque([node_id])
-
-        # search through reachable nodes from given node
-        # and generate expr for each node visited, skip if already visited or declared
-        # (can happen if root nodes are part of the same strongly connected component or several edges point to a child)
-        while len(visit_next) != 0:
-            current_node_id = visit_next.popleft()
-
-            print(f'current node id {current_node_id}')
-            print(f'visit next {visit_next}')
-
-            current_repr_id = self.merged_nodes.find(current_node_id)
-            if current_repr_id in visited_nodes or current_repr_id in declared_nodes:
-                continue
-
-            # TODO: should this be allowed to happen and we just continue outputting?
-            if (current_repr_id not in declared_nodes and current_repr_id in global_node_ids):
-                raise ValueError(f'Encountered undeclared global node {current_repr_id} while generating raw s-expression for node {node_id} with declared nodes {declared_nodes}')
-
-            visited_nodes.add(current_repr_id)
-
-            if current_repr_id not in id_to_node_name:
-                new_name = self.uniquify('_node_id_' + str(current_repr_id.raw))
-                id_to_node_name[current_repr_id] = new_name
-                # there can be no name clashes within the newly generated name names
-                # because they all have a different node id and uniquify can only append _{number}
-
-            current_node_name: str = id_to_node_name[current_repr_id]
-            current_node = self.nodes[current_repr_id]
-
-            if isinstance(current_node, PlaceholderNode):
-                raise ValueError(f'Cannot generate s-expression for container {self} with uninstantiated node {current_node.node_id}')
-            elif isinstance(current_node, Signal) and current_repr_id not in declared_nodes:
-                raise ValueError(f'Cannot generate s-expression for container {self} starting from node id {node_id} with reachable undeclared signal id {current_repr_id}')
-            elif isinstance(current_node, Signal):
-                continue
-
-            current_node_expr: RawSExpr = [current_node.op_symbol()]
-            signature = type(current_node).signature()
-
-            collected_children: list[NodeId | LiteralType] = list()
-
-            for index, field in enumerate(current_node.get_child_fields()):
-
-                field_type: type = signature[index]
-
-                if get_origin(field_type) is list:
-                    collected_children += getattr(current_node, field.name)
-                else:
-                    collected_children.append(getattr(current_node, field.name))
-
-
-            for child_elem in collected_children:
-                if isinstance(child_elem, NodeId):
-                    child_repr_id = self.merged_nodes.find(child_elem)
-                    if child_repr_id not in id_to_node_name:
-                        child_new_name = self.uniquify('_node_id_' + str(child_repr_id.raw))
-                        id_to_node_name[child_repr_id] = child_new_name
-                    current_node_expr.append(id_to_node_name[child_repr_id])
-                    visit_next.append(child_repr_id)
-                elif isinstance(child_elem, LiteralType.__value__):
-                    current_node_expr.append(self._generate_literal_raw_sexpr(child_elem))
-                else:
-                    raise TypeError(f'Unexpected child type of {child_elem} while generating s-expression for node {current_node}')
-
-
-            node_expr_list.append([current_node_name, current_node_expr])
-
-
-        result_expr: RawSExpr = ['let-rec']
-        result_expr += node_expr_list
-        result_expr.append(id_to_node_name[self.merged_nodes.find(node_id)])
-
-        return result_expr
-
 
 
 
@@ -629,7 +530,10 @@ class IrContainer:
                         graph.edge(repr(node.node_id), repr(child_node_id), field.name)
 
         for (node_name, node_id) in self.node_names.items():
-            graph.node(f'__NODENAME__{node_name}', node_name, shape='plain')
+            if node_name in self.global_nodes:
+                graph.node(f'__NODENAME__{node_name}', label=f'<<U>{node_name}</U>>', shape='plain')
+            else:
+                graph.node(f'__NODENAME__{node_name}', node_name, shape='plain')
             graph.edge(f'__NODENAME__{node_name}', repr(node_id), style='dashed')
 
         if not output_path.parent.exists():

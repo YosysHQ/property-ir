@@ -139,9 +139,9 @@ def main():
 
     #ir_container1.show_graph(output_directory / 'container1.png')
 
-    ir_container1.make_top_level_node(root_node_id1)
+    #ir_container1.make_top_level_node(root_node_id1)
     #print(ir_container1.root_nodes)
-    print(ir_container1.generate_raw_sexpr(root_node_id1, declared_nodes=signal_dict))
+    #print(ir_container1.generate_raw_sexpr(root_node_id1, declared_nodes=signal_dict))
 
     #print()
     #print(ir_container7.nodes)
@@ -151,7 +151,7 @@ def main():
     #print(ir_container7.merged_nodes.parents)
     #print()
 
-    #ir_container1.bypass_placeholders()
+    ir_container1.bypass_placeholders()
 
     #print()
     #print(ir_container7.nodes)

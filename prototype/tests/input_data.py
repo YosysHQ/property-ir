@@ -2,6 +2,9 @@
 
 
 
+from sexpr.base import RawSExpr
+
+
 expr1 =  '(or (and a b) (not (and (not a) c)) d)'
 
 expr2 = """(seq-concat
@@ -131,4 +134,24 @@ raw_sexpr5_declare_rec = ['declare-rec',
         ['declare', 'bar', ['or', 'b', 'c']],
     ]
 
+
+raw_sexpr7_declare_rec = ['declare-rec',
+        ['declare', 'q1', ['seq-concat', ['seq-bool', 'a'], 'q3']],
+        ['q2', ['seq-concat', ['seq-bool', 'b'], 'q4']],
+        ['q3', 'q4'],
+        ['declare', 'q4', ['seq-bool', 'c']],
+        ['q5', 'q3'],
+        ['declare', 'p', ['seq-concat', ['seq-bool', 'd'], 'q5']]
+    ]
+
+raw_sexpr_signal_redeclaration_local = ['let-rec',
+    ['q1', 'a'],
+    'q1'
+    ]
+
+raw_sexpr_signal_redeclaration_global1: RawSExpr = ['declare', 'q1', 'a']
+
+raw_sexpr_signal_redeclaration_global2 = ['declare-rec',
+    ['declare', 'q1', 'a'],
+    ]
 
