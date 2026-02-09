@@ -75,6 +75,8 @@ def test_node_renaming1():
     assert container1.sink_nodes == container2.sink_nodes
     assert container1.inner_nodes == container2.inner_nodes
 
+    assert container1 == container2
+
 def test_node_renaming2():
     container1 = IrContainer()
     parse_document(wrap_multiple_statements_in_document(
@@ -97,5 +99,7 @@ def test_node_renaming2():
     assert container1.source_nodes == container2.source_nodes
     assert container1.sink_nodes == container2.sink_nodes
     assert container1.inner_nodes == container2.inner_nodes
+
+    assert container1 == container2
 
 

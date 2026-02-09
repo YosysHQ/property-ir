@@ -1,7 +1,7 @@
 from __future__ import annotations
 from abc import ABC, abstractmethod
 from collections import deque
-from dataclasses import dataclass, fields, Field
+from dataclasses import dataclass, fields, Field, field
 from typing import Literal, Optional, Any, get_origin, get_type_hints, get_args
 from typeguard import typechecked
 from graphviz import Digraph
@@ -69,9 +69,9 @@ def forward_node_id_types(ty: Any) -> type:
 
 
 @typechecked
-@dataclass
+@dataclass(eq=True)
 class PropertyIrNode(ABC):
-    ir_container: IrContainer
+    ir_container: IrContainer = field(compare=False)
     node_id: NodeId
 
     @classmethod
@@ -222,6 +222,22 @@ class IrContainer:
         self.inner_nodes = dict()
         self.sink_nodes = list()
         self.next_raw_node_id = 1
+
+    def __eq__(self, other):
+        """Two containers are only considered equivalent if they have the same types of nodes with the same node ids
+        connected in the same way, and the same declared names and unnamed root nodes, each added in the same order,
+        respectively. No merged nodes are allowed, else the equality check will yield False.
+        Use canonical_id_renaming first in order to remove all unreachable or redundant nodes and rename node ids in
+        depth-first order (this also resets merged_nodes)."""
+
+        if not isinstance(other, IrContainer):
+            return NotImplemented
+        return (self.nodes == other.nodes and
+                self.global_nodes == other.global_nodes and
+                self.source_nodes == other.source_nodes and
+                self.inner_nodes == other.inner_nodes and
+                self.sink_nodes == other.sink_nodes and
+                len(self.merged_nodes.parents) == 0 and len(other.merged_nodes.parents) == 0)
 
     def _get_next_node_id(self) -> NodeId:
         node_id = NodeId(self.next_raw_node_id)
