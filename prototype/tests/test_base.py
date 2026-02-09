@@ -1,6 +1,11 @@
 import pytest
+from pathlib import Path
 
 from sexpr import IrContainer
+from sexpr import parse_document
+from sexpr.base import NodeId
+from input_data import raw_sexpr1, raw_sexpr6_declare_rec, raw_sexpr7_declare_rec, raw_sexpr5
+from helpers import wrap_in_document, wrap_multiple_statements_in_document
 
 
 def test_uniquify1(container):
@@ -47,3 +52,50 @@ def test_uniquify5(empty_container):
     container.add_placeholder_node(name=container.uniquify('1111_35'))
     container.add_placeholder_node(name=container.uniquify('1111_35'))
     assert len(container.node_names) == 4
+
+def test_node_renaming1():
+    container1 = IrContainer()
+    parse_document(wrap_in_document(raw_sexpr1), container1)
+
+    #output_directory: Path = Path('./output')
+    #container1.show_graph(output_directory / 'before_renaming.png')
+
+    container1.canonical_id_renaming()
+
+    #container1.show_graph(output_directory / 'after_renaming.png')
+
+    container2 = IrContainer()
+    parse_document(wrap_in_document(raw_sexpr1), container2)
+    container2.canonical_id_renaming()
+
+    assert container1.sink_nodes[0] == NodeId(5)
+
+    assert container1.global_nodes == container2.global_nodes
+    assert container1.source_nodes == container2.source_nodes
+    assert container1.sink_nodes == container2.sink_nodes
+    assert container1.inner_nodes == container2.inner_nodes
+
+def test_node_renaming2():
+    container1 = IrContainer()
+    parse_document(wrap_multiple_statements_in_document(
+            [raw_sexpr6_declare_rec, raw_sexpr7_declare_rec, ['parse-sexpr', raw_sexpr5]]), container1)
+
+    #container1.bypass_placeholders()
+    #output_directory: Path = Path('./output')
+    #container1.show_graph(output_directory / 'before_renaming.png')
+
+    container1.canonical_id_renaming()
+
+    #container1.show_graph(output_directory / 'after_renaming.png')
+
+    container2 = IrContainer()
+    parse_document(wrap_multiple_statements_in_document(
+            [['parse-sexpr', raw_sexpr5], raw_sexpr6_declare_rec, raw_sexpr7_declare_rec]), container2)
+    container2.canonical_id_renaming()
+
+    assert container1.global_nodes == container2.global_nodes
+    assert container1.source_nodes == container2.source_nodes
+    assert container1.sink_nodes == container2.sink_nodes
+    assert container1.inner_nodes == container2.inner_nodes
+
+

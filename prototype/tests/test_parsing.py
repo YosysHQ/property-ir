@@ -7,6 +7,7 @@ from input_data import raw_sexpr6_declare, raw_sexpr6_declare_rec, raw_sexpr5_de
 from input_data import raw_sexpr_signal_redeclaration_local, raw_sexpr_signal_redeclaration_global1, raw_sexpr_signal_redeclaration_global2
 from sexpr.base import Bool, BoundedRange, IntOrUnbounded, NodeId, Property, PropertyIrNode, Range, Sequence, UnnamedExpressionDeclaration
 from sexpr.primitives import And, Not, Or, PropAlwaysRanged, PropSeq, SeqBool, SeqConcat, SeqRepeat, Constant
+from helpers import wrap_in_document, wrap_multiple_expr_in_document, wrap_statement_in_document, wrap_multiple_statements_in_document
 
 
 
@@ -45,6 +46,9 @@ literal_invalid_range = [
     (['bounded-range', '4', '2'], BoundedRange),
     (['range', '5', '0'], Range),
 ]
+
+
+expr_valid_list = [raw_sexpr4, raw_sexpr5, raw_sexpr6, raw_sexpr7, raw_sexpr8]
 
 
 
@@ -130,41 +134,10 @@ def test_parse_expr3(container):
 
 
 
-expr_valid_list = [raw_sexpr4, raw_sexpr5, raw_sexpr6, raw_sexpr7, raw_sexpr8]
-
 @pytest.mark.parametrize('expr', expr_valid_list)
 def test_parse_expr_no_error(container, expr):
     root_node_id = parse_expression(expr=expr, expected_type=None, local_nodes=container.global_nodes, ir_container=container)
     assert root_node_id is not None
-
-
-
-
-def wrap_in_document(expr: RawSExpr) -> RawSExpr:
-    return ['document',
-        ['add-signals', 'a', 'b'],
-        ['add-signals', 'c', 'd'],
-        ['parse-sexpr', expr]
-    ]
-
-def wrap_multiple_expr_in_document(expr_list: list[RawSExpr]) -> RawSExpr:
-    parse_expr_list = [['parse-sexpr', expr] for expr in expr_list]
-    return ['document', ['add-signals', 'a', 'b', 'c', 'd']] + parse_expr_list
-
-
-def wrap_statement_in_document(expr: RawSExpr) -> RawSExpr:
-    return ['document',
-        ['add-signals', 'a', 'b'],
-        ['add-signals', 'c', 'd'],
-        expr
-    ]
-
-def wrap_multiple_statements_in_document(expr_list: list[RawSExpr]) -> RawSExpr:
-    return ['document',
-        ['add-signals', 'a', 'b'],
-        ['add-signals', 'c', 'd'],
-    ] + expr_list
-
 
 
 @pytest.mark.parametrize('expr', expr_valid_list)

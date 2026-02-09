@@ -431,9 +431,11 @@ class IrContainer:
         visit_next += self.inner_nodes.values()
         visit_next += self.sink_nodes
 
+        print(f'visit_next {visit_next}')
+
         visited: set[NodeId] = set()
 
-        while len(visited) > 0:
+        while len(visit_next) > 0:
             current_id: NodeId = visit_next.popleft()
             if current_id in visited:
                 continue
@@ -450,9 +452,11 @@ class IrContainer:
                     collected_children += getattr(current_node, field.name)
                 else:
                     collected_children.append(getattr(current_node, field.name))
-            for child_elem in collected_children:
+            for child_elem in reversed(collected_children): # to achieve depth-first order
                 if isinstance(child_elem, NodeId) and child_elem not in visited:
-                        visit_next.append(child_elem)
+                        visit_next.appendleft(child_elem)
+
+        print(f'id_mapping {id_mapping}')
 
         new_nodes: dict[NodeId, PropertyIrNode] = dict()
         new_node_names: dict[str, NodeId] = dict()
@@ -489,6 +493,7 @@ class IrContainer:
         self.next_raw_id = next_raw_id
 
         for node in self.nodes.values():
+            node.node_id = id_mapping[node.node_id]
             signature = type(node).signature()
             for index, field in enumerate(node.get_child_fields()):
                 child_type: type = signature[index]
