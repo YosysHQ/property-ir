@@ -415,6 +415,91 @@ class IrContainer:
 
         return output_expr
 
+    def canonical_id_renaming(self) -> None:
+        """Gives each node a new NodeId by first bypassing placeholders and then searching from the root nodes contained
+        in source_nodes, inner_nodes, sink_nodes (in this order) depth-first and numbering nodes in the order they are
+        encountered first. Note that the order in which expressions are added to the container influences this order.
+        References to and names of unreachable nodes are removed.
+        Used to check equivalence of containers (for testing purposes only)."""
+
+        self.bypass_placeholders()
+
+        id_mapping: dict[NodeId, NodeId] = dict()
+        next_raw_id: int = 1
+
+        visit_next: deque[NodeId] = deque(self.source_nodes.values())
+        visit_next += self.inner_nodes.values()
+        visit_next += self.sink_nodes
+
+        visited: set[NodeId] = set()
+
+        while len(visited) > 0:
+            current_id: NodeId = visit_next.popleft()
+            if current_id in visited:
+                continue
+            id_mapping[current_id] = NodeId(next_raw_id)
+            next_raw_id += 1
+            visited.add(current_id)
+
+            current_node = self.nodes[current_id]
+            signature = type(current_node).signature()
+            collected_children: list[NodeId | LiteralType] = list()
+            for index, field in enumerate(current_node.get_child_fields()):
+                field_type: type = signature[index]
+                if get_origin(field_type) is list:
+                    collected_children += getattr(current_node, field.name)
+                else:
+                    collected_children.append(getattr(current_node, field.name))
+            for child_elem in collected_children:
+                if isinstance(child_elem, NodeId) and child_elem not in visited:
+                        visit_next.append(child_elem)
+
+        new_nodes: dict[NodeId, PropertyIrNode] = dict()
+        new_node_names: dict[str, NodeId] = dict()
+        new_global_nodes: dict[str, NodeId] = dict()
+        new_source_nodes: dict[str, NodeId] = dict()
+        new_inner_nodes: dict[str, NodeId] = dict()
+        new_sink_nodes: list[NodeId] = list()
+
+        for old_id, new_id in id_mapping.items():
+            new_nodes[new_id] = self.nodes[old_id]
+
+        for old_str_id_dict, new_str_id_dict in [
+                (self.node_names, new_node_names), (self.global_nodes, new_global_nodes), (self.source_nodes, new_source_nodes), (self.inner_nodes, new_inner_nodes)]:
+            for node_name, old_id in old_str_id_dict.items():
+                if old_id in id_mapping: # forget names of unreachable nodes
+                    new_str_id_dict[node_name] = id_mapping[old_id]
+
+        new_sink_nodes = [id_mapping[old_id] for old_id in self.sink_nodes]
+
+        self.nodes = new_nodes
+        self.node_names = new_node_names
+        self.global_nodes = new_global_nodes
+        self.source_nodes = new_source_nodes
+        self.inner_nodes = new_inner_nodes
+        self.sink_nodes = new_sink_nodes
+
+        for declaration in self.declarations:
+            if isinstance(declaration, SignalDeclaration | NamedExpressionDeclaration | UnnamedExpressionDeclaration):
+                declaration.node_id = id_mapping[declaration.node_id]
+            elif isinstance(declaration, NamedRecursiveDeclaration):
+                for node_name, node_id in declaration.node_names.items():
+                    declaration.node_names[node_name] = id_mapping[node_id]
+
+        self.next_raw_id = next_raw_id
+
+        for node in self.nodes.values():
+            signature = type(node).signature()
+            for index, field in enumerate(node.get_child_fields()):
+                child_type: type = signature[index]
+                if get_origin(child_type) is list:
+                    children_list = getattr(node, field.name)
+                    setattr(node, field.name, [id_mapping[old_id] for old_id in children_list.copy()])
+                else:
+                    child_node_id = getattr(node, field.name)
+                    if isinstance(child_node_id, NodeId):
+                        setattr(node, field.name, id_mapping[child_node_id])
+
 
 
     def uniquify(self, name: str) -> str:
