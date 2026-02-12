@@ -285,7 +285,8 @@ class IrContainer:
         with only local names use one of those consistently (chosen aribitrarily).
         """
 
-        inner_node_reprs: set[NodeId] = {self.merged_nodes.find(node_id) for node_id in self.inner_nodes.values()}
+        inner_node_reprs_with_duplicates: list[NodeId] = [self.merged_nodes.find(node_id) for node_id in self.inner_nodes.values()]
+        inner_node_reprs: list[NodeId] = list(dict.fromkeys(inner_node_reprs_with_duplicates))
 
         declared_nodes = {self.merged_nodes.find(node_id): name for (name, node_id) in self.source_nodes.items()}
         global_names_to_use = {self.merged_nodes.find(node_id): name for (name, node_id) in self.global_nodes.items() if self.merged_nodes.find(node_id) not in declared_nodes}
@@ -321,15 +322,17 @@ class IrContainer:
 
 
 
-    def generate_raw_sexpr_node_defs(self, node_set: set[NodeId], declared_nodes: dict[NodeId, str], node_names_to_use: dict[NodeId, str]) -> dict[str, RawSExpr]:
-        """Generates a list of node definitions of the form (name expression) for all nodes reachable from those in node_set.
+    def generate_raw_sexpr_node_defs(self, node_list: list[NodeId], declared_nodes: dict[NodeId, str], node_names_to_use: dict[NodeId, str]) -> dict[str, RawSExpr]:
+        """Generates a list of node definitions of the form (name expression) for all nodes reachable from those in node_list.
         The nodes in declared_nodes are not output or further expanded, and when appearing as children, they are named as
         in declared_nodes. The generated node expressions get a new unique local name, or, if present, use
         node_names_to_use instead. These two dicts need to consist of disjoint node sets.
         No uninstantiated placeholder nodes are allowed and all encountered signal nodes need to be contained in declared_nodes.
         """
 
-        node_reprs: set[NodeId] = {self.merged_nodes.find(node_id) for node_id in node_set}
+        node_reprs_with_duplicates: list[NodeId] = [self.merged_nodes.find(node_id) for node_id in node_list]
+        node_reprs: list[NodeId] = list(dict.fromkeys(node_reprs_with_duplicates))
+
         for node_id in node_reprs:
             if node_id not in self.nodes:
                 raise ValueError(f'Cannot generate s-expression for missing node {node_id} of container {self}')
@@ -422,7 +425,7 @@ class IrContainer:
             local_name = self.uniquify('_node_id_' + str(repr_id.raw))
             return ['let-rec', [local_name, declared_nodes[repr_id]], local_name]
 
-        node_expr_defs: dict[str, RawSExpr] = self.generate_raw_sexpr_node_defs(set([repr_id]), declared_nodes, node_names_to_use)
+        node_expr_defs: dict[str, RawSExpr] = self.generate_raw_sexpr_node_defs([repr_id], declared_nodes, node_names_to_use)
 
         output_expr: RawSExpr = ['let-rec']
         for (name, expr) in node_expr_defs.items():

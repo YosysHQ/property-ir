@@ -199,7 +199,7 @@ def test_generate_raw_sexpr_node_defs_no_error(expr):
     }
     declaration = container1.declarations[4]
     assert isinstance(declaration, UnnamedExpressionDeclaration)
-    output_expr_list = container1.generate_raw_sexpr_node_defs(node_set=set([declaration.node_id]), declared_nodes=declared_nodes, node_names_to_use=dict())
+    output_expr_list = container1.generate_raw_sexpr_node_defs(node_list=[declaration.node_id], declared_nodes=declared_nodes, node_names_to_use=dict())
     output_expr2: RawSExpr | str = container1.generate_raw_sexpr_unnamed_root(node_id=declaration.node_id, declared_nodes=declared_nodes)
     print(output_expr_list)
     print()
@@ -232,6 +232,21 @@ def test_roundtrip_named_expr(expr):
     container1.canonical_id_renaming()
     container2.canonical_id_renaming()
     assert container1 == container2
+
+#def test_roundtrip_raw_sexpr7_declare_rec():
+#    expr = raw_sexpr7_declare_rec
+#    container1 = IrContainer()
+#    parse_document(wrap_statement_in_document(expr), ir_container=container1)
+#    output_document = container1.output_container()
+#    print(output_document)
+#    container2 = IrContainer()
+#    parse_document(output_document, ir_container=container2)
+#    container1.canonical_id_renaming()
+#    container2.canonical_id_renaming()
+#    output_directory: Path = Path('./output')
+#    container1.show_graph(output_directory / 'expr7_decl_1.png')
+#    container2.show_graph(output_directory / 'expr7_decl_2.png')
+#    assert container1 == container2
 
 
 def test_expr6_declare():
