@@ -8,7 +8,6 @@ from .base import NodeId, Bool, Sequence, Property, Range
 
 # Bool primitives
 
-# literal treated as node type Bool
 @typechecked
 @dataclass
 class Constant(Bool): # "(constant false)" "(constant true)"
