@@ -337,7 +337,7 @@ def parse_document(document: RawSExprList, ir_container: IrContainer):
                             signal_node = ir_container.add_signal_node(signal_name)
                             ir_container.add_declaration(SignalDeclaration(signal_name, signal_node.node_id))
 
-                    case ['parse-sexpr', list(expression)]:
+                    case ['parse-sexpr', list(expression)] | ['parse-sexpr', str(expression)]:
                         root_node_id = parse_expression(expr=expression, expected_type=None, local_nodes=ir_container.global_nodes, ir_container=ir_container)
                         ir_container.add_declaration(UnnamedExpressionDeclaration(root_node_id))
 
