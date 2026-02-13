@@ -4,7 +4,7 @@ from _pytest.mark import expression
 from typeguard import typechecked
 import re
 
-from .base import RawSExpr, LiteralType, NodeId
+from .base import RawSExpr, RawSExprList, LiteralType, NodeId
 from .base import IrContainer, PropertyIrNode, PlaceholderNode
 from .base import Bool, Sequence, Property
 from .base import Range, BoundedRange, IntOrUnbounded
@@ -30,7 +30,7 @@ op_to_cls: dict[str, type[PropertyIrNode]] = get_op_symbols()
 
 
 @typechecked
-def parse_raw_sexpr(expr: str) -> RawSExpr:
+def parse_raw_sexpr(expr: str) -> RawSExprList:
     """Converts the s-expression given as a str to a nested list whose base
     elements are either str or int (int used only for integers, not for
     booleans)."""
@@ -46,8 +46,8 @@ def parse_raw_sexpr(expr: str) -> RawSExpr:
 
     print(tokens)
 
-    current_list: RawSExpr = []
-    stack: list[RawSExpr] = []
+    current_list: RawSExprList = []
+    stack: list[RawSExprList] = []
 
     for t in tokens:
         if re.fullmatch(r'[a-zA-Z0-9\-\$]+', t):
@@ -72,7 +72,7 @@ def parse_raw_sexpr(expr: str) -> RawSExpr:
     return current_list
 
 
-def unparse_raw_sexpr(sexpr: RawSExpr | str) -> str:
+def unparse_raw_sexpr(sexpr: RawSExpr) -> str:
 
     if isinstance(sexpr, str):
         return sexpr
@@ -84,7 +84,7 @@ def unparse_raw_sexpr(sexpr: RawSExpr | str) -> str:
 
 
 
-def parse_range(range_expr: RawSExpr) -> Range | BoundedRange:
+def parse_range(range_expr: RawSExprList) -> Range | BoundedRange:
 
     match range_expr:
 
@@ -118,7 +118,7 @@ def parse_int(int_literal: str) -> int | Literal['$']:
         raise TypeError(f"Mismatch of expected type int or '$' and {int_literal}")
 
 
-def parse_literal(literal_expr: RawSExpr | str, expected_type: type) -> LiteralType:
+def parse_literal(literal_expr: RawSExpr, expected_type: type) -> LiteralType:
 
     if issubclass(expected_type, bool) and isinstance(literal_expr, str):
         return parse_bool(literal_expr)
@@ -143,8 +143,8 @@ def parse_literal(literal_expr: RawSExpr | str, expected_type: type) -> LiteralT
     raise TypeError(f'Mismatch of expected type literal {expected_type} and expression {literal_expr}')
 
 
-def check_names_sexpr(expr: RawSExpr) -> list[tuple[str, RawSExpr | str]]:
-    named_subexpressions: list[tuple[str, RawSExpr | str]] = list()
+def check_names_sexpr(expr: RawSExprList) -> list[tuple[str, RawSExpr]]:
+    named_subexpressions: list[tuple[str, RawSExpr]] = list()
     if not isinstance(expr, list):
         raise ValueError(f"Expected list of named expressions instead of {expr}")
     for item in expr:
@@ -199,7 +199,7 @@ def process_named_subexpressions(local_nodes: dict[str, NodeId], named_subexpres
 
 @typechecked
 def parse_expression(
-    expr: RawSExpr | str,
+    expr: RawSExpr,
     expected_type: Optional[type[PropertyIrNode]],
     local_nodes: dict[str, NodeId],
     ir_container: IrContainer) -> NodeId:
@@ -221,7 +221,7 @@ def parse_expression(
 
         case ['let-rec', *named_subexpressions, return_expression]:
 
-            checked_named_subexpressions: list[tuple[str, RawSExpr | str]] = check_names_sexpr(named_subexpressions)
+            checked_named_subexpressions: list[tuple[str, RawSExpr]] = check_names_sexpr(named_subexpressions)
 
             inner_local_nodes: dict[str, NodeId] = process_named_subexpressions(local_nodes, checked_named_subexpressions, ir_container)
 
@@ -284,7 +284,7 @@ def parse_expression(
 
 
 @typechecked
-def parse_declare_rec(expression_list: list[RawSExpr], ir_container: IrContainer) -> dict[str, NodeId]:
+def parse_declare_rec(expression_list: list[RawSExprList], ir_container: IrContainer) -> dict[str, NodeId]:
     """Parses a declare-rec expression, adds its nodes to the given ir_container,
     and returns a dict of new global nodes that are specified with the declare keyword within the expression.
     This method is separate from parse_expression because not only a single NodeId is returned.
@@ -295,7 +295,7 @@ def parse_declare_rec(expression_list: list[RawSExpr], ir_container: IrContainer
     new_global_names = []
     new_global_nodes: dict[str, NodeId] = dict()
 
-    named_subexpressions: list[tuple[str, RawSExpr | str]] = list()
+    named_subexpressions: list[tuple[str, RawSExpr]] = list()
 
     # collect all named expressions and keep track of new global names
     for expr in expression_list:
@@ -318,7 +318,7 @@ def parse_declare_rec(expression_list: list[RawSExpr], ir_container: IrContainer
 
 
 @typechecked
-def parse_document(document: RawSExpr, ir_container: IrContainer):
+def parse_document(document: RawSExprList, ir_container: IrContainer):
     """Parses a document of property IR statements and adds it to the given ir_container.
     Adds declarations to the container (which in turn updates the global nodes).
     """

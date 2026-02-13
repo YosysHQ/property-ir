@@ -2,7 +2,7 @@
 
 
 
-from sexpr.base import RawSExpr
+from sexpr.base import RawSExprList
 
 
 expr1 =  '(or (and a b) (not (and (not a) c)) d)'
@@ -149,7 +149,7 @@ raw_sexpr_signal_redeclaration_local = ['let-rec',
     'q1'
     ]
 
-raw_sexpr_signal_redeclaration_global1: RawSExpr = ['declare', 'q1', 'a']
+raw_sexpr_signal_redeclaration_global1: RawSExprList = ['declare', 'q1', 'a']
 
 raw_sexpr_signal_redeclaration_global2 = ['declare-rec',
     ['declare', 'q1', 'a'],

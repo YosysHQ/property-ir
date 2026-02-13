@@ -28,7 +28,7 @@ class Range():
     lower_bound: int
     upper_bound: IntOrUnbounded
 
-    def get_raw_sexpr_repr(self) -> RawSExpr:
+    def get_raw_sexpr_repr(self) -> RawSExprList:
         return ['range', str(self.lower_bound), self.upper_bound.get_raw_sexpr_repr()]
 
 @typechecked
@@ -37,7 +37,7 @@ class BoundedRange():
     lower_bound: int
     upper_bound: int
 
-    def get_raw_sexpr_repr(self) -> RawSExpr:
+    def get_raw_sexpr_repr(self) -> RawSExprList:
         return ['bounded-range', str(self.lower_bound), str(self.upper_bound)]
 
 
@@ -53,7 +53,8 @@ class NodeId[T: PropertyIrNode]:
 
 type LiteralType = bool | Range | BoundedRange | IntOrUnbounded | int | str
 
-type RawSExpr = list[str | RawSExpr]
+type RawSExprList = list[RawSExpr]
+type RawSExpr = RawSExprList | str
 
 
 
@@ -245,7 +246,7 @@ class IrContainer:
         self.next_raw_node_id += 1
         return node_id
 
-    def _generate_literal_raw_sexpr(self, literal: LiteralType) -> RawSExpr | str:
+    def _generate_literal_raw_sexpr(self, literal: LiteralType) -> RawSExprList | str:
         if isinstance(literal, str):
             return literal
         elif isinstance(literal, bool):
@@ -256,13 +257,13 @@ class IrContainer:
             return literal.get_raw_sexpr_repr()
         raise TypeError(f'Unexpected type {type(literal)} of literal {literal} while generating s-expression of container {self}')
 
-    def output_container(self) -> RawSExpr:
+    def output_container(self) -> RawSExprList:
         """Output the complete contents of the container as a property ir document s-expression.
         The order of output is source_nodes (signals), inner_nodes (declare/declare-rec), sink_nodes (unnamed expression roots),
         where everything reachable from inner_nodes is output in one large declare-rec expression.
         """
 
-        statements: list[RawSExpr] = []
+        statements: list[RawSExprList] = []
 
         for node_name in self.source_nodes:
             statements.append(['add-signals', node_name])
@@ -278,7 +279,7 @@ class IrContainer:
         return ['document', *statements]
 
 
-    def generate_raw_sexpr_inner_nodes(self) -> RawSExpr:
+    def generate_raw_sexpr_inner_nodes(self) -> RawSExprList:
         """Generates one large declare-rec expression for all inner nodes (added with declare/declare-rec).
         Expects that all source node names can be used (have been declared earlier).
         Unnamed nodes get a new unique local name based on their id. Declared nodes use their global name(s) and nodes
@@ -298,11 +299,11 @@ class IrContainer:
         node_names_to_use = {self.merged_nodes.find(node_id): name for (name, node_id) in self.node_names.items() if self.merged_nodes.find(node_id) not in declared_nodes}
         node_names_to_use |= global_names_to_use
 
-        node_expr_defs: dict[str, RawSExpr] = self.generate_raw_sexpr_node_defs(inner_node_reprs, declared_nodes, node_names_to_use)
+        node_expr_defs: dict[str, RawSExprList] = self.generate_raw_sexpr_node_defs(inner_node_reprs, declared_nodes, node_names_to_use)
 
         print(f'node_expr_defs while generating inner nodes expr: {node_expr_defs}')
 
-        output_expr: RawSExpr = ['declare-rec']
+        output_expr: RawSExprList = ['declare-rec']
         for (name, expr) in node_expr_defs.items():
             if name in self.global_nodes:
                 output_expr.append(['declare', name, expr])
@@ -322,7 +323,7 @@ class IrContainer:
 
 
 
-    def generate_raw_sexpr_node_defs(self, node_list: list[NodeId], declared_nodes: dict[NodeId, str], node_names_to_use: dict[NodeId, str]) -> dict[str, RawSExpr]:
+    def generate_raw_sexpr_node_defs(self, node_list: list[NodeId], declared_nodes: dict[NodeId, str], node_names_to_use: dict[NodeId, str]) -> dict[str, RawSExprList]:
         """Generates a list of node definitions of the form (name expression) for all nodes reachable from those in node_list.
         The nodes in declared_nodes are not output or further expanded, and when appearing as children, they are named as
         in declared_nodes. The generated node expressions get a new unique local name, or, if present, use
@@ -355,7 +356,7 @@ class IrContainer:
                 raise ValueError(f'Declared nodes and node names to use must be disjoint, node with id {repr_id} and name {name} occuring in both')
             id_to_node_name[repr_id] = name
 
-        node_expr_dict: dict[str, RawSExpr] = dict()
+        node_expr_dict: dict[str, RawSExprList] = dict()
         visited_nodes: set[NodeId] = set()
 
         # search through reachable nodes and generate expr for each node visited, skip if already visited or declared
@@ -381,7 +382,7 @@ class IrContainer:
             elif isinstance(current_node, Signal):
                 continue
 
-            current_node_expr: RawSExpr = [current_node.op_symbol()]
+            current_node_expr: RawSExprList = [current_node.op_symbol()]
             signature = type(current_node).signature()
 
             collected_children: list[NodeId | LiteralType] = list()
@@ -408,7 +409,7 @@ class IrContainer:
         return node_expr_dict
 
 
-    def generate_raw_sexpr_unnamed_root(self, node_id: NodeId, declared_nodes: dict[NodeId, str]) -> RawSExpr:
+    def generate_raw_sexpr_unnamed_root(self, node_id: NodeId, declared_nodes: dict[NodeId, str]) -> RawSExprList:
         """With the given node_id as the root, output the graph reachable from it as an s-expression
         in the form of a let-rec with one line per node. Unnamed nodes get a new unique local name based on their id.
         The nodes in declared_nodes are output as their provided name (usually previously declared global node names)
@@ -425,9 +426,9 @@ class IrContainer:
             local_name = self.uniquify('_node_id_' + str(repr_id.raw))
             return ['let-rec', [local_name, declared_nodes[repr_id]], local_name]
 
-        node_expr_defs: dict[str, RawSExpr] = self.generate_raw_sexpr_node_defs([repr_id], declared_nodes, node_names_to_use)
+        node_expr_defs: dict[str, RawSExprList] = self.generate_raw_sexpr_node_defs([repr_id], declared_nodes, node_names_to_use)
 
-        output_expr: RawSExpr = ['let-rec']
+        output_expr: RawSExprList = ['let-rec']
         for (name, expr) in node_expr_defs.items():
             output_expr.append([name, expr])
 

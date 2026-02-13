@@ -1,7 +1,7 @@
 import pytest
 from pathlib import Path
 
-from sexpr import parse_expression, parse_literal, parse_raw_sexpr, RawSExpr, IrContainer, Signal, parse_document
+from sexpr import parse_expression, parse_literal, parse_raw_sexpr, RawSExprList, IrContainer, Signal, parse_document
 from input_data import raw_sexpr1, raw_sexpr2, raw_sexpr3, raw_sexpr4, raw_sexpr5, raw_sexpr6, raw_sexpr7, raw_sexpr8
 from input_data import raw_sexpr6_declare, raw_sexpr6_declare_rec, raw_sexpr5_declare_rec, raw_sexpr7_declare_rec
 from input_data import raw_sexpr_signal_redeclaration_local, raw_sexpr_signal_redeclaration_global1, raw_sexpr_signal_redeclaration_global2
@@ -200,7 +200,7 @@ def test_generate_raw_sexpr_node_defs_no_error(expr):
     declaration = container1.declarations[4]
     assert isinstance(declaration, UnnamedExpressionDeclaration)
     output_expr_list = container1.generate_raw_sexpr_node_defs(node_list=[declaration.node_id], declared_nodes=declared_nodes, node_names_to_use=dict())
-    output_expr2: RawSExpr | str = container1.generate_raw_sexpr_unnamed_root(node_id=declaration.node_id, declared_nodes=declared_nodes)
+    output_expr2: RawSExprList | str = container1.generate_raw_sexpr_unnamed_root(node_id=declaration.node_id, declared_nodes=declared_nodes)
     print(output_expr_list)
     print()
     print(output_expr2)

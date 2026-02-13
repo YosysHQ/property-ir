@@ -1,7 +1,7 @@
 from __future__ import annotations
 from pathlib import Path
 
-from sexpr import parse_expression, parse_raw_sexpr, IrContainer, Signal, RawSExpr, unparse_raw_sexpr
+from sexpr import parse_expression, parse_raw_sexpr, IrContainer, Signal, RawSExprList, unparse_raw_sexpr
 from sexpr.base import SignalDeclaration
 
 
@@ -70,23 +70,23 @@ def main():
     #signal_dict = {'a': Signal('a'), 'b': Signal('b'), 'c': Signal('c'), 'd': Signal('d')}
 
 
-    expr_list1: RawSExpr = parse_raw_sexpr(test_expr1)
+    expr_list1: RawSExprList = parse_raw_sexpr(test_expr1)
     print()
-    expr_list2: RawSExpr = parse_raw_sexpr(test_expr2)
+    expr_list2: RawSExprList = parse_raw_sexpr(test_expr2)
     print()
-    expr_list3: RawSExpr = parse_raw_sexpr(test_expr3)
+    expr_list3: RawSExprList = parse_raw_sexpr(test_expr3)
     print()
-    expr_list4: RawSExpr = parse_raw_sexpr(test_expr4)
+    expr_list4: RawSExprList = parse_raw_sexpr(test_expr4)
     print()
-    expr_list5: RawSExpr = parse_raw_sexpr(test_expr5)
+    expr_list5: RawSExprList = parse_raw_sexpr(test_expr5)
     print()
-    expr_list6: RawSExpr = parse_raw_sexpr(test_expr6)
+    expr_list6: RawSExprList = parse_raw_sexpr(test_expr6)
     print()
-    expr_list7: RawSExpr = parse_raw_sexpr(test_expr7)
+    expr_list7: RawSExprList = parse_raw_sexpr(test_expr7)
     print()
-    expr_list8: RawSExpr = parse_raw_sexpr(test_expr8)
+    expr_list8: RawSExprList = parse_raw_sexpr(test_expr8)
     print()
-    expr_list9: RawSExpr = parse_raw_sexpr(test_expr9)
+    expr_list9: RawSExprList = parse_raw_sexpr(test_expr9)
     print()
 
     ir_container1 = IrContainer()
