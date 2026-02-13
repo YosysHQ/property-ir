@@ -10,3 +10,8 @@ wheels/
 .venv
 
 .python-version
+
+prototype/output
+
+prototype/tests/.hypothesis
+.hypothesis

@@ -4,8 +4,8 @@ from pathlib import Path
 from sexpr import IrContainer
 from sexpr import parse_document
 from sexpr.base import NodeId
-from input_data import raw_sexpr1, raw_sexpr6_declare_rec, raw_sexpr7_declare_rec, raw_sexpr5
-from helpers import wrap_in_document, wrap_multiple_statements_in_document
+from tests.input_data import raw_sexpr1, raw_sexpr6_declare_rec, raw_sexpr7_declare_rec, raw_sexpr5
+from tests.helpers import wrap_in_document, wrap_multiple_statements_in_document
 
 
 def test_uniquify1(container):

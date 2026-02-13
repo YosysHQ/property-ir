@@ -2,12 +2,12 @@ import pytest
 from pathlib import Path
 
 from sexpr import parse_expression, parse_literal, parse_raw_sexpr, RawSExprList, IrContainer, Signal, parse_document
-from input_data import raw_sexpr1, raw_sexpr2, raw_sexpr3, raw_sexpr4, raw_sexpr5, raw_sexpr6, raw_sexpr7, raw_sexpr8
-from input_data import raw_sexpr6_declare, raw_sexpr6_declare_rec, raw_sexpr5_declare_rec, raw_sexpr7_declare_rec
-from input_data import raw_sexpr_signal_redeclaration_local, raw_sexpr_signal_redeclaration_global1, raw_sexpr_signal_redeclaration_global2
+from tests.input_data import raw_sexpr1, raw_sexpr2, raw_sexpr3, raw_sexpr4, raw_sexpr5, raw_sexpr6, raw_sexpr7, raw_sexpr8
+from tests.input_data import raw_sexpr6_declare, raw_sexpr6_declare_rec, raw_sexpr5_declare_rec, raw_sexpr7_declare_rec
+from tests.input_data import raw_sexpr_signal_redeclaration_local, raw_sexpr_signal_redeclaration_global1, raw_sexpr_signal_redeclaration_global2
 from sexpr.base import Bool, BoundedRange, IntOrUnbounded, NodeId, Property, PropertyIrNode, Range, Sequence, SignalDeclaration, UnnamedExpressionDeclaration
 from sexpr.primitives import And, Not, Or, PropAlwaysRanged, PropSeq, SeqBool, SeqConcat, SeqRepeat, Constant
-from helpers import wrap_in_document, wrap_multiple_expr_in_document, wrap_statement_in_document, wrap_multiple_statements_in_document
+from tests.helpers import wrap_in_document, wrap_multiple_expr_in_document, wrap_statement_in_document, wrap_multiple_statements_in_document
 
 
 

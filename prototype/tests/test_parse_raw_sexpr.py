@@ -2,8 +2,8 @@ import pytest
 
 from sexpr import parse_raw_sexpr
 
-from input_data import expr1, expr2, expr3, expr4, expr5, expr6, expr7, expr8
-from input_data import raw_sexpr1, raw_sexpr2, raw_sexpr3, raw_sexpr4, raw_sexpr5, raw_sexpr6, raw_sexpr7, raw_sexpr8
+from tests.input_data import expr1, expr2, expr3, expr4, expr5, expr6, expr7, expr8
+from tests.input_data import raw_sexpr1, raw_sexpr2, raw_sexpr3, raw_sexpr4, raw_sexpr5, raw_sexpr6, raw_sexpr7, raw_sexpr8
 from sexpr.parsing import unparse_raw_sexpr
 
 
