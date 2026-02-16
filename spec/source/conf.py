@@ -14,7 +14,7 @@ release = '0.1'
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
 
-extensions = []
+extensions = ["sphinx.ext.mathjax"]
 
 templates_path = ['_templates']
 exclude_patterns = []
@@ -25,9 +25,5 @@ exclude_patterns = []
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#options-for-html-output
 
 html_theme = 'furo'
-#html_css_files = ['custom.css']
+html_css_files = ['custom.css']
 html_static_path = ['_static']
-
-#from sphinx.application import Sphinx
-#def setup(app: Sphinx) -> None:
-#    app.add_css_file('custom.css')

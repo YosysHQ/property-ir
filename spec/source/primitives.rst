@@ -1,6 +1,8 @@
-Types and Operations
+Primitives
 ---------------------
 
+By convention, except for ``bool``,
+each primitive symbol has as a prefix the type that it returns
 
 Boolean Expression
 ^^^^^^^^^^^^^^^^^^^^
