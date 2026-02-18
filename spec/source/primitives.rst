@@ -2,21 +2,44 @@ Primitives
 ---------------------
 
 By convention, except for ``bool``,
-each primitive symbol has as a prefix the type that it returns
+each primitive symbol has as a prefix the type that it returns.
+
 
 Boolean Expression
 ^^^^^^^^^^^^^^^^^^^^
 
-**Operations**: ``and, or, not``
+.. *Note:* Do not use  &&, ||, !, because it becomes too confusing if there are many
+    different names for the same concept. Use ``seq_and``, ``prop_and`` etc. for
+    sequences and properties.
 
-*Note:* Do not use  &&, ||, !, because it becomes too confusing if there are many
-different names for the same concept. Use ``seq_and``, ``prop_and`` etc. for
-sequences and properties.
+
+Boolean literal:
 
 .. code-block:: sexpr
 
-    <bool> = true | false | <signal> | (<operation> <bool1> <bool2> ...)
+    <bool_literal> = true | false
 
+Basic booleans:
+
+.. code-block:: sexpr
+
+    <bool> = <signal_name>
+
+           | (constant <bool_literal>) ; can be abbreviated as (<bool_literal>)
+
+
+Boolean primitives:
+
+.. code-block:: sexpr
+
+    (not <bool>)
+
+    (and <bool1> <bool2> ...)
+
+    (or <bool1> <bool2> ...)
+
+
+.. Are there other Boolean primitives we need to consider?
 
 Examples:
 
@@ -28,48 +51,76 @@ Examples:
 
     (not (and (not a) c))
 
+
 Clocked Sequence
 ^^^^^^^^^^^^^^^^^
 
 TODO: clocked sequence
-(Simple) Sequence
+
+
+Simple Sequence
+^^^^^^^^^^^^^^^^^^^^
+
 Uses the global clock and does not have empty matches.
 
-.. code-block:: sexpr
-
-    <sequence> = (<sequence_operation> <argument1> <argument2> ...)
-
-Basic sequence (convert Boolean expression to sequence of length 1): ``(seq_bool <bool>)``
-
-**Example operations:** repeat, delay, concat, fusion, intersect, seq-bool, seq-and
+Basic sequence (convert Boolean expression to sequence of length 1): ``(seq-bool <bool>)``
 
 **Argument types:** sequence, boolean expression, integer, bounded range, range
 
-.. code-block:: sexpr
-
-    <bounded_range> = (range <integer1> <integer2>) with <integer1> <= <integer2>
-
-    <range> = <bounded_range> | (range <integer> $)
-
-*Note:* For delay and repeat, the case with a single integer argument can be represented as a bounded range with <integer1> = <integer2> and must not be represented as a separate case.
-
-Sequence operations:
+Range literals:
 
 .. code-block:: sexpr
 
-    (seq-bool <bool>)
+    <bounded_range> = (bounded-range <integer1> <integer2>) with <integer1> <= <integer2>
 
-    (seq-repeat <range> <sequence>)
+    <range> = (range <integer> $) | (range <integer1> <integer2>) with <integer1> <= <integer2>
 
-    (seq-delay <range> <sequence>)
+*Notes:*
 
-    (seq-concat <sequence1> <sequence2> ...)
+* For ``seq-delay``, ``seq-repeat``, ``seq-goto-repeat``, and
+  ``seq-nonconsecutive-repeat``, the case with a single integer argument can
+  be represented as a bounded range with ``<integer1> = <integer2>`` and is not
+  handled as a separate case
+* Sampled Value Functions are handled outside of Property IR (?)
+* ``triggered`` and ``matched`` are handled outside of Property IR (?)
 
-    (seq-fusion <sequence1> <sequence2> ...)
 
-    (seq-intersect <sequence1> <sequence2> ...)
+Basic simple sequence:
 
-    (seq-and <sequence1> <sequence2> ...)
+.. code-block:: sexpr
+
+    (seq-bool <bool>) ; convert Boolean expression to sequence of length 1
+                      ; has no equivalent operator in SVA
+
+Simple sequence primitives:
+
+.. code-block:: sexpr
+
+    (seq-repeat <range> <seq>) ; seq [m:n]
+
+    (seq-delay <range> <seq>) ; ##[m:n] seq
+
+    (seq-concat <seq1> <seq2> ...) ; seq1 ##1 seq2
+
+    (seq-fusion <seq1> <seq2> ...) ; seq1 ##0 seq2
+
+    (seq-intersect <seq1> <seq2> ...)
+
+    (seq-and <seq1> <seq2> ...)
+
+    (seq-or <seq1> <seq2> ...)
+
+    (seq-goto-repeat <range> <bool>) ; bool [m->n]
+
+    (seq-nonconsecutive-repeat <range> <bool>) ; bool [=m:n]
+
+    (seq-first-match <seq>)
+
+    (seq-within <seq1> <seq2>)
+
+    (seq-throughout <bool> <seq>)
+
+
 
 Examples:
 
@@ -78,94 +129,162 @@ Examples:
     (seq-concat (seq-bool a) (seq-bool (not b)) (seq-bool c))
 
     (seq-concat
-    (seq-repeat 5 (seq-bool a))
-    (seq-concat (seq-bool b) (seq-bool c)))
+        (seq-repeat 5 (seq-bool a))
+        (seq-concat (seq-bool b) (seq-bool c)))
 
 
     (seq-intersect
-    (seq-concat (seq-delay (range 2 $) (seq-bool b)))
-    (seq-fusion
-    (seq-concat (seq-bool a) (seq-bool b))
-    (seq-repeat 3 (seq-bool b))))
+        (seq-concat (seq-delay (range 2 $) (seq-bool b)))
+        (seq-fusion
+            (seq-concat (seq-bool a) (seq-bool b))
+            (seq-repeat 3 (seq-bool b))))
 
 Clocked Property
 ^^^^^^^^^^^^^^^^^
 
 TODO: clocked property
 
-Property
-^^^^^^^^^^
+Simple Property
+^^^^^^^^^^^^^^^^^
+
+Uses the global clock and does not contain sequences having empty matches.
 
 ..
-    Question: Should something of a specific sort be allowed everywhere where an argument of that sort is allowed? If that is the case, does that mean that a special sort for top-level properties / disable-iff expressions is required?
+    Question: Should something of a specific sort be allowed everywhere where an argument of that sort is allowed?
+    If that is the case, does that mean that a special sort for top-level properties / disable-iff expressions is
+    required?
 
     Answer:
     Yes, every instance of some sort should be allowed where an argument of that sort is expected.
     Possible solutions:
-    Allow disable iff more flexibly
-    Add Top-level property sort
-    Assert-property gets option to add optional disable iff
+    1. Allow disable iff more flexibly
+    2. Add Top-level property sort
+    3. Assert-property gets option to add optional disable iff
     -> check why there is that restriction in SVA
 
-    Question: The same issue occurs for recursive properties because there are restrictions on what kind of properties can be recursive. How should that be treated?
+    Question: The same issue occurs for recursive properties because there are
+    restrictions on what kind of properties can be recursive. How should that be treated?
 
     Answer:
-    Allow everything there in the syntax, and handle these additional conditions on the level of semantics. This means everything can be written down in the syntax as a fixpoint, but there might not exist a useful or unambiguous fixpoint. Either reject these cases later when they are handled, or the result can be anything.
-    Also allow all types in let-rec expressions on the level of syntax. Semantically cyclic Boolean expressions can be detected and rejected later.
-    Keep all restrictions of the SVA standard (although not all of them might be strictly necessary). ::
+    Allow everything there in the syntax, and handle these additional conditions
+    on the level of semantics. This means everything can be written down in the
+    syntax as a fixpoint, but there might not exist a useful or unambiguous fixpoint.
+    Either reject these cases later when they are handled, or the result can be anything.
+    Also allow all types in let-rec expressions on the level of syntax.
+    Semantically cyclic Boolean expressions can be detected and rejected later.
+    Keep all restrictions of the SVA standard (although not all of them might be
+    strictly necessary). ::
 
 
     <top_property> = <property> | (prop-disable-iff <bool> <property>)
     <property> = (<property_operation> <argument1> <argument2> ...)
 
-**Example operations:** ``and, implication, until, always, disable-iff, accept-on``
+Basic simple properties:
 
 .. code-block:: sexpr
 
-    (prop-seq <sequence>)		convert sequence to sequence property
+    (prop-seq <seq>) ; convert sequence to sequence property
 
-    (prop-bool <bool>)		convert Boolean expression to property
-    === (prop-seq (seq-bool <bool>))
+    (prop-bool <bool>) ; convert boolean expression to sequence property
+                       ; equivalent to (prop-seq (seq-bool <bool>))
 
-    (prop-and <property1> <property2> ...)
+    (prop-strong <seq>)
 
-    (prop-non-overlapped-implication <sequence> <property>)
-
-    (prop-until <property1> <property2>)
-
-    (prop-always <property)
-
-    (prop-accept-on <bool> <property>)
+    (prop-weak <seq>)
 
 
+Simple property primitives:
+
+.. code-block:: sexpr
+
+    (prop-and <prop1> <prop2> ...)
+
+    (prop-or <prop1> <prop2> ...)
+
+    (prop-not <prop>)
+
+    (prop-iff <prop1> <prop2>)
+
+    (prop-implies <prop1> <prop2>)
+
+    (prop-if <bool> <prop>)
+
+    (prop-if-else <bool> <prop1> <prop2>)
 
 
-Property Examples:
-^^^^^^^^^^^^^^^^^^^
+    (prop-nexttime <int> <prop>)
+
+
+    (prop-overlapped-implication <seq> <prop>) ; seq |-> prop
+
+    (prop-non-overlapped-implication <seq> <prop>) ; seq |=> prop
+
+    (prop-overlapped-followed-by <seq> <prop>) ; seq #-# prop
+
+    (prop-non-overlapped-followed-by <seq> <prop>) ; seq #=# prop
+
+
+    (prop-until <prop1> <prop2>)
+
+    (prop-strong-until <prop1> <prop2>)
+
+    (prop-until-with <prop1> <prop2>)
+
+    (prop-strong-until <prop1> <prop2>)
+
+
+    (prop-always <prop>) ; Question: should we omit the version without a range?
+
+    (prop-always-ranged <range> <prop>)
+
+    (prop-strong-always <bounded-range> <prop>)
+
+    (prop-eventually <bounded-range> <prop>)
+
+    (prop-strong-eventually <prop>)  ; Question: should we omit the version without a range?
+
+    (prop-strong-eventually-ranged <range> <prop>)
+
+
+    (prop-accept-on <bool> <prop>)
+
+    (prop-reject-on <bool> <prop>)
+
+    (prop-sync-accept-on <bool> <prop>)
+
+    (prop-sync-reject-on <bool> <prop>)
+
+
+
+
+Examples:
 
 .. code-block:: sexpr
 
     (prop-non-overlapped-implication
-    (seq-concat (seq-bool a) (seq-bool b))
-    (prop-always (prop-bool c)))
+        (seq-concat (seq-bool a) (seq-bool b))
+        (prop-always (prop-bool c)))
 
     (until
-    (prop-not (prop-seq (seq-concat (seq-bool a) (seq-bool b))))
-    (prop-seq (seq-and (seq-bool c) (seq-bool a)))
+        (prop-not (prop-seq (seq-concat (seq-bool a) (seq-bool b))))
+        (prop-seq (seq-and (seq-bool c) (seq-bool a)))
 
     (always
-    (range 4 $)
-    (prop-seq (seq-bool (not b))))
+        (range 4 $)
+        (prop-seq (seq-bool (not b))))
 
 Recursive property
 """"""""""""""""""""
 
-See recursion ``(let-rec)`` above.
+See recursive expression ``let-rec`` above.
 
 Several restrictions apply to recursive properties:
-``prop-not`` cannot be applied to a recursive property, no ``disable-iff`` in
-recursive property, advance in time before reinstantiation, restrictions on
-arguments of recursive properties (these will be checked by Verific beforehand)
+
+* ``prop-not`` cannot be applied to a recursive property
+* no ``disable-iff`` in recursive property
+* advance in time before reinstantiation
+* restrictions on
+  arguments of recursive properties (these will be checked by Verific beforehand)
 
 
 Example:
@@ -173,10 +292,10 @@ Example:
 .. code-block:: sexpr
 
     (let-rec (prop1
-    (prop-and
-    (prop-bool a)
-    (prop-non-overlapped-implication (seq-bool true) prop1)))
-    prop1)
+        (prop-and
+            (prop-bool a)
+            (prop-non-overlapped-implication (seq-bool true) prop1)))
+        prop1)
 
 Mutually recursive properties
 
@@ -197,13 +316,13 @@ Statement form:
 .. code-block:: sexpr
 
     (declare-rec
-    (prop1 (prop-and
-    (prop-bool a)
-    (prop-non-overlapped-implication (seq-bool true) prop2)))
-    (prop2 (prop-and
-    (prop-bool b)
-    (prop-non-overlapped-implication (seq-bool true) prop1))))
-    (assert-property prop1)
+        (prop1 (prop-and
+            (prop-bool a)
+            (prop-non-overlapped-implication (seq-bool true) prop2)))
+        (prop2 (prop-and
+            (prop-bool b)
+            (prop-non-overlapped-implication (seq-bool true) prop1))))
+            (assert-property prop1)
 
 
 Example for graph (Verific output or automaton) -> ``let-rec``

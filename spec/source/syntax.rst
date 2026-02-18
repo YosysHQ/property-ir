@@ -39,13 +39,14 @@ Primitive form
 
 .. code-block:: sexpr
 
-    (<root_primitive> <arg1> <arg2> ...)
+    (<primitive_symbol> <arg1> <arg2> ...)
 
 An expression in primitive form consists of a primitive symbol and its arguments.
 It is enclosed in parentheses.
 Each primitive has a *signature* that determines the argument types
 and the return type.
 Each argument is either a literal or an expression.
+Every instance of a type is allowed where an argument of that type is expected.
 
 
 Recursive form
@@ -133,8 +134,8 @@ omitting it makes the identifier available only locally inside the ``declare-rec
 statement.
 
 Note that the named subexpression with the ``declare`` keyword is semantically
-different from the non-recursive declaration and is in itself not a statement
-(since statements cannot be nested).
+different from the non-recursive declaration and is in itself not a statement.
+(Recall that statements cannot be nested.)
 
 .. code-block:: sexpr
 
@@ -155,8 +156,8 @@ Only the identifier ``bar`` can be referred to outside this statement, since
 ``foo`` does not use the ``declare`` keyword.
 
 
-External input
-"""""""""""""""""""
+External input declaration
+"""""""""""""""""""""""""""
 
 Signals that are handled outside of Property IR, but referred to in statements,
 need to be declared using the ``declare-input`` statement.
