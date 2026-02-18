@@ -1,4 +1,4 @@
-Abstract Syntax
+Syntax
 -----------------
 
 
@@ -8,21 +8,29 @@ Types
 Literal types
 ^^^^^^^^^^^^^^^
 
-* Boolean: true, false
-* Non-negative Integer: 0, 1, …
-* Bounded Range: ``(bounded-range n m)`` with :math:`n \leq m`
-* Constant Range: ``(range n m)`` with :math:`n \leq m` or :math:`m=$`
+* Boolean literal: ``<bool_literal> = true | false``
+* Non-negative integer: ``<int> = n`` with :math:`n \in \mathbb N^{\geq 0}`
+* Bounded range: ``<bounded_range> = (bounded-range n m)`` with :math:`n,m \in \mathbb N^{\geq 0}` and :math:`n \leq m`
+* Constant range: ``<range> = (range n m) | (range n $)`` with :math:`n,m \in \mathbb N^{\geq 0}` and :math:`n \leq m`
+
+
+
+.. :math:`0 \leq n \leq m`
+
+.. <bounded_range> = (bounded-range <integer1> <integer2>) with <integer1> <= <integer2>
+
+.. <range> = (range <integer> $) | (range <integer1> <integer2>) with <integer1> <= <integer2>
 
 
 Expression types
 ^^^^^^^^^^^^^^^^^
 
-* Boolean Expression
-* Sequence
-    * clocked or simple/unclocked
-* Property
-    * clocked or unclocked
-* AutomataState
+* Boolean Expression ``bool``
+* Clocked Sequence ``clk-seq``
+* Simple Sequence ``seq``
+* Clocked Property ``clk-prop``
+* Simple Property ``prop``
+* Automata State
 * Circuit
 
 
@@ -177,10 +185,10 @@ Example:
 .. TODO: more information on this, and reference to the $property cell
 
 
-Directive Statements
+Assertion Statements
 ^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-These directives correspond directly to the respective directives in SVA.
+These directives correspond directly to the respective assertion statements in SVA.
 
 .. code-block:: sexpr
 

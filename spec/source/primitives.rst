@@ -13,11 +13,6 @@ Boolean Expression
     sequences and properties.
 
 
-Boolean literal:
-
-.. code-block:: sexpr
-
-    <bool_literal> = true | false
 
 Basic booleans:
 
@@ -55,25 +50,18 @@ Examples:
 Clocked Sequence
 ^^^^^^^^^^^^^^^^^
 
+
+
 TODO: clocked sequence
 
 
 Simple Sequence
 ^^^^^^^^^^^^^^^^^^^^
 
-Uses the global clock and does not have empty matches.
+Uses the global clock and does not admit empty matches.
 
 Basic sequence (convert Boolean expression to sequence of length 1): ``(seq-bool <bool>)``
 
-**Argument types:** sequence, boolean expression, integer, bounded range, range
-
-Range literals:
-
-.. code-block:: sexpr
-
-    <bounded_range> = (bounded-range <integer1> <integer2>) with <integer1> <= <integer2>
-
-    <range> = (range <integer> $) | (range <integer1> <integer2>) with <integer1> <= <integer2>
 
 *Notes:*
 
@@ -147,7 +135,7 @@ TODO: clocked property
 Simple Property
 ^^^^^^^^^^^^^^^^^
 
-Uses the global clock and does not contain sequences having empty matches.
+Uses the global clock and does not contain sequences that admit empty matches.
 
 ..
     Question: Should something of a specific sort be allowed everywhere where an argument of that sort is allowed?
@@ -267,7 +255,7 @@ Examples:
 
     (until
         (prop-not (prop-seq (seq-concat (seq-bool a) (seq-bool b))))
-        (prop-seq (seq-and (seq-bool c) (seq-bool a)))
+        (prop-seq (seq-and (seq-bool c) (seq-bool a))))
 
     (always
         (range 4 $)
@@ -304,10 +292,10 @@ Mutually recursive properties
     (let-rec
         (prop1 (prop-and
             (prop-bool a)
-            (prop-non-overlapped-implication (seq-bool true) prop2))
+            (prop-non-overlapped-implication (seq-bool true) prop2)))
         (prop2 (prop-and
             (prop-bool b)
-            (prop-non-overlapped-implication (seq-bool true) prop1))
+            (prop-non-overlapped-implication (seq-bool true) prop1)))
     prop1)
 
 
