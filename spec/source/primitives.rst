@@ -54,9 +54,49 @@ Examples:
 Clocked Sequence
 ^^^^^^^^^^^^^^^^^
 
+Clocked sequences use a clock that may be different from the global clock.
+The available primitives are the same as for simple sequences, but with the
+additional prefix ``clk-``.
+All their arguments that are sequences need to be of type ``clk-seq``.
+
+There is an additional primitive for specifying the clock.
+
+.. code-block:: sexpr
+
+    (clk-seq-clocked <bool> <clk_seq>) ; @(bool) clk-seq
+
+The clock can explicitly be specified to be the global clock by using the argument ``true``.
+
+.. code-block:: sexpr
+
+    (clk-seq-clocked true <clk-seq>)
 
 
-TODO: clocked sequence
+Transformation to Simple Sequence
+""""""""""""""""""""""""""""""""""
+
+The clocked sequence can be rewritten to a simple sequence using the macros
+``#clk-seq-apply-clock``, ``#clk-seq-nonempty-part``, and ``#seq-remove-clock`` in
+this order.
+
+.. code-block:: sexpr
+
+    (clk-seq-clocked <bool> <clk_seq>)  ; clocked
+
+    |   #clk-seq-apply-clock
+    V
+
+    (clk-seq-clocked true <clk_seq2>)   ; global-clocked
+
+    |  #clk-seq-nonempty-part
+    V
+
+    (clk-seq-clocked true <clk_seq3>)   ; global-clocked and non-empty-matching
+
+    |  #seq-remove-clock
+    V
+
+    <seq>                               ; simple/unclocked
 
 
 Simple Sequence
@@ -133,7 +173,32 @@ Examples:
 Clocked Property
 ^^^^^^^^^^^^^^^^^
 
-TODO: clocked property
+Clocked properties are analogous to clocked sequences and use a clock that may
+be different from the global clock.
+The available primitives are the same as for simple properties, but with the
+additional prefix ``clk-``.
+All their arguments that are sequences need to be of type ``clk-seq`` and all
+arguments that are properties need to be of type ``clk-prop``.
+
+There is an additional primitive for specifying the clock.
+
+.. code-block:: sexpr
+
+    (clk-prop-clocked <bool> <clk_prop>) ; @(bool) clk_prop
+
+The clock can explicitly be specified to be the global clock by using the argument ``true``.
+
+.. code-block:: sexpr
+
+    (clk-prop-clocked true <clk_prop>)
+
+
+The tranformation to a simple property is analogous to sequences, using the
+macros ``#clk-prop-apply-clock``, ``#clk-prop-nonempty-part``, and
+``#prop-remove-clock`` in this order.
+
+
+
 
 Simple Property
 ^^^^^^^^^^^^^^^^^

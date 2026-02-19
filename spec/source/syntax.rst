@@ -107,7 +107,7 @@ Declare Statements
 
 Declare statements are used to bind expressions to identifiers that can
 be referred to in later statements.
-Any UTF-16 string may be used as an identifier.
+Any string may be used as an identifier.
 An identifier that is declared once may not be redeclared later or used as an
 identifier in a ``let-rec`` expression appearing later or nested inside the same
 declare statement.
@@ -190,6 +190,8 @@ Assertion Statements
 ^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 These directives correspond directly to the respective assertion statements in SVA.
+
+TODO: add disable-iff
 
 .. code-block:: sexpr
 
