@@ -9,9 +9,9 @@ Literal types
 ^^^^^^^^^^^^^^^
 
 * Boolean literal: ``<bool_literal> = true | false``
-* Non-negative integer: ``<int> = n`` with :math:`n \in \mathbb N^{\geq 0}`
-* Bounded range: ``<bounded_range> = (bounded-range n m)`` with :math:`n,m \in \mathbb N^{\geq 0}` and :math:`n \leq m`
-* Constant range: ``<range> = (range n m) | (range n $)`` with :math:`n,m \in \mathbb N^{\geq 0}` and :math:`n \leq m`
+* Non-negative integer: ``<int> = n`` with :math:`n \in \mathbb N_{0}`
+* Bounded range: ``<bounded_range> = (bounded-range n m)`` with :math:`n,m \in \mathbb N_{0}` and :math:`n \leq m`
+* Constant range: ``<range> = (range n m) | (range n $)`` with :math:`n,m \in \mathbb N_{0}` and :math:`n \leq m`
 
 
 
@@ -116,7 +116,7 @@ expression and then declare it later.
 
 
 
-Non-recursive declaration
+Expression declaration
 """"""""""""""""""""""""""""""
 
 .. code-block:: sexpr
@@ -125,6 +125,7 @@ Non-recursive declaration
 
 With the ``declare`` keyword, an expression can be bound to an identifier.
 The type of the identifier is the type of the expression.
+``<expr>`` must not contain the identifier.
 
 
 Recursive declaration

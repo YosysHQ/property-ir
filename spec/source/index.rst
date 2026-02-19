@@ -17,4 +17,5 @@ documentation for details.
 
    introduction
    syntax
+   considerations
    primitives

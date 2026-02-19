@@ -12,6 +12,10 @@ Boolean Expression
     different names for the same concept. Use ``seq_and``, ``prop_and`` etc. for
     sequences and properties.
 
+*Notes:*
+
+* Sampled value functions (``$rose``, ``$fell``, ``$stable`` etc.)
+  are handled outside of Property IR.
 
 
 Basic booleans:
@@ -60,17 +64,16 @@ Simple Sequence
 
 Uses the global clock and does not admit empty matches.
 
-Basic sequence (convert Boolean expression to sequence of length 1): ``(seq-bool <bool>)``
+.. Basic sequence (convert Boolean expression to sequence of length 1): ``(seq-bool <bool>)``
 
 
 *Notes:*
 
 * For ``seq-delay``, ``seq-repeat``, ``seq-goto-repeat``, and
   ``seq-nonconsecutive-repeat``, the case with a single integer argument can
-  be represented as a bounded range with ``<integer1> = <integer2>`` and is not
-  handled as a separate case
-* Sampled Value Functions are handled outside of Property IR (?)
-* ``triggered`` and ``matched`` are handled outside of Property IR (?)
+  be represented as a bounded range with :math:`n = m` and is not
+  handled as a separate case.
+* ``triggered`` and ``matched`` are handled outside of Property IR.
 
 
 Basic simple sequence:
@@ -265,15 +268,6 @@ Recursive property
 """"""""""""""""""""
 
 See recursive expression ``let-rec`` above.
-
-Several restrictions apply to recursive properties:
-
-* ``prop-not`` cannot be applied to a recursive property
-* no ``disable-iff`` in recursive property
-* advance in time before reinstantiation
-* restrictions on
-  arguments of recursive properties (these will be checked by Verific beforehand)
-
 
 Example:
 
