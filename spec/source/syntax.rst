@@ -191,11 +191,20 @@ Assertion Statements
 
 These directives correspond directly to the respective assertion statements in SVA.
 
-TODO: add disable-iff
+
+The first parameter is the disable condition (``disable iff``). If no disable
+condition is used, it should be set to ``(constant false)``.
+
+TODO:
+
+* cover-sequence? counts all matches per evaluation attempt, while cover property only once
+* initial assert property? is mentioned only in formal semantics, not in main part
+* a clock can be provided to an assertion statement - is this different from
+    adding the clock to ``prop``?
 
 .. code-block:: sexpr
 
-    (assert-property <property_expr>)
-    (cover-property <property_expr>)
-    (assume-property <property_expr>)
-    (restrict-property <property_expr>)
+    (assert-property <bool> <clk-prop>)
+    (cover-property <bool> <clk-prop>)
+    (assume-property <bool> <clk-prop>)
+    (restrict-property <bool> <clk-prop>)
