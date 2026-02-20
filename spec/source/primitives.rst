@@ -40,7 +40,8 @@ Boolean primitives:
 
 .. Are there other Boolean primitives we need to consider?
 
-Examples:
+Examples
+""""""""""""""
 
 .. code-block:: sexpr
 
@@ -153,7 +154,8 @@ Simple sequence primitives:
 
 
 
-Examples:
+Examples
+""""""""""""""""""""""
 
 .. code-block:: sexpr
 
@@ -313,7 +315,10 @@ Simple property primitives:
 
 
 
-Examples:
+Examples
+""""""""""""""
+
+Property expressions:
 
 .. code-block:: sexpr
 
@@ -321,70 +326,57 @@ Examples:
         (seq-concat (seq-bool a) (seq-bool b))
         (prop-always (prop-bool c)))
 
-    (until
+    (prop-until
         (prop-not (prop-seq (seq-concat (seq-bool a) (seq-bool b))))
         (prop-seq (seq-and (seq-bool c) (seq-bool a))))
 
-    (always
+    (prop-always-ranged
         (range 4 $)
         (prop-seq (seq-bool (not b))))
 
-Recursive property
-""""""""""""""""""""
-
-See recursive expression ``let-rec`` above.
-
-Example:
+Recursive property:
 
 .. code-block:: sexpr
 
     (let-rec (prop1
         (prop-and
             (prop-bool a)
-            (prop-non-overlapped-implication (seq-bool true) prop1)))
+            (prop-non-overlapped-implication (seq-bool (true)) prop1)))
         prop1)
 
-Mutually recursive properties
+Mutually recursive properties:
 
 .. code-block:: sexpr
 
     (let-rec
         (prop1 (prop-and
             (prop-bool a)
-            (prop-non-overlapped-implication (seq-bool true) prop2)))
+            (prop-non-overlapped-implication (seq-bool (true)) prop2)))
         (prop2 (prop-and
             (prop-bool b)
-            (prop-non-overlapped-implication (seq-bool true) prop1)))
+            (prop-non-overlapped-implication (seq-bool (true)) prop1)))
     prop1)
 
 
-Statement form:
+Declaration form:
 
 .. code-block:: sexpr
 
     (declare-rec
-        (prop1 (prop-and
+        (declare prop1 (prop-and
             (prop-bool a)
-            (prop-non-overlapped-implication (seq-bool true) prop2)))
-        (prop2 (prop-and
+            (prop-non-overlapped-implication (seq-bool (true)) prop2)))
+        (declare prop2 (prop-and
             (prop-bool b)
-            (prop-non-overlapped-implication (seq-bool true) prop1))))
-            (assert-property prop1)
+            (prop-non-overlapped-implication (seq-bool (true)) prop1))))
 
 
-Example for graph (Verific output or automaton) -> ``let-rec``
-
-.. code-block:: sexpr
-
-    (let-rec
-    	(node1 (<operation-of-node-1> <name-of-first-arg-node> ...))
-    	(node2 (<operation-of-node-2> <name-of-first-arg-node> ...))
-    ...
-    <root-or-initial-state-or-whatever>)
 
 
 Automaton
 ^^^^^^^^^^
+
+TODO
 
 .. code-block:: sexpr
 
@@ -468,7 +460,8 @@ Works like a standard transition that checks a condition and enters the next sta
     Followed-by, as-long-as
 
 
-Examples:
+Examples
+"""""""""""""""""""
 
 .. code-block:: sexpr
 
