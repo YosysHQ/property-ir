@@ -5,10 +5,11 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
+    "furo-ys",
     "graphviz>=0.21",
     "hypothesis>=6.150.2",
     "pytest>=9.0.2",
-    "sphinx>=9.0.4",
+    "sphinx<9",
     "typeguard>=4.4.4",
 ]
 
@@ -19,3 +20,6 @@ extraPaths = ["prototype/src"]
 [tool.pytest.ini_options]
 testpaths = ["prototype/tests"]
 pythonpath = ["prototype/src"]
+
+[tool.uv.sources]
+furo-ys = { git = "https://github.com/YosysHQ/furo-ys.git" }
