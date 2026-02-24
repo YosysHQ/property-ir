@@ -66,11 +66,11 @@ There is an additional primitive for specifying the clock.
 
     (clk-seq-clocked <bool> <clk_seq>) ; @(bool) clk-seq
 
-The clock can explicitly be specified to be the global clock by using the argument ``true``.
+The clock can explicitly be specified to be the global clock by using the argument ``(constant true)`` or ``(true)``.
 
 .. code-block:: sexpr
 
-    (clk-seq-clocked true <clk-seq>)
+    (clk-seq-clocked (true) <clk-seq>)
 
 
 Transformation to Simple Sequence
@@ -87,12 +87,12 @@ this order.
     |   #clk-seq-apply-clock
     V
 
-    (clk-seq-clocked true <clk_seq2>)   ; global-clocked
+    (clk-seq-clocked (true) <clk_seq2>)   ; global-clocked
 
     |  #clk-seq-nonempty-part
     V
 
-    (clk-seq-clocked true <clk_seq3>)   ; global-clocked and non-empty-matching
+    (clk-seq-clocked (true) <clk_seq3>)   ; global-clocked and non-empty-matching
 
     |  #seq-remove-clock
     V
@@ -188,11 +188,11 @@ There is an additional primitive for specifying the clock.
 
     (clk-prop-clocked <bool> <clk_prop>) ; @(bool) clk_prop
 
-The clock can explicitly be specified to be the global clock by using the argument ``true``.
+The clock can explicitly be specified to be the global clock by using the argument ``(constant true)`` or ``(true)``.
 
 .. code-block:: sexpr
 
-    (clk-prop-clocked true <clk_prop>)
+    (clk-prop-clocked (true) <clk_prop>)
 
 
 The tranformation to a simple property is analogous to sequences, using the

@@ -193,7 +193,7 @@ These directives correspond directly to the respective assertion statements in S
 
 
 The first parameter is the disable condition (``disable iff``). If no disable
-condition is used, it should be set to ``(constant false)``.
+condition is used, it should be set to ``(constant false)`` or ``(false)``.
 
 TODO:
 
