@@ -8,21 +8,6 @@ import sys
 import os
 
 sys.path.insert(0, os.path.abspath('./_ext'))
-#import _ext.sexpr_ext
-
-#from pathlib import Path
-#
-#sys.path += [os.path.dirname(__file__) + '/_ext']
-#
-#
-#sys.path.insert(0, os.path.abspath('./_ext'))
-#
-#from _ext.sexpr_lexer import SExprLexer
-#extensions = ['sphinx.ext.ifconfig', 'myExt']
-#testlevel = 2
-
-
-#sys.path.insert(0, os.path.abspath('./_ext'))
 
 
 # -- Project information -----------------------------------------------------
