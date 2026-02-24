@@ -204,7 +204,7 @@ TODO:
 
 .. code-block:: sexpr
 
-    (assert-property <bool> <clk-prop>)
-    (cover-property <bool> <clk-prop>)
-    (assume-property <bool> <clk-prop>)
-    (restrict-property <bool> <clk-prop>)
+    (assert-property <bool> <clk_prop>)
+    (cover-property <bool> <clk_prop>)
+    (assume-property <bool> <clk_prop>)
+    (restrict-property <bool> <clk_prop>)

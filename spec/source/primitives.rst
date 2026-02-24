@@ -295,9 +295,9 @@ Simple property primitives:
 
     (prop-always-ranged <range> <prop>)
 
-    (prop-strong-always <bounded-range> <prop>)
+    (prop-strong-always <bounded_range> <prop>)
 
-    (prop-eventually <bounded-range> <prop>)
+    (prop-eventually <bounded_range> <prop>)
 
     (prop-strong-eventually <prop>)  ; Question: should we omit the version without a range?
 
@@ -380,11 +380,11 @@ TODO
 
 .. code-block:: sexpr
 
-    <state> = (<sort-of-state> [<bool>] <child1> <child2> ... )
+    <state> = (<sort_of_state> [<bool>] <child1> <child2> ... )
 
     <child> = <state>
 
-    <sort-of-state> = state-or | state-and | state-followed-by | state-as-long-as | state-next | state-immediate
+    <sort_of_state> = state-or | state-and | state-followed-by | state-as-long-as | state-next | state-immediate
 
 
 States:
@@ -415,6 +415,7 @@ Disjunctive / existential state
 .. code-block:: sexpr
 
     (state-and <child1> <child2> ... )
+
 Conjunctive / universal state
 
 .. code-block:: sexpr
