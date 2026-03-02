@@ -139,6 +139,12 @@ class PlaceholderNode(PropertyIrNode):
             super().check_type(node_type)
 
     def instantiate_placeholder(self, node: PropertyIrNode):
+        # merging 2 uninstantiated placeholders
+        if isinstance(node, PlaceholderNode):
+            if self.expected_type is None and node.expected_type is None:
+                self.ir_container.merge_nodes(self.node_id, node.node_id)
+                return
+
         self.check_type(node.node_type().type_class())
         self.ir_container.merge_nodes(self.node_id, node.node_id)
 
