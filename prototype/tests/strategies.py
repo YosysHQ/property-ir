@@ -1,6 +1,7 @@
 from hypothesis import strategies as st
+from hypothesis import settings
 
-from src.sexpr.base import RawSExprList
+from src.sexpr.base import RawSExpr, RawSExprList
 
 
 
@@ -8,7 +9,7 @@ def identifier() -> st.SearchStrategy:
     #return st.text(min_size=1)
     return st.from_regex(r"[A-Za-z0-9-_]+", fullmatch=True)
 
-identifier_list: st.SearchStrategy = st.lists(elements=identifier(), min_size=1, max_size=8, unique=True)
+identifier_list: st.SearchStrategy = st.lists(elements=identifier(), min_size=1, max_size=3, unique=True)
 
 def raw_sexpr() -> st.SearchStrategy:
     return st.recursive(base=identifier(), extend=lambda children: st.lists(elements=children, min_size=1))
@@ -37,7 +38,7 @@ def parsable_boolean(declared_signals: list[str]) -> st.SearchStrategy:
             st.lists(children, min_size=1, max_size=4).map(lambda lst: ['and'] + lst) |
             st.lists(children, min_size=1, max_size=4).map(lambda lst: ['or'] + lst) |
             children.map(lambda elem: ['not', elem]),
-            max_leaves=2
+            max_leaves=3
     )
 
 def parsable_sequence(declared_signals: list[str]) -> st.SearchStrategy:
@@ -60,11 +61,32 @@ def parsable_property(declared_signals: list[str]) -> st.SearchStrategy:
             max_leaves=2)
 
 
-def parsable_let_rec():
-    pass
+@st.composite
+def parsable_let_rec_boolean(draw, declared_signals: list[str]) -> RawSExprList:
+    let_identifiers = draw(st.lists(elements=identifier().filter(lambda x: x not in declared_signals), min_size=1, max_size=3, unique=True))
+    print(f'declared_signals {declared_signals}')
+    print(f'let_identifiers {let_identifiers}')
+    all_identifiers = declared_signals + let_identifiers
+    let_rec_expr = []
+    for idf in let_identifiers:
+        expr: RawSExprList = draw(parsable_boolean(all_identifiers).filter(lambda x: x != idf))
+        let_rec_expr.append([idf, expr])
+    return_value = draw(st.sampled_from(let_identifiers))
+    return ['let-rec'] + let_rec_expr + [return_value] # type: ignore
+
 
 def parsable_declare_rec():
     pass
+
+
+@st.composite
+def parsable_let_rec_boolean_document(draw) -> RawSExprList:
+    declared_signals = draw(identifier_list)
+    expr = draw(parsable_let_rec_boolean(declared_signals))
+    return ['document',
+        ['add-signals'] + declared_signals,
+        ['parse-sexpr', expr]
+    ]
 
 
 @st.composite
