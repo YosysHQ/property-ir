@@ -9,7 +9,7 @@ def identifier() -> st.SearchStrategy:
     #return st.text(min_size=1)
     return st.from_regex(r"[A-Za-z0-9-_]+", fullmatch=True)
 
-identifier_list: st.SearchStrategy = st.lists(elements=identifier(), min_size=1, max_size=3, unique=True)
+identifier_list: st.SearchStrategy = st.lists(elements=identifier(), min_size=1, max_size=4, unique=True)
 
 def raw_sexpr() -> st.SearchStrategy:
     return st.recursive(base=identifier(), extend=lambda children: st.lists(elements=children, min_size=1))
@@ -38,7 +38,7 @@ def parsable_boolean(declared_signals: list[str]) -> st.SearchStrategy:
             st.lists(children, min_size=1, max_size=4).map(lambda lst: ['and'] + lst) |
             st.lists(children, min_size=1, max_size=4).map(lambda lst: ['or'] + lst) |
             children.map(lambda elem: ['not', elem]),
-            max_leaves=3
+            max_leaves=4
     )
 
 def parsable_sequence(declared_signals: list[str]) -> st.SearchStrategy:
@@ -69,10 +69,18 @@ def parsable_let_rec_boolean(draw, declared_signals: list[str]) -> RawSExprList:
     all_identifiers = declared_signals + let_identifiers
     let_rec_expr = []
     for idf in let_identifiers:
-        expr: RawSExprList = draw(parsable_boolean(all_identifiers).filter(lambda x: x != idf))
+        expr: RawSExprList = draw(parsable_boolean(all_identifiers).filter(lambda x: x not in let_identifiers))
         let_rec_expr.append([idf, expr])
     return_value = draw(st.sampled_from(let_identifiers))
     return ['let-rec'] + let_rec_expr + [return_value] # type: ignore
+
+
+@st.composite
+def parsable_let_rec_boolean_nested(draw, declared_names: list[str]) -> RawSExprList:
+    let_identifiers = draw(st.lists(elements=identifier().filter(lambda x: x not in declared_names), min_size=1, max_size=3, unique=True))
+    all_identifiers = declared_names + let_identifiers
+    return []
+
 
 
 def parsable_declare_rec():

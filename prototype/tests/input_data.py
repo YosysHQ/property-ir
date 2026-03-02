@@ -155,3 +155,8 @@ raw_sexpr_signal_redeclaration_global2 = ['declare-rec',
     ['declare', 'q1', 'a'],
     ]
 
+
+
+uninst_node_expr1: RawSExprList = ['let-rec', ['0', '0'], '0']
+uninst_node_expr2: RawSExprList = ['let-rec', ['0', '00'], ['00', '0'], '0']
+uninst_node_exprs = [uninst_node_expr1, uninst_node_expr2]

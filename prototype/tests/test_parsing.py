@@ -5,9 +5,11 @@ from sexpr import parse_expression, parse_literal, parse_raw_sexpr, RawSExprList
 from tests.input_data import raw_sexpr1, raw_sexpr2, raw_sexpr3, raw_sexpr4, raw_sexpr5, raw_sexpr6, raw_sexpr7, raw_sexpr8
 from tests.input_data import raw_sexpr6_declare, raw_sexpr6_declare_rec, raw_sexpr5_declare_rec, raw_sexpr7_declare_rec
 from tests.input_data import raw_sexpr_signal_redeclaration_local, raw_sexpr_signal_redeclaration_global1, raw_sexpr_signal_redeclaration_global2
+from tests.input_data import uninst_node_exprs
 from sexpr.base import Bool, BoundedRange, IntOrUnbounded, NodeId, Property, PropertyIrNode, Range, Sequence, SignalDeclaration, UnnamedExpressionDeclaration
 from sexpr.primitives import And, Not, Or, PropAlwaysRanged, PropSeq, SeqBool, SeqConcat, SeqRepeat, Constant
 from tests.helpers import wrap_in_document, wrap_multiple_expr_in_document, wrap_statement_in_document, wrap_multiple_statements_in_document
+from tests.helpers import apply_roundtrip
 
 
 
@@ -211,42 +213,11 @@ def test_generate_raw_sexpr_node_defs_no_error(expr):
 
 @pytest.mark.parametrize('expr', expr_valid_list)
 def test_roundtrip_unnamed_expr(expr):
-    container1 = IrContainer()
-    parse_document(wrap_in_document(expr), ir_container=container1)
-    output_document = container1.output_container()
-    print(output_document)
-    container2 = IrContainer()
-    parse_document(output_document, ir_container=container2)
-    container1.canonical_id_renaming()
-    container2.canonical_id_renaming()
-    assert container1 == container2
+    apply_roundtrip(wrap_in_document(expr))
 
 @pytest.mark.parametrize('expr', named_expr_valid_list)
 def test_roundtrip_named_expr(expr):
-    container1 = IrContainer()
-    parse_document(wrap_statement_in_document(expr), ir_container=container1)
-    output_document = container1.output_container()
-    print(output_document)
-    container2 = IrContainer()
-    parse_document(output_document, ir_container=container2)
-    container1.canonical_id_renaming()
-    container2.canonical_id_renaming()
-    assert container1 == container2
-
-#def test_roundtrip_raw_sexpr7_declare_rec():
-#    expr = raw_sexpr7_declare_rec
-#    container1 = IrContainer()
-#    parse_document(wrap_statement_in_document(expr), ir_container=container1)
-#    output_document = container1.output_container()
-#    print(output_document)
-#    container2 = IrContainer()
-#    parse_document(output_document, ir_container=container2)
-#    container1.canonical_id_renaming()
-#    container2.canonical_id_renaming()
-#    output_directory: Path = Path('./output')
-#    container1.show_graph(output_directory / 'expr7_decl_1.png')
-#    container2.show_graph(output_directory / 'expr7_decl_2.png')
-#    assert container1 == container2
+    apply_roundtrip(wrap_statement_in_document(expr))
 
 
 def test_expr6_declare():
@@ -436,3 +407,10 @@ def test_signal_redeclaration():
 
     #output_directory: Path = Path('./output')
     #container3_2.show_graph(output_directory / 'signal_test.png')
+
+
+@pytest.mark.parametrize('expr', uninst_node_exprs)
+def test_uninstantiated_node(expr):
+    with pytest.raises(ValueError, match='uninstantiated node'):
+        container = IrContainer()
+        parse_document(wrap_in_document(expr), ir_container=container)
