@@ -4,19 +4,8 @@ from sexpr import parse_expression, parse_literal, parse_raw_sexpr, RawSExprList
 from tests.helpers import wrap_in_document, wrap_multiple_expr_in_document, wrap_statement_in_document, wrap_multiple_statements_in_document
 from tests.helpers import apply_roundtrip
 from tests.strategies import parsable_document, parsable_boolean_document, parsable_let_rec_boolean_document, parsable_sequence_document, parsable_property_document
+from tests.strategies import parsable_let_rec_boolean_nested_document
 
-
-def apply_roundtrip(document: RawSExprList):
-    print(f'TESTING {document}')
-    container1 = IrContainer()
-    parse_document(document, ir_container=container1)
-    output_document = container1.output_container()
-    print(output_document)
-    container2 = IrContainer()
-    parse_document(output_document, ir_container=container2)
-    container1.canonical_id_renaming()
-    container2.canonical_id_renaming()
-    assert container1 == container2
 
 
 @settings(verbosity=Verbosity.verbose, max_examples=20)
@@ -45,3 +34,8 @@ def test_roundtrip_unnamed_expr_random_property(doc):
 def test_roundtrip_unnamed_expr_random_let_rec_boolean(doc):
     apply_roundtrip(doc)
 
+
+@settings(verbosity=Verbosity.verbose, max_examples=50, deadline=3000)
+@given(parsable_let_rec_boolean_nested_document())
+def test_roundtrip_unnamed_expr_random_let_rec_boolean_nested(doc):
+    apply_roundtrip(doc)

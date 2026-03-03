@@ -26,6 +26,12 @@ def wrap_multiple_statements_in_document(expr_list: list[RawSExprList]) -> RawSE
         ['add-signals', 'c', 'd'],
     ] + expr_list
 
+def wrap_signals_and_expr_in_document(signals: list[str], expr: RawSExprList):
+    return ['document',
+        ['add-signals'] + signals,
+        ['parse-sexpr', expr]
+    ]
+
 
 def apply_roundtrip(document: RawSExprList):
     print(f'TESTING {document}')

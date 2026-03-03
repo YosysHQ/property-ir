@@ -1,7 +1,9 @@
+from typing import Optional
 from hypothesis import strategies as st
 from hypothesis import settings
 
 from src.sexpr.base import RawSExpr, RawSExprList
+from tests.helpers import wrap_signals_and_expr_in_document
 
 
 
@@ -9,7 +11,7 @@ def identifier() -> st.SearchStrategy:
     #return st.text(min_size=1)
     return st.from_regex(r"[A-Za-z0-9-_]+", fullmatch=True)
 
-identifier_list: st.SearchStrategy = st.lists(elements=identifier(), min_size=1, max_size=4, unique=True)
+identifier_list: st.SearchStrategy = st.lists(elements=identifier(), min_size=1, max_size=5, unique=True)
 
 def raw_sexpr() -> st.SearchStrategy:
     return st.recursive(base=identifier(), extend=lambda children: st.lists(elements=children, min_size=1))
@@ -76,10 +78,24 @@ def parsable_let_rec_boolean(draw, declared_signals: list[str]) -> RawSExprList:
 
 
 @st.composite
-def parsable_let_rec_boolean_nested(draw, declared_names: list[str]) -> RawSExprList:
+def parsable_let_rec_boolean_nested(draw, declared_names: list[str], inner=False) -> RawSExprList:
     let_identifiers = draw(st.lists(elements=identifier().filter(lambda x: x not in declared_names), min_size=1, max_size=3, unique=True))
     all_identifiers = declared_names + let_identifiers
-    return []
+    inner_let_rec: Optional[RawSExprList] = None
+    nested_idf: Optional[str] = None
+    if not inner:
+        inner_let_rec = draw(parsable_let_rec_boolean_nested(declared_names=all_identifiers, inner=True))
+        nested_idf = draw(st.sampled_from(let_identifiers))
+    let_rec_expr = []
+    for idf in let_identifiers:
+        if not inner:
+            if idf == nested_idf:
+                let_rec_expr.append([idf, inner_let_rec])
+                continue
+        expr: RawSExprList = draw(parsable_boolean(all_identifiers).filter(lambda x: x not in all_identifiers))
+        let_rec_expr.append([idf, expr])
+    return_value = draw(st.sampled_from(let_identifiers))
+    return ['let-rec'] + let_rec_expr + [return_value] # type: ignore
 
 
 
@@ -91,47 +107,37 @@ def parsable_declare_rec():
 def parsable_let_rec_boolean_document(draw) -> RawSExprList:
     declared_signals = draw(identifier_list)
     expr = draw(parsable_let_rec_boolean(declared_signals))
-    return ['document',
-        ['add-signals'] + declared_signals,
-        ['parse-sexpr', expr]
-    ]
+    return wrap_signals_and_expr_in_document(declared_signals, expr)
 
+@st.composite
+def parsable_let_rec_boolean_nested_document(draw) -> RawSExprList:
+    declared_signals = draw(identifier_list)
+    expr = draw(parsable_let_rec_boolean_nested(declared_signals))
+    return wrap_signals_and_expr_in_document(declared_signals, expr)
 
 @st.composite
 def parsable_boolean_document(draw) -> RawSExprList:
     declared_signals = draw(identifier_list)
     expr = draw(parsable_boolean(declared_signals))
-    return ['document',
-        ['add-signals'] + declared_signals,
-        ['parse-sexpr', expr]
-    ]
+    return wrap_signals_and_expr_in_document(declared_signals, expr)
 
 @st.composite
 def parsable_sequence_document(draw) -> RawSExprList:
     declared_signals = draw(identifier_list)
     expr = draw(parsable_sequence(declared_signals))
-    return ['document',
-        ['add-signals'] + declared_signals,
-        ['parse-sexpr', expr]
-    ]
+    return wrap_signals_and_expr_in_document(declared_signals, expr)
 
 @st.composite
 def parsable_property_document(draw) -> RawSExprList:
     declared_signals = draw(identifier_list)
     expr = draw(parsable_property(declared_signals))
-    return ['document',
-        ['add-signals'] + declared_signals,
-        ['parse-sexpr', expr]
-    ]
+    return wrap_signals_and_expr_in_document(declared_signals, expr)
 
 @st.composite
 def parsable_document(draw) -> RawSExprList:
     declared_signals = draw(identifier_list)
     expr = draw(parsable_boolean(declared_signals) | parsable_sequence(declared_signals) | parsable_property(declared_signals))
-    return ['document',
-        ['add-signals'] + declared_signals,
-        ['parse-sexpr', expr]
-    ]
+    return wrap_signals_and_expr_in_document(declared_signals, expr)
 
 
 
