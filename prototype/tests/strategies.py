@@ -1,10 +1,13 @@
 from typing import Optional
 from hypothesis import strategies as st
 from hypothesis import settings
+import logging
 
 from src.sexpr.base import RawSExpr, RawSExprList
 from tests.helpers import wrap_signals_and_expr_in_document
 
+
+logger = logging.getLogger(__name__)
 
 
 def identifier() -> st.SearchStrategy:
@@ -66,8 +69,8 @@ def parsable_property(declared_signals: list[str]) -> st.SearchStrategy:
 @st.composite
 def parsable_let_rec_boolean(draw, declared_signals: list[str]) -> RawSExprList:
     let_identifiers = draw(st.lists(elements=identifier().filter(lambda x: x not in declared_signals), min_size=1, max_size=3, unique=True))
-    print(f'declared_signals {declared_signals}')
-    print(f'let_identifiers {let_identifiers}')
+    logger.debug('declared_signals %s', declared_signals)
+    logger.debug('let_identifiers %s', let_identifiers)
     all_identifiers = declared_signals + let_identifiers
     let_rec_expr = []
     for idf in let_identifiers:
@@ -143,19 +146,19 @@ def parsable_document(draw) -> RawSExprList:
 
 def main():
 
-    print(identifier().example())
-    print(raw_sexpr().example())
-    print(bounded_range().example())
-    print(constant_range().example())
+    logger.info(identifier().example())
+    logger.info(raw_sexpr().example())
+    logger.info(bounded_range().example())
+    logger.info(constant_range().example())
 
     declared_signals = identifier_list.example()
-    print(declared_signals)
-    print(parsable_boolean(declared_signals).example())
-    print(parsable_boolean_document().example())
+    logger.info(declared_signals)
+    logger.info(parsable_boolean(declared_signals).example())
+    logger.info(parsable_boolean_document().example())
 
-    print(parsable_sequence(declared_signals).example())
-    print(parsable_property(declared_signals).example())
-    print(parsable_document().example())
+    logger.info(parsable_sequence(declared_signals).example())
+    logger.info(parsable_property(declared_signals).example())
+    logger.info(parsable_document().example())
 
 
 if __name__ == "__main__":

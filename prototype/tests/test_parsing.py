@@ -1,5 +1,6 @@
 import pytest
 from pathlib import Path
+import logging
 
 from sexpr import parse_expression, parse_literal, parse_raw_sexpr, RawSExprList, IrContainer, Signal, parse_document
 from tests.input_data import raw_sexpr1, raw_sexpr2, raw_sexpr3, raw_sexpr4, raw_sexpr5, raw_sexpr6, raw_sexpr7, raw_sexpr8
@@ -12,6 +13,7 @@ from tests.helpers import wrap_in_document, wrap_multiple_expr_in_document, wrap
 from tests.helpers import apply_roundtrip
 
 
+logger = logging.getLogger(__name__)
 
 
 literal_valid_list = [
@@ -203,11 +205,10 @@ def test_generate_raw_sexpr_node_defs_no_error(expr):
     assert isinstance(declaration, UnnamedExpressionDeclaration)
     output_expr_list = container1.generate_raw_sexpr_node_defs(node_list=[declaration.node_id], declared_nodes=declared_nodes, node_names_to_use=dict())
     output_expr2: RawSExprList | str = container1.generate_raw_sexpr_unnamed_root(node_id=declaration.node_id, declared_nodes=declared_nodes)
-    print(output_expr_list)
-    print()
-    print(output_expr2)
+    logger.debug(output_expr_list)
+    logger.debug(output_expr2)
     output_document = container1.output_container()
-    print(output_document)
+    logger.debug(output_document)
     parse_document(output_document, ir_container=IrContainer())
 
 

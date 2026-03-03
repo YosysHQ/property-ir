@@ -1,5 +1,11 @@
+import logging
+
 from sexpr import RawSExprList
 from sexpr import parse_document, IrContainer
+
+
+logger = logging.getLogger(__name__)
+
 
 def wrap_in_document(expr: RawSExprList) -> RawSExprList:
     return ['document',
@@ -34,11 +40,11 @@ def wrap_signals_and_expr_in_document(signals: list[str], expr: RawSExprList):
 
 
 def apply_roundtrip(document: RawSExprList):
-    print(f'TESTING {document}')
+    logger.info('TESTING %s', document)
     container1 = IrContainer()
     parse_document(document, ir_container=container1)
     output_document = container1.output_container()
-    print(output_document)
+    logger.info(output_document)
     container2 = IrContainer()
     parse_document(output_document, ir_container=container2)
     container1.canonical_id_renaming()

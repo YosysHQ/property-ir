@@ -1,5 +1,6 @@
 from __future__ import annotations
 from pathlib import Path
+import logging
 
 from sexpr import parse_expression, parse_raw_sexpr, IrContainer, Signal, RawSExprList, unparse_raw_sexpr
 from sexpr.base import SignalDeclaration
@@ -8,8 +9,15 @@ from sexpr.base import SignalDeclaration
 output_directory: Path = Path('prototype/output')
 
 
+logger = logging.getLogger(__name__)
+
 
 def main():
+
+    logging.basicConfig(
+        level=logging.DEBUG,
+        format="%(asctime)s | %(levelname)s | %(name)s | %(message)s")
+
 
     test_expr1 = '(or (and a b) (not (and (not a) c)) d)'
 
@@ -71,23 +79,23 @@ def main():
 
 
     expr_list1: RawSExprList = parse_raw_sexpr(test_expr1)
-    print()
+    logger.debug('=== next expression ===')
     expr_list2: RawSExprList = parse_raw_sexpr(test_expr2)
-    print()
+    logger.debug('=== next expression ===')
     expr_list3: RawSExprList = parse_raw_sexpr(test_expr3)
-    print()
+    logger.debug('=== next expression ===')
     expr_list4: RawSExprList = parse_raw_sexpr(test_expr4)
-    print()
+    logger.debug('=== next expression ===')
     expr_list5: RawSExprList = parse_raw_sexpr(test_expr5)
-    print()
+    logger.debug('=== next expression ===')
     expr_list6: RawSExprList = parse_raw_sexpr(test_expr6)
-    print()
+    logger.debug('=== next expression ===')
     expr_list7: RawSExprList = parse_raw_sexpr(test_expr7)
-    print()
+    logger.debug('=== next expression ===')
     expr_list8: RawSExprList = parse_raw_sexpr(test_expr8)
-    print()
+    logger.debug('=== next expression ===')
     expr_list9: RawSExprList = parse_raw_sexpr(test_expr9)
-    print()
+    logger.debug('=== start parsing ===')
 
     ir_container1 = IrContainer()
     ir_container2 = IrContainer()
@@ -106,13 +114,13 @@ def main():
 
     signal_dict = {signal_node1.node_id: 'a', signal_node2.node_id: 'b', signal_node3.node_id: 'c', signal_node4.node_id: 'd'}
 
-    print()
+    #print()
 
-    unparsed_expr1 = unparse_raw_sexpr(expr_list1)
-    print(unparsed_expr1)
+    #unparsed_expr1 = unparse_raw_sexpr(expr_list1)
+    #print(unparsed_expr1)
 
-    unparsed_expr2 = unparse_raw_sexpr(expr_list2)
-    print(unparsed_expr2)
+    #unparsed_expr2 = unparse_raw_sexpr(expr_list2)
+    #print(unparsed_expr2)
 
     ir_container1.add_declaration(SignalDeclaration('a', signal_node1.node_id))
     ir_container1.add_declaration(SignalDeclaration('b', signal_node2.node_id))
@@ -120,7 +128,7 @@ def main():
     ir_container1.add_declaration(SignalDeclaration('d', signal_node4.node_id))
 
     root_node_id1 = parse_expression(expr_list6, None, ir_container1.global_nodes, ir_container1)
-    print()
+    #print()
     #parse_expression(expr_list2, None, signal_dict, ir_container2)
     #print()
     #parse_expression(expr_list3, None, signal_dict, ir_container3)

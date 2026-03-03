@@ -2,6 +2,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from collections import deque
 from dataclasses import dataclass, fields, Field, field
+import logging
 from typing import Literal, Optional, Any, get_origin, get_type_hints, get_args
 from typeguard import typechecked
 from graphviz import Digraph
@@ -11,6 +12,7 @@ import re
 from .utils import UnionFind
 
 
+logger = logging.getLogger(__name__)
 
 
 @typechecked
@@ -307,7 +309,7 @@ class IrContainer:
 
         node_expr_defs: dict[str, RawSExprList] = self.generate_raw_sexpr_node_defs(inner_node_reprs, declared_nodes, node_names_to_use)
 
-        print(f'node_expr_defs while generating inner nodes expr: {node_expr_defs}')
+        logger.debug('node_expr_defs while generating inner nodes expr: %s', node_expr_defs)
 
         output_expr: RawSExprList = ['declare-rec']
         for (name, expr) in node_expr_defs.items():
@@ -316,7 +318,7 @@ class IrContainer:
             else:
                 output_expr.append([name, expr])
 
-        print(f'unprocessed_names {unprocessed_names}')
+        logger.debug('unprocessed_names %s', unprocessed_names)
 
         for name in unprocessed_names:
             node_id = self.merged_nodes.find(self.global_nodes[name])
@@ -368,9 +370,6 @@ class IrContainer:
         # search through reachable nodes and generate expr for each node visited, skip if already visited or declared
         while len(visit_next) != 0:
             current_node_id = visit_next.popleft()
-
-            #print(f'current node id {current_node_id}')
-            #print(f'visit next {visit_next}')
 
             current_repr_id = self.merged_nodes.find(current_node_id)
             if current_repr_id in visited_nodes or current_repr_id in declared_nodes:
@@ -460,7 +459,7 @@ class IrContainer:
         visit_next += self.inner_nodes.values()
         visit_next += self.sink_nodes
 
-        print(f'visit_next {visit_next}')
+        logger.debug('visit_next %s', visit_next)
 
         visited: set[NodeId] = set()
 
@@ -485,7 +484,7 @@ class IrContainer:
                 if isinstance(child_elem, NodeId) and child_elem not in visited:
                         visit_next.appendleft(child_elem)
 
-        print(f'id_mapping {id_mapping}')
+        logger.debug('id_mapping %s', id_mapping)
 
         new_nodes: dict[NodeId, PropertyIrNode] = dict()
         new_node_names: dict[str, NodeId] = dict()
@@ -685,13 +684,13 @@ class IrContainer:
 
 
         for node in self.nodes.values():
-            print(f'START NODE {node}')
+            logger.debug('START NODE %s', node)
             if isinstance(node, PlaceholderNode):
                 representative_id = self.merged_nodes.find(node.node_id)
                 if representative_id != node.node_id:
-                    print(f'represented by {representative_id}, mark to delete')
+                    logger.debug('represented by %s - mark to delete', representative_id)
                     placeholder_ids_to_remove.append(node.node_id)
-                print(f'SKIP PLACEHOLDER')
+                logger.debug('SKIP PLACEHOLDER')
                 continue
 
             signature = type(node).signature()
@@ -706,7 +705,7 @@ class IrContainer:
                         if isinstance(child_node_id, LiteralType.__value__): # skip literal type
                             continue
                         child_node_representative = self[child_node_id]
-                        print(f'child node {child_node_representative}')
+                        logger.debug('child node %s', child_node_representative)
 
                         child_representative_id: NodeId = child_node_representative.node_id
                         if child_representative_id != child_node_id:
@@ -718,7 +717,7 @@ class IrContainer:
                         continue
 
                     child_node_representative = self[child_node_id]
-                    print(f'child node {child_node_representative}')
+                    logger.debug('child node %s', child_node_representative)
 
                     child_representative_id: NodeId = child_node_representative.node_id
                     if child_representative_id != child_node_id:

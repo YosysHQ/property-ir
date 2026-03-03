@@ -1,8 +1,8 @@
 from __future__ import annotations
 from typing import Optional, Any, TypeAliasType,get_origin, get_args, Literal
-from _pytest.mark import expression
 from typeguard import typechecked
 import re
+import logging
 
 from .base import RawSExpr, RawSExprList, LiteralType, NodeId
 from .base import IrContainer, PropertyIrNode, PlaceholderNode
@@ -12,6 +12,7 @@ from .base import UnnamedExpressionDeclaration, NamedExpressionDeclaration, Sign
 from .primitives import *
 
 
+logger = logging.getLogger(__name__)
 
 
 @typechecked
@@ -35,7 +36,7 @@ def parse_raw_sexpr(expr: str) -> RawSExprList:
     elements are either str or int (int used only for integers, not for
     booleans)."""
 
-    print(expr)
+    logger.debug(expr)
 
     tokens: list[str] = re.split(r'[\s]+|(?=[()])|(?<=[()])', expr)
     tokens = [t for t in tokens if t != '']
@@ -44,7 +45,7 @@ def parse_raw_sexpr(expr: str) -> RawSExprList:
     if tokens.pop() != ')':
             raise ValueError(f"Expression not ending in ')'")
 
-    print(tokens)
+    logger.debug(tokens)
 
     current_list: RawSExprList = []
     stack: list[RawSExprList] = []
@@ -67,7 +68,7 @@ def parse_raw_sexpr(expr: str) -> RawSExprList:
     if len(stack) != 0:
             raise ValueError(f"Unexpected end of expression with stack {stack}. Missing ')'?")
 
-    print(current_list)
+    logger.debug(current_list)
 
     return current_list
 
@@ -204,8 +205,8 @@ def parse_expression(
     local_nodes: dict[str, NodeId],
     ir_container: IrContainer) -> NodeId:
 
-    print(f"start with {expr}")
-    print(f"expecting type {expected_type}")
+    logger.info(f"start with {expr}")
+    logger.info(f"expecting type {expected_type}")
 
     match expr:
 
@@ -273,7 +274,7 @@ def parse_expression(
 
                 root_node: PropertyIrNode = ir_container.add_node_by_kwargs(root_class, kwargs)
 
-                print(root_node)
+                logger.info(root_node)
                 return root_node.node_id
 
             else: # if root_symbol not in op_to_cls
