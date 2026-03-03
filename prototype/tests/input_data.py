@@ -160,3 +160,12 @@ raw_sexpr_signal_redeclaration_global2 = ['declare-rec',
 uninst_node_expr1: RawSExprList = ['let-rec', ['0', '0'], '0']
 uninst_node_expr2: RawSExprList = ['let-rec', ['0', '00'], ['00', '0'], '0']
 uninst_node_exprs = [uninst_node_expr1, uninst_node_expr2]
+
+
+
+
+merge_without_type_conflict: RawSExprList = ['let-rec',
+    ['q0', 'q2'], ['q1', 'q2'], ['q2', 'q3'], ['q3', 'q4'], ['q4', 'a'], 'q1']
+
+merge_with_type_conflict: RawSExprList = ['let-rec',
+    ['q0', 'q2'], ['q1', 'q2'], ['q2', 'q3'], ['q3', 'q4'], ['q5', ['not', 'q3']], ['q6', ['seq-concat', 'q1']], ['q4', 'a'], 'q4']
