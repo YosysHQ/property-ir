@@ -33,7 +33,7 @@ and other implementation details, see ...
 General Concept
 ^^^^^^^^^^^^^^^^
 
-The syntax of the Property IR is based on s-expressions (*symbolic expressions*).
+The syntax of the Property IR expressions is based on s-expressions (*symbolic expressions*).
 This is a notation for expressions in the form of nested lists, with
 the first element of a list representing an operation, and the subsequent
 elements representing its arguments (each being either atomic or a list again).
@@ -60,27 +60,44 @@ and returns a property (indicated by the prefix ``prop-`` of the primitive).
 
     (prop-overlapped-implication <seq> <prop>)
 
-Expressions are *well-typed*, meaning that the types of provided arguments need
-to match with the type expected by the signature of the parent primitive at that
-position, and that each expression with the correct type is acceptable as a
-parameter.
+Property IR expressions are *well-typed*, having distinct types for example
+for boolean expressions, sequences, and temporal properties.
 When describing primitives, we write parameters enclosed in angle brackets
 (e.g., ``<seq>``), which needs to be replaced by an expression with the correct
 type to yield a valid expression.
 The (return) type of the first element (or *root*) of an expression is also the
 (return) type of the whole expression.
 
-In the following example, ``a``, ``b``, and ``c`` are signals (type ``bool``).
-Concatenation (``seq-concat``) expects arguments of type ``seq``, therefore
-``seq-bool`` is used to convert the signal to a sequence of length 1.
-Similarly, ``prop-bool`` converts signal ``c`` to a sequence property of length
-1, because ``prop-always`` requires an argument of type ``prop``.
+.. meaning that the types of provided arguments need
+.. to match with the type expected by the signature of the parent primitive at that
+.. position, and that each expression with the correct type is acceptable as a
+.. parameter.
+
+Property IR provides primitives that closely match the operators of SVA,
+which allows for a direct syntactic translation.
+Consider for example the following SystemVerilog property.
+
+.. code-block:: systemverilog
+
+    property p;
+        a ##1 b |-> always(c);
+    endproperty
+
+It corresponds to the following Property IR expression.
 
 .. code-block:: sexpr
 
-    (prop-overlapped-implication
-        (seq-concat (seq-bool a) (seq-bool b))
-        (prop-always (prop-bool c)))
+    (declare p
+        (prop-overlapped-implication
+            (seq-concat (seq-bool a) (seq-bool b))
+            (prop-always (prop-bool c))))
+
+The signals ``a``, ``b``, and ``c`` have type ``bool``.
+Concatenation (``seq-concat``) expects arguments of type ``seq``, therefore
+``seq-bool`` is used to convert the signals to sequences of length 1.
+Similarly, ``prop-bool`` converts signal ``c`` to a sequence property of length 1,
+because ``prop-always`` requires an argument of type ``prop``.
+With ``declare`` we can bind expressions to identifiers to reference them later.
 
 Expressions can be regarded as an expression graph, and this is also how they
 are stored and processed internally.
@@ -88,15 +105,58 @@ In this graph, the *nodes* are primitives (or external signals, or literals)
 and the *edges* are connections between nodes, pointing from primitives as
 parents to their arguments as children.
 
-Different from the classical s-expressions in the strict sense, which can only
-represent trees, Property IR provies a syntax to represent cycles.
+TODO: image
 
-naming and referencing nodes
+Different from the classical s-expressions in the strict sense,
+Property IR provides a syntax to represent cycles by naming
+and referencing nodes.
+Using this feature, recursive properties like the following
+(which is equivalent to ``always(a)``) can be expressed.
 
-example cycles
+.. code-block:: systemverilog
+
+    property always_a;
+        a and (1'b1 |=> always_a);
+    endproperty
 
 
+.. code-block:: sexpr
 
+    (declare-rec
+        (declare always_a
+            (prop-and
+                (prop-bool a)
+                (prop-non-overlapped-implication
+                    (constant true)
+                    always_a))))
+
+
+TODO: image
+
+Similarly, mutually recursive properties can be expressed.
+
+.. code-block:: systemverilog
+
+    property prop1;
+        a and (1'b1 |=> prop2);
+    endproperty
+
+    property prop2;
+        b and (1'b1 |=> prop1);
+    endproperty
+
+
+.. code-block:: sexpr
+
+    (declare-rec
+        (declare prop1 (prop-and
+            (prop-bool a)
+            (prop-non-overlapped-implication (seq-bool (true)) prop2)))
+        (declare prop2 (prop-and
+            (prop-bool b)
+            (prop-non-overlapped-implication (seq-bool (true)) prop1))))
+
+TODO: image
 
 
 Application in Yosys
@@ -107,14 +167,7 @@ external input
 ``$property`` cell
 
 
-Representing SVA in Property IR
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-Consider the following SystemVerilog assertion.
 
 
-In can be expressed in Property IR in the following way.
 
-We can bind expressions to identifiers to reuse them later.
 
-Recursive properties can be expressed as well.

@@ -115,6 +115,19 @@ However, it is possible to first use an identifier locally inside a ``let-rec``
 expression and then declare it later.
 
 
+*Identifiers:*
+Any string may be used as an identifier, including the empty string and
+primitive symbols. This facilitates integration with other tools.
+Since the first element of each list in an expression is a primitive and all
+other elements are arguments, expressions can be parsed unambiguously.
+
+Globally declared identifiers may not be redeclared, and also not used as local
+identifiers later in a document. Nested ``let-rec`` may not reuse identifiers,
+i.e., *shadowig* is forbidden.
+
+(is this really what we want?)
+
+
 
 Expression declaration
 """"""""""""""""""""""""""""""

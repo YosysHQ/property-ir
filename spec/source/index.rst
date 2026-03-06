@@ -19,3 +19,4 @@ Property IR documentation
    syntax
    considerations
    primitives
+   sva_table

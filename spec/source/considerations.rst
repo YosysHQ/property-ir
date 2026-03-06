@@ -52,43 +52,7 @@ keeping all restrictions of the SV standard.
 
 
 
-Rewriting Passes
-~~~~~~~~~~~~~~~~~~~
-
-Rewriting passes are transformations of Property IR expressions.
-They are defined outside of Property IR. It will be
-possible to define them using a LHS in the form of a Property IR expression
-to apply pattern matching, but their RHS may contain any logic that is not
-necessarily expressible inside Property IR.
-
-At the moment it is not planned to provide a way inside Property IR to define
-additional primitives.
 
 
-.. Macros
-.. ~~~~~~~~~
-..
-.. Macros are functions that perform some computation outside of Property IR.
-.. They are written with the prefix ``#``.
-.. Macros can be rewriting passes, but there can also be macros that do not return
-.. expressions, e.g. ``#admits-empty`` returns ``true`` if a sequence admits an
-.. empty match, and ``false`` else.
-..
-.. (list more macros? should this be part of the specification?)
-
-
-Identifiers
-~~~~~~~~~~~~~
-
-Any string may be used as an identifier, including the empty string and
-primitive symbols. This facilitates integration with other tools.
-Since the first element of each list in an expression is a primitive and all
-other elements are arguments, expressions can be parsed unambiguously.
-
-Globally declared identifiers may not be redeclared, and also not used as local
-identifiers later in a document. Nested ``let-rec`` may not reuse identifiers,
-i.e., *shadowig* is forbidden.
-
-(is this really what we want?)
 
 
