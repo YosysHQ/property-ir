@@ -65,16 +65,16 @@ At the moment it is not planned to provide a way inside Property IR to define
 additional primitives.
 
 
-Macros
-~~~~~~~~~
-
-Macros are functions that perform some computation outside of Property IR.
-They are written with the prefix ``#``.
-Macros can be rewriting passes, but there can also be macros that do not return
-expressions, e.g. ``#admits-empty`` returns ``true`` if a sequence admits an
-empty match, and ``false`` else.
-
-(list more macros? should this be part of the specification?)
+.. Macros
+.. ~~~~~~~~~
+..
+.. Macros are functions that perform some computation outside of Property IR.
+.. They are written with the prefix ``#``.
+.. Macros can be rewriting passes, but there can also be macros that do not return
+.. expressions, e.g. ``#admits-empty`` returns ``true`` if a sequence admits an
+.. empty match, and ``false`` else.
+..
+.. (list more macros? should this be part of the specification?)
 
 
 Identifiers
@@ -92,7 +92,3 @@ i.e., *shadowig* is forbidden.
 (is this really what we want?)
 
 
-
-
-External Input
-~~~~~~~~~~~~~~~~
