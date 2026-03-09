@@ -37,10 +37,11 @@ The syntax of the Property IR expressions is based on s-expressions (*symbolic e
 This is a notation for expressions in the form of nested lists, with
 the first element of a list representing an operation, and the subsequent
 elements representing its arguments (each being either atomic or a list again).
-We can also regard operation and arguments as parent and children in a
-tree-like structure.
 For mathematical terms, this is also known as *Polish notation* or *prefix
 notation*, and it is the principle that the Lisp programming language is based on.
+
+.. We can also regard operation and arguments as parent and children in a
+.. tree-like structure.
 
 .. code-block:: sexpr
 
@@ -62,7 +63,8 @@ and returns a property (indicated by the prefix ``prop-`` of the primitive).
 
 Property IR expressions are *well-typed*, having distinct types for example
 for boolean expressions, sequences, and temporal properties.
-When describing primitives, we write parameters enclosed in angle brackets
+When specifying the signature of primitives in this document, we write
+parameters enclosed in angle brackets
 (e.g., ``<seq>``), which needs to be replaced by an expression with the correct
 type to yield a valid expression.
 The (return) type of the first element (or *root*) of an expression is also the
@@ -95,14 +97,15 @@ It corresponds to the following Property IR expression.
 The signals ``a``, ``b``, and ``c`` have type ``bool``.
 Concatenation (``seq-concat``) expects arguments of type ``seq``, therefore
 ``seq-bool`` is used to convert the signals to sequences of length 1.
-Similarly, ``prop-bool`` converts signal ``c`` to a sequence property of length 1,
+Similarly, ``prop-bool`` converts signal ``c`` to a sequence property,
 because ``prop-always`` requires an argument of type ``prop``.
 With ``declare`` we can bind expressions to identifiers to reference them later.
 
 Expressions can be regarded as an expression graph, and this is also how they
 are stored and processed internally.
-In this graph, the *nodes* are primitives (or external signals, or literals)
-and the *edges* are connections between nodes, pointing from primitives as
+In this graph, the *nodes* are primitives in the case of internal nodes, and
+external signals or literals (like integers or ranges) in the case of leaf nodes.
+The *edges* are connections between nodes, pointing from primitives as
 parents to their arguments as children.
 
 TODO: image
@@ -158,16 +161,68 @@ Similarly, mutually recursive properties can be expressed.
 
 TODO: image
 
+The same syntax will also be used to represent cycles in the automata or
+checker circuit representations of properties in later steps of the verification flow.
 
-Application in Yosys
+
+Embedding in Yosys
 ^^^^^^^^^^^^^^^^^^^^^^
 
-external input
+Property IR embeds into RTLIL via a new ``$property`` cell that stores
+the textual Property IR code in a parameter.
+One ``$property`` cell may contain several assertions, which enables optimizations
+that were else not possible. We call the contents of one ``$property`` cell
+a Property IR *document*.
+The ``$property`` cell takes a parametric number of input bits and produces a
+parametric number of output bits.
+The meaning of individual bits is declared as part of the embedded
+Property IR code and can include:
 
-``$property`` cell
+* observed signals of the design as inputs
+* checker status of properties as outputs
+* sequence matches as outputs
+* local variable assignments as inputs
+* local variable values as outputs (undefined if used outside of local
+  variable assignments)
+
+There are certain SystemVerilog expressions that can be used in SystemVerilog
+assertions but can not be represented in Property IR.
+This concerns the *extended Booleans*, including sampled value functions like
+``$past$``, ``$rose$`` etc. and
+the ``matched`` and ``triggered`` functions.
+The reason is that Property IR expects *time-variable Booleans* as input,
+that is, functions from time to Boolean. Allowing ``$past`` and similar
+operators would deviate from this stateless notion of input.
+Future revisions of Property IR might include native support for some of these
+functions.
+(Also note that ``x`` and ``z`` do not exist inside Property IR, and are treated
+as they usually are in SystemVerilog in a purely Boolean context.)
+Extended Boolean expressions need to be synthesized outside of Property IR, and
+the output signals of the synthesized circuits become input signals of the
+``$property`` cell. Then they are treated like any other Boolean input inside Property IR.
+
+.. code-block:: systemverilog
+
+    property prop;
+        $rose(b) |-> always(a);
+    endproperty
+
+In this example, let signal ``rose_b`` be the output of the circuit that was
+synthesized for ``$rose(b)`` and becomes an input for a ``$property`` cell.
+(For simplicity, we omitted the declaration of inputs in previous examples.)
+
+.. code-block:: sexpr
+
+    (declare-input a)
+    (declare-input rose_b)
+    (declare prop (prop-overlapped-implication (seq-bool rose_b) (prop-bool a)))
 
 
+Registering properties for FV continues to use the existing ``$check`` cell
+(or the lower level ``$assert``, ``$assume``, etc. cells).
+The synthesis of checker circuits will be done in multiple passes with
+intermediate results representable as Property IR.
 
-
-
+The MLIR dialect for RTLIL will be extended to represent Property IR in order
+to ensure interoperability with CIRCT.
 
