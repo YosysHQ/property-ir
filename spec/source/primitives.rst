@@ -322,10 +322,6 @@ Property expressions:
 
 .. code-block:: sexpr
 
-    (prop-non-overlapped-implication
-        (seq-concat (seq-bool a) (seq-bool b))
-        (prop-always (prop-bool c)))
-
     (prop-until
         (prop-not (prop-seq (seq-concat (seq-bool a) (seq-bool b))))
         (prop-seq (seq-and (seq-bool c) (seq-bool a))))
@@ -334,41 +330,43 @@ Property expressions:
         (range 4 $)
         (prop-seq (seq-bool (not b))))
 
-Recursive property:
-
-.. code-block:: sexpr
-
-    (let-rec (prop1
-        (prop-and
-            (prop-bool a)
-            (prop-non-overlapped-implication (seq-bool (true)) prop1)))
-        prop1)
-
-Mutually recursive properties:
-
-.. code-block:: sexpr
-
-    (let-rec
-        (prop1 (prop-and
-            (prop-bool a)
-            (prop-non-overlapped-implication (seq-bool (true)) prop2)))
-        (prop2 (prop-and
-            (prop-bool b)
-            (prop-non-overlapped-implication (seq-bool (true)) prop1)))
-    prop1)
 
 
-Declaration form:
-
-.. code-block:: sexpr
-
-    (declare-rec
-        (declare prop1 (prop-and
-            (prop-bool a)
-            (prop-non-overlapped-implication (seq-bool (true)) prop2)))
-        (declare prop2 (prop-and
-            (prop-bool b)
-            (prop-non-overlapped-implication (seq-bool (true)) prop1))))
+.. Recursive property:
+..
+.. .. code-block:: sexpr
+..
+..     (let-rec (prop1
+..         (prop-and
+..             (prop-bool a)
+..             (prop-non-overlapped-implication (seq-bool (true)) prop1)))
+..         prop1)
+..
+.. Mutually recursive properties:
+..
+.. .. code-block:: sexpr
+..
+..     (let-rec
+..         (prop1 (prop-and
+..             (prop-bool a)
+..             (prop-non-overlapped-implication (seq-bool (true)) prop2)))
+..         (prop2 (prop-and
+..             (prop-bool b)
+..             (prop-non-overlapped-implication (seq-bool (true)) prop1)))
+..     prop1)
+..
+..
+.. Declaration form:
+..
+.. .. code-block:: sexpr
+..
+..     (declare-rec
+..         (declare prop1 (prop-and
+..             (prop-bool a)
+..             (prop-non-overlapped-implication (seq-bool (true)) prop2)))
+..         (declare prop2 (prop-and
+..             (prop-bool b)
+..             (prop-non-overlapped-implication (seq-bool (true)) prop1))))
 
 
 

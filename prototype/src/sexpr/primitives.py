@@ -55,6 +55,11 @@ class SeqRepeat(Sequence):
 
 @typechecked
 @dataclass
+class PropBool(Property):
+    child: NodeId[Bool]
+
+@typechecked
+@dataclass
 class PropAlways(Property):
     child: NodeId[Property]
 
@@ -77,6 +82,12 @@ class PropSeq(Property):
 @typechecked
 @dataclass
 class PropNonOverlappedImplication(Property):
+    child1: NodeId[Sequence]
+    child2: NodeId[Property]
+
+@typechecked
+@dataclass
+class PropOverlappedImplication(Property):
     child1: NodeId[Sequence]
     child2: NodeId[Property]
 

@@ -108,7 +108,11 @@ external signals or literals (like integers or ranges) in the case of leaf nodes
 The *edges* are connections between nodes, pointing from primitives as
 parents to their arguments as children.
 
-TODO: image
+.. figure:: /_images/spec_exp1.svg
+    :class: width-helper invert-helper
+    :name: spec_exp1
+
+    expression graph of ``p``
 
 Different from the classical s-expressions in the strict sense,
 Property IR provides a syntax to represent cycles by naming
@@ -130,11 +134,16 @@ Using this feature, recursive properties like the following
             (prop-and
                 (prop-bool a)
                 (prop-non-overlapped-implication
-                    (constant true)
+                    (seq-bool (constant true))
                     always_a))))
 
 
-TODO: image
+.. figure:: /_images/spec_exp2.svg
+    :class: width-helper invert-helper
+    :name: spec_exp1
+
+    expression graph of ``always_a``
+
 
 Similarly, mutually recursive properties can be expressed.
 
@@ -154,12 +163,18 @@ Similarly, mutually recursive properties can be expressed.
     (declare-rec
         (declare prop1 (prop-and
             (prop-bool a)
-            (prop-non-overlapped-implication (seq-bool (true)) prop2)))
+            (prop-non-overlapped-implication (seq-bool (constant true)) prop2)))
         (declare prop2 (prop-and
             (prop-bool b)
-            (prop-non-overlapped-implication (seq-bool (true)) prop1))))
+            (prop-non-overlapped-implication (seq-bool (constant true)) prop1))))
 
-TODO: image
+
+.. figure:: /_images/spec_exp3.svg
+    :class: width-helper invert-helper
+    :name: spec_exp1
+
+    expression graph of ``prop1`` and ``prop2``
+
 
 The same syntax will also be used to represent cycles in the automata or
 checker circuit representations of properties in later steps of the verification flow.
@@ -193,13 +208,17 @@ the ``matched`` and ``triggered`` functions.
 The reason is that Property IR expects *time-variable Booleans* as input,
 that is, functions from time to Boolean. Allowing ``$past`` and similar
 operators would deviate from this stateless notion of input.
-Future revisions of Property IR might include native support for some of these
-functions.
-(Also note that ``x`` and ``z`` do not exist inside Property IR, and are treated
-as they usually are in SystemVerilog in a purely Boolean context.)
+Also note that ``x`` and ``z`` do not exist inside Property IR, and are treated
+as they usually are in SystemVerilog in a purely Boolean context.
 Extended Boolean expressions need to be synthesized outside of Property IR, and
 the output signals of the synthesized circuits become input signals of the
 ``$property`` cell. Then they are treated like any other Boolean input inside Property IR.
+
+.. note::
+
+    Future revisions of Property IR might include native support for some of these
+    functions.
+
 
 .. code-block:: systemverilog
 

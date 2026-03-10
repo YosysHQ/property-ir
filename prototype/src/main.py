@@ -2,7 +2,7 @@ from __future__ import annotations
 from pathlib import Path
 import logging
 
-from sexpr import parse_expression, parse_raw_sexpr, IrContainer, Signal, RawSExprList, unparse_raw_sexpr
+from sexpr import parse_expression, parse_raw_sexpr, IrContainer, Signal, RawSExprList, unparse_raw_sexpr, parse_document
 from sexpr.base import SignalDeclaration
 
 
@@ -77,6 +77,26 @@ def main():
 
     #signal_dict = {'a': Signal('a'), 'b': Signal('b'), 'c': Signal('c'), 'd': Signal('d')}
 
+    spec_example1 = """(document (declare p
+        (prop-overlapped-implication
+            (seq-concat (seq-bool a) (seq-bool b))
+            (prop-always (prop-bool c)))))"""
+
+    spec_example2 = """(document (declare-rec
+        (declare always_a
+            (prop-and
+                (prop-bool a)
+                (prop-non-overlapped-implication
+                    (seq-bool (constant true))
+                    always_a)))))"""
+
+    spec_example3 = """(document (declare-rec
+        (declare prop1 (prop-and
+            (prop-bool a)
+            (prop-non-overlapped-implication (seq-bool (true)) prop2)))
+        (declare prop2 (prop-and
+            (prop-bool b)
+            (prop-non-overlapped-implication (seq-bool (true)) prop1)))))"""
 
     expr_list1: RawSExprList = parse_raw_sexpr(test_expr1)
     logger.debug('=== next expression ===')
@@ -95,6 +115,14 @@ def main():
     expr_list8: RawSExprList = parse_raw_sexpr(test_expr8)
     logger.debug('=== next expression ===')
     expr_list9: RawSExprList = parse_raw_sexpr(test_expr9)
+
+    logger.debug('=== next expression ===')
+    spec_expr_list1: RawSExprList = parse_raw_sexpr(spec_example1)
+    logger.debug('=== next expression ===')
+    spec_expr_list2: RawSExprList = parse_raw_sexpr(spec_example2)
+    logger.debug('=== next expression ===')
+    spec_expr_list3: RawSExprList = parse_raw_sexpr(spec_example3)
+
     logger.debug('=== start parsing ===')
 
     ir_container1 = IrContainer()
@@ -108,11 +136,11 @@ def main():
     ir_container9 = IrContainer()
 
     signal_node1 = ir_container1.add_signal_node('a')
-    signal_node2 = ir_container1.add_signal_node('b')
-    signal_node3 = ir_container1.add_signal_node('c')
-    signal_node4 = ir_container1.add_signal_node('d')
+    #signal_node2 = ir_container1.add_signal_node('b')
+    #signal_node3 = ir_container1.add_signal_node('c')
+    #signal_node4 = ir_container1.add_signal_node('d')
 
-    signal_dict = {signal_node1.node_id: 'a', signal_node2.node_id: 'b', signal_node3.node_id: 'c', signal_node4.node_id: 'd'}
+    #signal_dict = {signal_node1.node_id: 'a', signal_node2.node_id: 'b', signal_node3.node_id: 'c', signal_node4.node_id: 'd'}
 
     #print()
 
@@ -123,11 +151,14 @@ def main():
     #print(unparsed_expr2)
 
     ir_container1.add_declaration(SignalDeclaration('a', signal_node1.node_id))
-    ir_container1.add_declaration(SignalDeclaration('b', signal_node2.node_id))
-    ir_container1.add_declaration(SignalDeclaration('c', signal_node3.node_id))
-    ir_container1.add_declaration(SignalDeclaration('d', signal_node4.node_id))
+    #ir_container1.add_declaration(SignalDeclaration('b', signal_node2.node_id))
+    #ir_container1.add_declaration(SignalDeclaration('c', signal_node3.node_id))
+    #ir_container1.add_declaration(SignalDeclaration('d', signal_node4.node_id))
 
-    root_node_id1 = parse_expression(expr_list6, None, ir_container1.global_nodes, ir_container1)
+
+    root_node_id1 = parse_document(spec_expr_list2, ir_container1)
+
+    #root_node_id1 = parse_expression(expr_list1, None, ir_container1.global_nodes, ir_container1)
     #print()
     #parse_expression(expr_list2, None, signal_dict, ir_container2)
     #print()
@@ -169,7 +200,7 @@ def main():
     #print(ir_container7.merged_nodes.parents)
     #print()
 
-    #ir_container1.show_graph(output_directory / 'container1.png')
+    ir_container1.show_graph(output_directory / 'container1.png')
 
 
 if __name__ == "__main__":

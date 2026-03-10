@@ -2,6 +2,7 @@ from typing import Optional
 from hypothesis import strategies as st
 from hypothesis import settings
 import logging
+import string
 
 from src.sexpr.base import RawSExpr, RawSExprList
 from tests.helpers import wrap_signals_and_expr_in_document
@@ -12,7 +13,8 @@ logger = logging.getLogger(__name__)
 
 def identifier() -> st.SearchStrategy:
     #return st.text(min_size=1)
-    return st.from_regex(r"[A-Za-z0-9-_]+", fullmatch=True)
+    #return st.from_regex(r"[A-Za-z0-9-_]+", fullmatch=True)
+    return st.text(alphabet=string.ascii_letters + string.digits + "_", min_size=1, max_size=3)
 
 identifier_list: st.SearchStrategy = st.lists(elements=identifier(), min_size=1, max_size=5, unique=True)
 

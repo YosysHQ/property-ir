@@ -51,7 +51,7 @@ def parse_raw_sexpr(expr: str) -> RawSExprList:
     stack: list[RawSExprList] = []
 
     for t in tokens:
-        if re.fullmatch(r'[a-zA-Z0-9\-\$]+', t):
+        if re.fullmatch(r'[a-zA-Z0-9\-\$\_]+', t):
             current_list.append(t)
         elif t == "(":
             stack.append(current_list)
