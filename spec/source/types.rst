@@ -61,4 +61,28 @@ According to the SV standard, the sequence expression of a sequential
 property shall not admit an empty match.
 
 
-(fewer primitives for simple sequences / simple properties?)
+Transformation to Simple Sequence
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+The clocked sequence can be rewritten to a simple sequence using the macros
+``#clk-seq-apply-clock``, ``#clk-seq-nonempty-part``, and ``#seq-remove-clock`` in
+this order.
+
+.. code-block:: sexpr
+
+    (clk-seq-clocked <bool> <clk_seq>)  ; clocked
+
+    |   #clk-seq-apply-clock
+    V
+
+    (clk-seq-clocked (true) <clk_seq2>)   ; global-clocked
+
+    |  #clk-seq-nonempty-part
+    V
+
+    (clk-seq-clocked (true) <clk_seq3>)   ; global-clocked and non-empty-matching
+
+    |  #seq-remove-clock
+    V
+
+    <seq>                               ; simple/unclocked

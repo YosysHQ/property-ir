@@ -1,38 +1,11 @@
 Syntax
 -----------------
 
-.. Types
-.. ~~~~~~~
-..
-.. Literal types
-.. ^^^^^^^^^^^^^^^
-..
-.. * Boolean literal: ``<bool_literal> = true | false``
-.. * Non-negative integer: ``<int> = n`` with :math:`n \in \mathbb N_{0}`
-.. * Bounded range: ``<bounded_range> = (bounded-range n m)`` with :math:`n,m \in \mathbb N_{0}` and :math:`n \leq m`
-.. * Constant range: ``<range> = (range n m) | (range n $)`` with :math:`n,m \in \mathbb N_{0}` and :math:`n \leq m`
-..
-..
-..
-.. .. :math:`0 \leq n \leq m`
-..
-.. .. <bounded_range> = (bounded-range <integer1> <integer2>) with <integer1> <= <integer2>
-..
-.. .. <range> = (range <integer> $) | (range <integer1> <integer2>) with <integer1> <= <integer2>
-..
-..
-.. Expression types
-.. ^^^^^^^^^^^^^^^^^
-..
-.. * Boolean Expression ``bool``
-.. * Clocked Sequence ``clk-seq``
-.. * Simple Sequence ``seq``
-.. * Clocked Property ``clk-prop``
-.. * Simple Property ``prop``
-.. * Automata State
-.. * Circuit
+.. role:: sexpr(code)
+   :language: sexpr
 
-
+.. role:: systemverilog(code)
+   :language: systemverilog
 
 
 Expressions
@@ -241,7 +214,7 @@ condition to be true.
 Note how this is different from the disable condition.
 
 In order to use an assertion inside an ``initial`` block,
-use the :sexpr:`bool-initial` primitive that is high only in the first time step.
+use the :sexpr:`initial` primitive that is high only in the first time step.
 
 Assertion statements in SVA may contain a clocking event.
 Property IR does not provide this option because it is semantically equivalent

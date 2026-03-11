@@ -3,31 +3,47 @@ Primitives
 
 By convention, except for ``bool``,
 each primitive symbol has as a prefix the type that it returns.
+This makes the type of an expression immediately evident, and is necessary
+to disambiguate between for example ``and``, ``seq-and``, and ``prop-and``.
 
 
 Boolean Expression
 ^^^^^^^^^^^^^^^^^^^^
 
-.. *Note:* Do not use  &&, ||, !, because it becomes too confusing if there are many
-    different names for the same concept. Use ``seq_and``, ``prop_and`` etc. for
-    sequences and properties.
+.. Recall that ``x`` and ``z`` do not exist inside Property IR, and are treated
+.. as they usually are in SystemVerilog in a purely Boolean context.
 
-*Notes:*
+.. note::
 
-* Sampled value functions (``$rose``, ``$fell``, ``$stable`` etc.)
-  are handled outside of Property IR.
+    Extended Booleans like sampled value functions (``$past``, ``$rose``, ``$fell``, ``$stable`` etc.)
+    as well as ``triggered`` and ``matched``
+    need to be handled outside of Property IR.
 
 
-Basic booleans:
+Basic Booleans
+""""""""""""""""
 
 .. code-block:: sexpr
 
-    <bool> = <signal_name>
+    <signal_name>
 
-           | (constant <bool_literal>) ; can be abbreviated as (<bool_literal>)
+    (constant <bool_literal>) ; can be abbreviated as (<bool_literal>)
+
+    (initial)
+
+After declaring a one-bit signal as external input using ``declare-input``,
+it can be used as an expression of type ``bool``.
+
+A Boolean that is constant high (``1'b1``) resp. low (``1'b0``) is written as
+``(constant true)`` resp. ``(constant false)``, or abbreviated as ``(true)`` resp. ``(false)``.
+
+The Boolean primitive ``initial`` corresponds to a signal that is high only in
+the first time step.
 
 
-Boolean primitives:
+
+Boolean primitives
+""""""""""""""""""""
 
 .. code-block:: sexpr
 
@@ -37,8 +53,10 @@ Boolean primitives:
 
     (or <bool1> <bool2> ...)
 
+These primitives correspond to the logical operators ``!``, ``&&``, and ``||`` of SystemVerilog.
+The primitives ``and`` and ``or`` accept any positive number of arguments of type ``bool``.
 
-.. Are there other Boolean primitives we need to consider?
+
 
 Examples
 """"""""""""""
@@ -56,75 +74,113 @@ Clocked Sequence
 ^^^^^^^^^^^^^^^^^
 
 Clocked sequences use a clock that may be different from the global clock.
-The available primitives are the same as for simple sequences, but with the
-additional prefix ``clk-``.
-All their arguments that are sequences need to be of type ``clk-seq``.
+Each primitive has the prefix ``clk-seq-``.
+All their arguments that are sequences need to be of type ``clk-seq`` as well.
+
+.. note:
+
+    The extended Booleans ``triggered`` and ``matched`` operating on sequences
+    are handled outside of Property IR.
+
+
+Specifying the clock
+""""""""""""""""""""""
 
 There is an additional primitive for specifying the clock.
 
 .. code-block:: sexpr
 
-    (clk-seq-clocked <bool> <clk_seq>) ; @(bool) clk-seq
+    (clk-seq-clocked <bool> <clk_seq>) ; @(bool) clk_seq
 
-The clock can explicitly be specified to be the global clock by using the argument ``(constant true)`` or ``(true)``.
-
-.. code-block:: sexpr
-
-    (clk-seq-clocked (true) <clk-seq>)
-
-
-Transformation to Simple Sequence
-""""""""""""""""""""""""""""""""""
-
-The clocked sequence can be rewritten to a simple sequence using the macros
-``#clk-seq-apply-clock``, ``#clk-seq-nonempty-part``, and ``#seq-remove-clock`` in
-this order.
+The clock can explicitly be specified to be the global clock by using
+the argument ``(constant true)`` or ``(true)``.
 
 .. code-block:: sexpr
 
-    (clk-seq-clocked <bool> <clk_seq>)  ; clocked
+    (clk-seq-clocked (true) <clk_seq>)
 
-    |   #clk-seq-apply-clock
-    V
 
-    (clk-seq-clocked (true) <clk_seq2>)   ; global-clocked
+Basic clocked sequence
+"""""""""""""""""""""""
 
-    |  #clk-seq-nonempty-part
-    V
+.. code-block:: sexpr
 
-    (clk-seq-clocked (true) <clk_seq3>)   ; global-clocked and non-empty-matching
+    (clk-seq-bool <bool>)
 
-    |  #seq-remove-clock
-    V
+The ``clk-seq-bool`` primitive converts a Boolean expression to a sequence of
+length 1. In SystemVerilog, this happens implicitly, therefore there exists no
+equivalent operator in SVA.
 
-    <seq>                               ; simple/unclocked
+Clocked sequence primitives
+""""""""""""""""""""""""""""
+
+.. note::
+
+    For ``clk-seq-delay``, ``clk-seq-repeat``, ``clk-seq-goto-repeat``, and
+    ``clk-seq-nonconsecutive-repeat``, the case with a single integer argument can
+    be represented as a constant range with :math:`n = m` and is not
+    handled as a separate case.
+
+.. code-block:: sexpr
+
+    (clk-seq-repeat <range> <clk_seq>) ; seq [m:n]
+
+    (clk-seq-delay <range> <clk_seq>) ; ##[m:n] seq
+
+    (clk-seq-concat <clk_seq1> <clk_seq2> ...) ; clk_seq1 ##1 clk_seq2
+
+    (clk-seq-fusion <clk_seq1> <clk_seq2> ...) ; clk_seq1 ##0 clk_seq2
+
+    (clk-seq-or <clk_seq1> <clk_seq2> ...)
+
+    (clk-seq-intersect <clk_seq1> <clk_seq2> ...)
+
+    (clk-seq-and <clk_seq1> <clk_seq2> ...)
+
+    (clk-seq-first-match <clk_seq>)
+
+    (clk-seq-goto-repeat <range> <bool>) ; bool [m->n]
+
+    (clk-seq-nonconsecutive-repeat <range> <bool>) ; bool [=m:n]
+
+    (clk-seq-within <clk_seq1> <clk_seq2>)
+
+    (clk-seq-throughout <bool> <clk_seq>)
 
 
 Simple Sequence
 ^^^^^^^^^^^^^^^^^^^^
 
-Uses the global clock and does not admit empty matches.
+Simple sequences use the global clock and do not admit empty matches.
 
-.. Basic sequence (convert Boolean expression to sequence of length 1): ``(seq-bool <bool>)``
+See ... for more information on the differences to clocked sequences.
 
-
-*Notes:*
-
-* For ``seq-delay``, ``seq-repeat``, ``seq-goto-repeat``, and
-  ``seq-nonconsecutive-repeat``, the case with a single integer argument can
-  be represented as a bounded range with :math:`n = m` and is not
-  handled as a separate case.
-* ``triggered`` and ``matched`` are handled outside of Property IR.
+There is a reduced set of primitives for simple sequence. All derived
+primitives that can be expressed using other more basic primitives are removed
+in a rewriting pass as a step in the transformation from clocked sequences to
+simple sequences.
 
 
-Basic simple sequence:
+
+Basic simple sequence
+""""""""""""""""""""""
 
 .. code-block:: sexpr
 
-    (seq-bool <bool>) ; convert Boolean expression to sequence of length 1
-                      ; has no equivalent operator in SVA
+    (seq-bool <bool>)
 
-Simple sequence primitives:
+The ``seq-bool`` primitive converts a Boolean expression to a sequence of
+length 1.
+
+Simple sequence primitives
+"""""""""""""""""""""""""""
+
+.. note::
+
+    For ``seq-delay``, ``seq-repeat``, ``seq-goto-repeat``, and
+    ``seq-nonconsecutive-repeat``, the case with a single integer argument can
+    be represented as a constant range with :math:`n = m` and is not
+    handled as a separate case.
 
 .. code-block:: sexpr
 
@@ -136,21 +192,24 @@ Simple sequence primitives:
 
     (seq-fusion <seq1> <seq2> ...) ; seq1 ##0 seq2
 
-    (seq-intersect <seq1> <seq2> ...)
-
-    (seq-and <seq1> <seq2> ...)
-
     (seq-or <seq1> <seq2> ...)
 
-    (seq-goto-repeat <range> <bool>) ; bool [m->n]
-
-    (seq-nonconsecutive-repeat <range> <bool>) ; bool [=m:n]
+    (seq-intersect <seq1> <seq2> ...)
 
     (seq-first-match <seq>)
 
-    (seq-within <seq1> <seq2>)
 
-    (seq-throughout <bool> <seq>)
+
+..    (seq-goto-repeat <range> <bool>) ; bool [m->n]
+
+..    (seq-nonconsecutive-repeat <range> <bool>) ; bool [=m:n]
+
+..    (seq-and <seq1> <seq2> ...)
+..
+..    (seq-within <seq1> <seq2>)
+..
+..    (seq-throughout <bool> <seq>)
+
 
 
 
@@ -181,6 +240,11 @@ The available primitives are the same as for simple properties, but with the
 additional prefix ``clk-``.
 All their arguments that are sequences need to be of type ``clk-seq`` and all
 arguments that are properties need to be of type ``clk-prop``.
+
+.. note:
+
+    The ``case`` property block needs to be translated into an ``if else`` block
+    to be represented in Property IR.
 
 There is an additional primitive for specifying the clock.
 
