@@ -21,7 +21,7 @@ release = '0.1'
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
 
-extensions = ["sphinx.ext.mathjax", "sphinx.ext.ifconfig", "sexpr_ext"]
+extensions = ["sphinx.ext.mathjax", "sphinx.ext.ifconfig", "sphinx.ext.autosectionlabel", "sexpr_ext"]
 
 templates_path = ['_templates']
 exclude_patterns = []

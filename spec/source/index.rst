@@ -11,12 +11,19 @@ Property IR documentation
 .. documentation for details.
 
 
+.. role:: sexpr(code)
+   :language: sexpr
+
+.. role:: systemverilog(code)
+   :language: systemverilog
+
+
 .. toctree::
    :maxdepth: 2
    :caption: Contents:
 
    introduction
    syntax
-   considerations
+   types
    primitives
    sva_table

@@ -1,37 +1,36 @@
 Syntax
 -----------------
 
-
-Types
-~~~~~~~
-
-Literal types
-^^^^^^^^^^^^^^^
-
-* Boolean literal: ``<bool_literal> = true | false``
-* Non-negative integer: ``<int> = n`` with :math:`n \in \mathbb N_{0}`
-* Bounded range: ``<bounded_range> = (bounded-range n m)`` with :math:`n,m \in \mathbb N_{0}` and :math:`n \leq m`
-* Constant range: ``<range> = (range n m) | (range n $)`` with :math:`n,m \in \mathbb N_{0}` and :math:`n \leq m`
-
-
-
-.. :math:`0 \leq n \leq m`
-
-.. <bounded_range> = (bounded-range <integer1> <integer2>) with <integer1> <= <integer2>
-
-.. <range> = (range <integer> $) | (range <integer1> <integer2>) with <integer1> <= <integer2>
-
-
-Expression types
-^^^^^^^^^^^^^^^^^
-
-* Boolean Expression ``bool``
-* Clocked Sequence ``clk-seq``
-* Simple Sequence ``seq``
-* Clocked Property ``clk-prop``
-* Simple Property ``prop``
-* Automata State
-* Circuit
+.. Types
+.. ~~~~~~~
+..
+.. Literal types
+.. ^^^^^^^^^^^^^^^
+..
+.. * Boolean literal: ``<bool_literal> = true | false``
+.. * Non-negative integer: ``<int> = n`` with :math:`n \in \mathbb N_{0}`
+.. * Bounded range: ``<bounded_range> = (bounded-range n m)`` with :math:`n,m \in \mathbb N_{0}` and :math:`n \leq m`
+.. * Constant range: ``<range> = (range n m) | (range n $)`` with :math:`n,m \in \mathbb N_{0}` and :math:`n \leq m`
+..
+..
+..
+.. .. :math:`0 \leq n \leq m`
+..
+.. .. <bounded_range> = (bounded-range <integer1> <integer2>) with <integer1> <= <integer2>
+..
+.. .. <range> = (range <integer> $) | (range <integer1> <integer2>) with <integer1> <= <integer2>
+..
+..
+.. Expression types
+.. ^^^^^^^^^^^^^^^^^
+..
+.. * Boolean Expression ``bool``
+.. * Clocked Sequence ``clk-seq``
+.. * Simple Sequence ``seq``
+.. * Clocked Property ``clk-prop``
+.. * Simple Property ``prop``
+.. * Automata State
+.. * Circuit
 
 
 
@@ -56,6 +55,13 @@ and the return type.
 Each argument is either a literal or an expression.
 Every instance of a type is allowed where an argument of that type is expected.
 
+Identifier form
+^^^^^^^^^^^^^^^^^^
+
+An identifier that is declared previously via a
+:ref:`declare statement <declare statements>` is a valid
+expression and can appear anywhere where expressions are allowed,
+given that it has the correct type.
 
 Recursive form
 ^^^^^^^^^^^^^^^^^^^^^^^
@@ -72,22 +78,41 @@ The ``let-rec`` expression can be used to model cycles and (mutual) recursion.
 The identifiers bound in a ``let-rec`` expression can only be accessed locally,
 either inside any of the named subexpressions (including the same and earlier ones),
 or in the return expression.
-(That is, the order of named subexpressions inside a ``let-rec`` expression can be changed without changing the semantics.)
+Note that it is not possible to bind literals to identifiers.
 ``let-rec`` expressions can appear anywhere where expressions are allowed,
 given that they have the correct type. The type of a ``let-rec`` expression is
 the type of its return expression.
 They can be nested, but
 reusing identifiers in nested ``let-rec`` expressions,
-and reusing identifiers that are declared previously via a declare statement,
-is forbidden.
+and reusing identifiers that are declared previously via a
+:ref:`declare statement <declare statements>`,
+is forbidden, i.e., *shadowig* is forbidden.
 
+Moreover, it is forbidden to define circular references of identifiers
+involving no primitives, like in the following example.
 
-Identifier form
-^^^^^^^^^^^^^^^^^^
+.. code-block:: sexpr
 
-An identifier that is declared previously via a declare statement is a valid
-expression and can appear anywhere where expressions are allowed,
-given that it has the correct type.
+    (let-rec
+        (identifier1 identifier2)
+        (identifier2 identifier1))
+
+.. note::
+
+    SVA allows recursion only for properties, and
+    several restrictions apply to them
+    (that are expected to be checked by the frontend that reads Verilog):
+
+    * ``prop-not`` can not be applied to recursive properties
+    * no ``disable-iff`` in recursive properties
+    * advance in time before reinstantiation
+    * restrictions on arguments of recursive properties
+
+    On the level of syntax, Property IR allows the use of recursive expressions
+    (``let-rec``) and recursive declarations (``declare-rec``) regardless of the type.
+    However, there might not exist a useful or unambiguous fixpoint, and these
+    cases are rejected later during the verification flow,
+    keeping all restrictions of the SV standard.
 
 
 Statements
@@ -101,13 +126,13 @@ used inside later statements (except for recursive declarations, which
 allow using declared identifiers immediately inside the same statement).
 
 
-
+.. _declare_statements:
 Declare Statements
 ^^^^^^^^^^^^^^^^^^^^^^^
 
 Declare statements are used to bind expressions to identifiers that can
 be referred to in later statements.
-Any string may be used as an identifier.
+Recall that it is not possible to bind literals to identifiers.
 An identifier that is declared once may not be redeclared later or used as an
 identifier in a ``let-rec`` expression appearing later or nested inside the same
 declare statement.
@@ -115,17 +140,17 @@ However, it is possible to first use an identifier locally inside a ``let-rec``
 expression and then declare it later.
 
 
-*Identifiers:*
-Any string may be used as an identifier, including the empty string and
-primitive symbols. This facilitates integration with other tools.
-Since the first element of each list in an expression is a primitive and all
-other elements are arguments, expressions can be parsed unambiguously.
+.. note::
 
-Globally declared identifiers may not be redeclared, and also not used as local
-identifiers later in a document. Nested ``let-rec`` may not reuse identifiers,
-i.e., *shadowig* is forbidden.
+    Any string may be used as an identifier, including the empty string and
+    primitive symbols. This facilitates integration with other tools.
+    Since the first element of each list in an expression is a primitive and all
+    other elements are arguments, expressions can be parsed unambiguously.
 
-(is this really what we want?)
+.. Globally declared identifiers may not be redeclared, and also not used as local
+.. identifiers later in a document. Nested ``let-rec`` may not reuse identifiers,
+.. i.e., *shadowig* is forbidden.
+
 
 
 
@@ -205,19 +230,39 @@ Assertion Statements
 These directives correspond directly to the respective assertion statements in SVA.
 
 
-The first parameter is the disable condition (``disable iff``). If no disable
-condition is used, it should be set to ``(constant false)`` or ``(false)``.
+The :sexpr:`<bool1>` parameter is the *disable condition* (``disable iff``).
+If no disable condition is used, it should be set to
+:sexpr:`(constant false)` or :sexpr:`(false)`.
+
+The :sexpr:`<bool2>` parameter is the *trigger condition*.
+It states whether the assertion is active. For example, an assertion might be
+located inside an ``if`` block and thus depend on the if
+condition to be true.
+Note how this is different from the disable condition.
+
+In order to use an assertion inside an ``initial`` block,
+use the :sexpr:`bool-initial` primitive that is high only in the first time step.
+
+Assertion statements in SVA may contain a clocking event.
+Property IR does not provide this option because it is semantically equivalent
+to adding the clock directly to the property.
+
+As in SVA, there exist two cover statements.
+While :sexpr:`cover-sequence` counts all matches per evaluation attempt,
+:sexpr:`cover-property` counts only one match per evaluation attempt.
+
 
 TODO:
 
-* cover-sequence? counts all matches per evaluation attempt, while cover property only once
-* initial assert property? is mentioned only in formal semantics, not in main part
+* does assume and restrict have a trigger condition?
+
 * a clock can be provided to an assertion statement - is this different from
     adding the clock to ``prop``?
 
 .. code-block:: sexpr
 
-    (assert-property <bool> <clk_prop>)
-    (cover-property <bool> <clk_prop>)
-    (assume-property <bool> <clk_prop>)
-    (restrict-property <bool> <clk_prop>)
+    (assert-property <bool1> <bool2> <clk_prop>)
+    (cover-property <bool1> <bool2> <clk_prop>)
+    (cover-sequence <bool1> <bool2> <clk_prop>)
+    (assume-property <bool1> <bool2> <clk_prop>)
+    (restrict-property <bool1> <bool2> <clk_prop>)
