@@ -1,8 +1,8 @@
 Examples
-----------
+==========
 
-Boolean Expressions
-^^^^^^^^^^^^^^^^^^^^
+Boolean Expression Examples
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. code-block:: sexpr
 
@@ -14,8 +14,8 @@ Boolean Expressions
 
 
 
-Simple Sequences
-^^^^^^^^^^^^^^^^^^^^^^
+Simple Sequence Examples
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. code-block:: sexpr
 
@@ -37,8 +37,8 @@ Simple Sequences
 
 
 
-Simple Property
-^^^^^^^^^^^^^^^^^^
+Simple Property Examples
+^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. code-block:: sexpr
 

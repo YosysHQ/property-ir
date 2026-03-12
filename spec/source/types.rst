@@ -10,8 +10,8 @@ Literal types
 
 * Boolean literal: :sexpr:`<bool_literal> = true | false`
 * Non-negative integer: :sexpr:`<int> = n` with :math:`n \in \mathbb N_{0}`
-* Bounded range: :sexpr:`<bounded_range> = (bounded-range n m)` with :math:`n,m \in \mathbb N_{0}` and :math:`n \leq m`
-* Constant range: :sexpr:`<range> = (range n m) | (range n $)` with :math:`n,m \in \mathbb N_{0}` and :math:`n \leq m`
+* Bounded range: :sexpr:`<bounded_range> = (bounded-range m n)` with :math:`m,n \in \mathbb N_{0}` and :math:`m \leq n`
+* Constant range: :sexpr:`<range> = (range m n) | (range m $)` with :math:`m,n \in \mathbb N_{0}` and :math:`m \leq n`
 
 
 
@@ -80,6 +80,10 @@ Transformation to Simple Sequence
 The clocked sequence can be rewritten to a simple sequence using the macros
 ``#clk-seq-apply-clock``, ``#clk-seq-nonempty-part``, and ``#seq-remove-clock`` in
 this order.
+
+The tranformation of a clocked property to a simple property is analogous to sequences, using the
+macros ``#clk-prop-apply-clock``, ``#clk-prop-nonempty-part``, and
+``#prop-remove-clock`` in this order.
 
 .. code-block:: sexpr
 
