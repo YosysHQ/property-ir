@@ -2,13 +2,16 @@
 Types
 =======
 
+.. role:: sexpr(code)
+   :language: sexpr
+
 Literal types
 ~~~~~~~~~~~~~~~
 
-* Boolean literal: ``<bool_literal> = true | false``
-* Non-negative integer: ``<int> = n`` with :math:`n \in \mathbb N_{0}`
-* Bounded range: ``<bounded_range> = (bounded-range n m)`` with :math:`n,m \in \mathbb N_{0}` and :math:`n \leq m`
-* Constant range: ``<range> = (range n m) | (range n $)`` with :math:`n,m \in \mathbb N_{0}` and :math:`n \leq m`
+* Boolean literal: :sexpr:`<bool_literal> = true | false`
+* Non-negative integer: :sexpr:`<int> = n` with :math:`n \in \mathbb N_{0}`
+* Bounded range: :sexpr:`<bounded_range> = (bounded-range n m)` with :math:`n,m \in \mathbb N_{0}` and :math:`n \leq m`
+* Constant range: :sexpr:`<range> = (range n m) | (range n $)` with :math:`n,m \in \mathbb N_{0}` and :math:`n \leq m`
 
 
 
@@ -24,16 +27,26 @@ Expression types
 
 * Boolean Expression ``bool``
 * Clocked Sequence ``clk-seq``
-* Simple Sequence ``seq``
 * Clocked Property ``clk-prop``
+* Simple Sequence ``seq``
 * Simple Property ``prop``
-* Automata State
-* Circuit
+
+There exist internal types to represent automata state and circuits.
+They are used internally during the verification flow and are not part of the
+public interface.
 
 
 
 Clocked vs Simple Sequences/Properties
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+TODO: revise this section
+
+Removing Derived Operations
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+TODO: include
+
 
 Clocking
 ^^^^^^^^^^^^^

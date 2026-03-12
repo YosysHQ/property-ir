@@ -26,4 +26,5 @@ Property IR documentation
    syntax
    types
    primitives
+   examples
    sva_table

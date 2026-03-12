@@ -186,6 +186,8 @@ need to be declared using the ``declare-input`` statement.
 
     (declare-input <identifier> <type>)
 
+TODO: what types should be available here? only one-bit signal for now?
+
 Example:
 
 .. code-block:: sexpr
@@ -227,10 +229,10 @@ While :sexpr:`cover-sequence` counts all matches per evaluation attempt,
 
 TODO:
 
-* does assume and restrict have a trigger condition?
-
 * a clock can be provided to an assertion statement - is this different from
     adding the clock to ``prop``?
+* trigger-sequence to specify output
+* vacuity parameter
 
 .. code-block:: sexpr
 
