@@ -23,7 +23,7 @@ Boolean Expression
     need to be handled outside of Property IR.
 
 
-Basic Booleans
+Base Booleans
 """"""""""""""""
 
 .. code-block:: sexpr
@@ -38,7 +38,8 @@ After declaring a one-bit signal as external input using :sexpr:`declare-input`,
 it can be used as an expression of type ``bool``.
 
 A Boolean that is constant high (``1'b1``) resp. low (``1'b0``) is written as
-:sexpr:`(constant true)` resp. :sexpr:`(constant false)`, or abbreviated as :sexpr:`(true)` resp. :sexpr:`(false)`.
+:sexpr:`(constant true)` resp. :sexpr:`(constant false)`, or abbreviated as
+:sexpr:`(true)` resp. :sexpr:`(false)`.
 
 The Boolean primitive :sexpr:`initial` corresponds to a signal that is high only in
 the first time step.
@@ -233,30 +234,33 @@ It may span over the complete length of :sexpr:`<clk_seq2>`.
 Clocked Property
 ^^^^^^^^^^^^^^^^^
 
-Clocked properties are analogous to clocked sequences and use a clock that may
+Like clocked sequences, clocked properties use a clock that may
 be different from the global clock.
-The available primitives are the same as for simple properties, but with the
-additional prefix ``clk-``.
-All their arguments that are sequences need to be of type ``clk-seq`` and all
-arguments that are properties need to be of type ``clk-prop``.
+Each primitive has the prefix ``clk-prop-``.
+All their sequence arguments need to be of type ``clk-seq``, and all
+property arguments need to be of type ``clk-prop``.
 
 
 Specifying the property clock
 """"""""""""""""""""""""""""""
 
 The following primitive is used for specifying the clock.
+The clock can be changed anywhere within the property.
 
 .. code-block:: sexpr
 
     (clk-prop-clocked <bool> <clk_prop>) ; @(bool) clk_prop
 
-The clock can explicitly be specified to be the global clock by using the argument :sexpr:`(constant true)` or :sexpr:`(true)`.
+The clock can explicitly be specified to be the global clock by using
+the argument :sexpr:`(constant true)` or :sexpr:`(true)`.
 
 .. code-block:: sexpr
 
     (clk-prop-clocked (true) <clk_prop>)
 
-
+If on the outermost layer of a clocked property expression no clock is
+specified, it is assumed to be the global clock until it is changed to
+another clock with :sexpr:`clk-prop-clocked`.
 
 
 Clocked property base primitives
@@ -284,17 +288,19 @@ must not admit an empty match
     (clk-prop-weak <clk_seq>)
 
 
-weak / strong default depends on assertion type
+weak / strong default depends on assertion type:
+
+
+strong: there must exist a nonempty match
+
+weak: no finite prefix witnesses the inability to match
 
 
 Clocked property primitives
 """"""""""""""""""""""""""""
 
-.. note::
-
-    The ``case`` property block needs to be translated into an ``if else`` block
-    to be represented in Property IR.
-
+Logical property operators
+''''''''''''''''''''''''''''
 
 .. code-block:: sexpr
 
@@ -309,23 +315,135 @@ Clocked property primitives
     (clk-prop-implies <clk_prop1> <clk_prop2>)
 
 
+These primitives correspond to the logical operators applied to properties.
+
+The primitives :sexpr:`clk-prop-or` and  :sexpr:`clk-prop-and`
+take any positive number of argument properties.
+
+
+Primitive :sexpr:`clk-prop-iff` is the logical operator :math:`\Leftrightarrow`
+that is true iff both argument properties have the same truth value.
+
+Primitive :sexpr:`clk-prop-implies` is the logical operator :math:`\Rightarrow`
+that is true if the first argument property is false or if the second
+argument property is true.
+Do not confuse with implication operators ``|->`` (overlapped)
+and ``|=>`` (non-overlapped), which take a sequence and a property as arguments.
+
+Negation :sexpr:`clk-prop-not` requires some attention in order to avoid
+unintuitive behavior in combination with weak satisfaction. Assume we
+assert the following property.
+
+.. code-block:: sexpr
+
+    (clk-prop-not (clk-prop-seq
+        (clk-seq-concat (seq-bool a) (seq-bool b))))
+
+By default, :sexpr:`assert-property` uses weak satisfaction, and the property
+fails on any finite sequence ending in a time step where ``a`` holds (because it
+is possible that ``b`` holds in the following time step).
+More intuitive behavior is achieved by explicitly using strong satisfaction
+to fail only if the offending sequence is witnessed.
+
+.. code-block:: sexpr
+
+    (clk-prop-not (clk-prop-strong
+        (clk-seq-concat (seq-bool a) (seq-bool b))))
+
+Negation must not be applied to recursive properties.
+
+
+Conditionals
+''''''''''''''''''
+
+.. note::
+
+    The ``case`` property block needs to be translated into a (nested) ``if ... else`` block
+    to be represented in Property IR.
+
+.. code-block:: sexpr
 
     (clk-prop-if <bool> <clk_prop>)
 
     (clk-prop-if-else <bool> <clk_prop1> <clk_prop2>)
 
+In the case of :sexpr:`clk-prop-if`, the property is satisfied if :sexpr:`<bool>` does not hold, or if
+:sexpr:`<bool>` holds and the first argument property holds (equivalent to overlapped implication).
+In the case of :sexpr:`clk-prop-if-else`, if :sexpr:`<bool>` does
+not holds, additionally, the second argument property must hold in order for
+the property to be satisfied.
+
+
+Nexttime
+''''''''''''''''''
+
+.. note::
+
+    In SVA, if the integer argument is omitted, :sexpr:`<int> = 1` is assumed.
+    In Property IR, we explicitly need to provide it.
+
+.. code-block:: sexpr
 
     (clk-prop-nexttime <int> <clk_prop>)
 
+    (clk-prop-strong-nexttime <int> <clk_prop>)
+
+This primitive checks if the argument property holds :sexpr:`<int>`
+time steps in the future.
+In the weak variant, the property evaluates to true if the referenced time step
+does not exist.
+In the strong variant, the property evaluates to false if the referenced time step
+does not exist.
+If the evaluation attempt begins inbetween clock ticks,
+the evaluation is moved to the next clock tick.
+Therefore, the integer argument :sexpr:`<int> = 0` can be used for alignment.
+In other words, the argument property has to hold on time step :sexpr:`<int> + 1`,
+beginning to count at the current time step (which might have already started)
+for the property to evaluate to true.
+For example, :sexpr:`(clk-prop-nexttime 2 (clk-prop-bool a))` checks whether ``a``
+holds at the second future clock tick.
+
+
+Implication and followed-by
+''''''''''''''''''''''''''''''
+
+.. code-block:: sexpr
 
     (clk-prop-overlapped-implication <clk_seq> <clk_prop>) ; clk_seq |-> clk_prop
 
     (clk-prop-non-overlapped-implication <clk_seq> <clk_prop>) ; clk_seq |=> clk_prop
 
+Witnessing the sequence :sexpr:`<clk_seq>` triggers the evaluation of property
+:sexpr:`<clk_prop>`, which has to hold either on the last time step of the sequence
+(overlapped), or on the next time step after the sequence matched (non-overlapped)
+to satisfy the implication.
+
+Do not confuse with :sexpr:`clk-prop-implies`, which takes two properties as arguments.
+
+.. code-block:: sexpr
+
     (clk-prop-overlapped-followed-by <clk_seq> <clk_prop>) ; clk_seq #-# clk_prop
 
     (clk-prop-non-overlapped-followed-by <clk_seq> <clk_prop>) ; clk_seq #=# clk_prop
 
+These primitives are the duals of the implication primitives.
+For example, the overlapped followed-by primitive is equivalent to to the following expression.
+
+.. code-block:: sexpr
+
+    (clk-prop-not (clk-prop-overlapped-implication <clk_seq> (clk-prop-not <clk-prop>)))
+
+The followed-by property evaluates to true iff
+there exists at least one match for the sequence :sexpr:`<clk_seq>`, and at the
+end of one of its matches, the property :sexpr:`<clk_prop>` holds --
+either in the last time step of the sequence (overlapped), or in the next time
+step (non-overlapped), depending on the variant.
+
+
+Until
+''''''''
+
+.. code-block:: sexpr
 
     (clk-prop-until <clk_prop1> <clk_prop2>)
 
@@ -335,6 +453,27 @@ Clocked property primitives
 
     (clk-prop-strong-until <clk_prop1> <clk_prop2>)
 
+These primitives requires that :sexpr:`<clk_prop1>` holds up until to the point
+where :sexpr:`<clk_prop2>` holds for the first time.
+The ``until-with`` variants are overlapping, meaning that it is required that
+:sexpr:`<clk_prop1>` and :sexpr:`<clk_prop2>` hold simultaneously for at least
+one time step before :sexpr:`<clk_prop1>` is allowed to not hold anymore.
+In linear temporal logic (LTL), this operator is called *release*.
+In the weak variants, the property as a whole evaluates to true even if :sexpr:`<clk_prop2>`
+is not witnessed, provided that :sexpr:`<clk_prop1>` holds until the end of the trace.
+In the strong variants, :sexpr:`<clk_prop2>` must be witnessed in order for the
+property as a whole to evaluate to true.
+
+The strong variants can not be used in recursive properties.
+
+
+Always and eventually
+''''''''''''''''''''''''
+
+If the evaluation attempt begins inbetween clock ticks,
+the evaluation is moved to the next clock tick.
+
+.. code-block:: sexpr
 
     (clk-prop-always <clk_prop>) ; Question: should we omit the version without a range?
 
@@ -342,12 +481,44 @@ Clocked property primitives
 
     (clk-prop-strong-always <bounded_range> <clk_prop>)
 
+The property :sexpr:`<clk_prop>` provided to :sexpr:`clk-prop-always` (weak), must hold
+at every current or future time step, if it exists.
+
+In the ranged variant (weak), the property must hold at each time step in the
+(possibly unbounded) range, if the time step exists.
+
+In the strong variant, the property must hold at each time step of the
+provided bounded range, and each of these time steps has to exist.
+
+In LTL, the ``always`` operator is called *globally*.
+
+.. code-block:: sexpr
+
     (clk-prop-eventually <bounded_range> <clk_prop>)
 
     (clk-prop-strong-eventually <clk_prop>)  ; Question: should we omit the version without a range?
 
     (clk-prop-strong-eventually-ranged <range> <clk_prop>)
 
+The weak variant expects a bounded range as a parameter and
+requires that somewhere in that range :sexpr:`<clk_prop>` holds. It evaluates to
+true if the trace ends before the bounded range has ended, even when
+:sexpr:`<clk_prop>` has not been witnessed yet.
+
+In the strong variant, there must exist a current or future time step where
+:sexpr:`<clk_prop>` holds.
+
+In the strong ranged variant, there must exist a current or future time step
+within the (possibly unbounded) range where :sexpr:`<clk_prop>` holds.
+
+In LTL, the ``eventually`` operator is called *finally*.
+
+The strong variants can not be used in recursive properties.
+
+Abort properties
+''''''''''''''''''
+
+.. code-block:: sexpr
 
     (clk-prop-accept-on <bool> <clk_prop>)
 
