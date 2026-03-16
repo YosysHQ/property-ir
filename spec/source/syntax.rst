@@ -204,16 +204,58 @@ Assertion Statements
 
 These directives correspond directly to the respective assertion statements in SVA.
 
+.. code-block:: sexpr
+
+    (assert-property <bool1> <bool2> <bool3> <clk_prop>)
+
+    (cover-property <bool1> <bool2> <bool3> <clk_prop>)
+    (cover-sequence <bool1> <bool2> <bool3> <clk_seq>)
+
+    (assume-property <bool1> <bool2> <bool3> <clk_prop>)
+
+    (restrict-property <bool1> <bool2> <bool3> <clk_prop>)
+
+
 
 The :sexpr:`<bool1>` parameter is the *disable condition* (``disable iff``).
 If no disable condition is used, it should be set to
 :sexpr:`(constant false)` or :sexpr:`(false)`.
+Provided that a disable condition is used, if it is true anytime during the
+evaluation attempt of the assertion, the assertion is disabled asynchronously and
+the evaluation attempt yields no result.
+
+.. note::
+
+    The disable condition must not reference local variables or the ``matched``
+    function (``triggered`` is allowed). Except for ``$sampled``,
+    if a sample value function is used, an explicit clock must be provided to
+    the function.
+    Note that these functions need to be handled outside of Property IR.
+
+
+TODO: More informatio on disable iff
 
 The :sexpr:`<bool2>` parameter is the *trigger condition*.
 It states whether the assertion is active. For example, an assertion might be
 located inside an ``if`` block and thus depend on the if
 condition to be true.
 Note how this is different from the disable condition.
+
+The :sexpr:`<bool_literal>` parameter is the *vacuity bit*.
+A property passes *vacuously* if the reason that it is satisfied is that
+the precondition is not fulfilled. For example, the implication ``a |-> b``
+is vacuously satisfied when ``a`` is false.
+If this parameter is set to :sexpr:`true`, ...
+
+
+The additional directive :sexpr:`trigger-sequence` does not have a corresponding
+SVA operation, and is used to declare an output bit that is high in each time step
+that the sequence matches, and low else.
+
+.. code-block:: sexpr
+
+    (trigger-sequence <bool1> <bool2> <bool3> <clk_prop>)
+
 
 In order to use an assertion inside an ``initial`` block,
 use the :sexpr:`initial` primitive that is high only in the first time step.
@@ -222,22 +264,43 @@ Assertion statements in SVA may contain a clocking event.
 Property IR does not provide this option because it is semantically equivalent
 to adding the clock directly to the property.
 
-As in SVA, there exist two cover statements.
+As defined by the SystemVerilog standard, there exist two cover statements:
 While :sexpr:`cover-sequence` counts all matches per evaluation attempt,
 :sexpr:`cover-property` counts only one match per evaluation attempt.
+Since we do not count matches internally, the result of these two directives
+will be the same, with the only difference being the provided type.
 
+.. note::
+
+    The trigger condition and the directive :sexpr:`trigger-sequence` should
+    not be confused with the extended Boolean ``triggered`` function, that
+    evaluates to true when the provided sequence matches. However, the
+    :sexpr:`trigger-sequence` directive can be used to implement the
+    ``triggered`` and ``matched`` function.
+
+There exist variants of each of the directives that take simple sequences resp.
+properties as parameters.
+
+.. code-block:: sexpr
+
+    (assert-simple-property <bool1> <bool2> <bool_literal> <prop>)
+
+    (cover-simple-property <bool1> <bool2> <bool_literal> <prop>)
+    (cover-simple-sequence <bool1> <bool2> <bool_literal> <seq>)
+
+    (assume-simple-property <bool1> <bool2> <bool_literal> <prop>)
+
+    (restrict-simple-property <bool1> <bool2> <bool_literal> <prop>)
+
+    (trigger-simple-sequence <bool1> <bool2> <bool_literal> <prop>)
+
+ALTERNATIVE: wrapper for type conversion clk-seq-seq and clk-prop-prop
+instead of more directives
 
 TODO:
 
 * a clock can be provided to an assertion statement - is this different from
     adding the clock to ``prop``?
-* trigger-sequence to specify output
-* vacuity parameter
+* explain vacuity parameter
+* explain disable iff
 
-.. code-block:: sexpr
-
-    (assert-property <bool1> <bool2> <clk_prop>)
-    (cover-property <bool1> <bool2> <clk_prop>)
-    (cover-sequence <bool1> <bool2> <clk_prop>)
-    (assume-property <bool1> <bool2> <clk_prop>)
-    (restrict-property <bool1> <bool2> <clk_prop>)
