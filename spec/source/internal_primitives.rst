@@ -92,7 +92,7 @@ Works like a standard transition that checks a condition and enters the next sta
     Followed-by, as-long-as
 
 
-Examples
+Automata Examples
 """""""""""""""""""
 
 .. code-block:: sexpr

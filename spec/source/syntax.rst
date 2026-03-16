@@ -99,7 +99,7 @@ used inside later statements (except for recursive declarations, which
 allow using declared identifiers immediately inside the same statement).
 
 
-.. _declare_statements:
+
 Declare Statements
 ^^^^^^^^^^^^^^^^^^^^^^^
 

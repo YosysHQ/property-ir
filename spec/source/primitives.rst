@@ -164,11 +164,13 @@ coincides with the first time step of the subsequent argument sequence.
 These repetition primitives operate on Boolean expressions and not on sequences.
 
 :sexpr:`clk-seq-goto-repeat` -- Boolean expression :sexpr:`<bool>` holds
-:sexpr:`<range>` number of time steps (may be unbounded), with gaps allowed inbetween.
+:sexpr:`<range>` number of time steps (may be unbounded), with gaps allowed in
+between, where it does not hold.
 The matched sequence needs to end in a time step where :sexpr:`<bool>` holds.
 
 :sexpr:`clk-seq-nonconsecutive-repeat` -- Boolean expression :sexpr:`<bool>` holds
-:sexpr:`<range>` number of time steps (may be unbounded), with gaps allowed inbetween.
+:sexpr:`<range>` number of time steps (may be unbounded), with gaps allowed in
+between, where it does not hold.
 The matched sequence may end with a gap.
 
 
@@ -272,14 +274,12 @@ Clocked property base primitives
 
     (clk-prop-bool <bool>)
 
-convert boolean expression to sequence property
-equivalent to (prop-seq (seq-bool <bool>))
-
-convert sequence to sequence property
-
-must not admit an empty match
-
-
+The primitive :sexpr:`clk-prop-seq`
+converts a clocked sequence to *sequence property*,
+wheres :sexpr:`clk-prop-bool`
+converts a Boolean expression directly to a sequence property,
+which is equivalent to :sexpr:`(clk-prop-seq (clk-seq-bool <bool>))`.
+Note that sequence properties must not admit empty matches.
 
 .. code-block:: sexpr
 
@@ -287,13 +287,20 @@ must not admit an empty match
 
     (clk-prop-weak <clk_seq>)
 
+These primitives can be used to explicitly choose either strong or weak
+semantics.
+For a strong sequence property to hold, there must be witnessed a nonempty
+match of the sequence in a finite number of time steps.
+For a weak sequence property to hold, no finite prefix of the trace must witness
+the inability of the sequence to match. In other words, even if the trace ends
+without a match of the sequence, if there still exists the possibility of it
+to match in the future if the trace were extended, the weak sequence property
+evaluates to true.
 
-weak / strong default depends on assertion type:
+When not specified, the default semantics depend on the
+assertion type: In the context of ``assert`` and ``assume``, weak semantics
+are used, else strong semantics are used.
 
-
-strong: there must exist a nonempty match
-
-weak: no finite prefix witnesses the inability to match
 
 
 Clocked property primitives
@@ -394,7 +401,7 @@ In the weak variant, the property evaluates to true if the referenced time step
 does not exist.
 In the strong variant, the property evaluates to false if the referenced time step
 does not exist.
-If the evaluation attempt begins inbetween clock ticks,
+If the evaluation attempt begins in between clock ticks,
 the evaluation is moved to the next clock tick.
 Therefore, the integer argument :sexpr:`<int> = 0` can be used for alignment.
 In other words, the argument property has to hold on time step :sexpr:`<int> + 1`,
@@ -470,7 +477,7 @@ The strong variants can not be used in recursive properties.
 Always and eventually
 ''''''''''''''''''''''''
 
-If the evaluation attempt begins inbetween clock ticks,
+If the evaluation attempt begins in between clock ticks,
 the evaluation is moved to the next clock tick.
 
 .. code-block:: sexpr
@@ -529,20 +536,33 @@ Abort properties
     (clk-prop-sync-reject-on <bool> <clk_prop>)
 
 
+The :sexpr:`<bool>` parameter of abort properties is called *abort condition*.
+In the ``accept on`` variants, if the abort condition evaluates to true,
+the abort property evaluates to true as well. Else, it evaluates to the
+evaluation result of :sexpr:`<clk_prop>`.
+In the ``reject on`` variants, if the abort condition evaluates to true,
+the abort property evaluates to false.
+
+In the synchronous variants, evaluation of the abort condition takes place on the
+clocking event, which represents a synchronous reset.
+In the asynchronous variants, if at any time during the evaluation of
+:sexpr:`<clk_prop>` the abort condition is true, then the abort property applies,
+which represent an asynchronous reset.
+
+Different from ``disable iff``, abort property primitives can be nested and
+are evaluated from left to right.
+They operate on the level of properties, affecting the result of the
+evaluation, whereas ``disable iff`` operates on the level of assertions and
+deactivates the evaluation.
+
+The use of sampled value functions is permitted in abort conditions, but local
+variables and ``triggered`` and ``matched`` are not.
 
 Simple Sequence
 ^^^^^^^^^^^^^^^^^^^^
 
 Simple sequences use the global clock and do not admit empty matches.
-
-See ... for more information on the differences to clocked sequences.
-
-There is a reduced set of primitives for simple sequence. All derived
-primitives that can be expressed using other more basic primitives are removed
-in a rewriting pass as a step in the transformation from clocked sequences to
-simple sequences.
-
-no empty repeat
+See :doc:`/types` for more information on the differences to clocked sequences.
 
 Simple sequence base primitive
 """"""""""""""""""""""""""""""""
@@ -551,17 +571,28 @@ Simple sequence base primitive
 
     (seq-bool <bool>)
 
-The ``seq-bool`` primitive converts a Boolean expression to a simple sequence
+The :sexpr:`seq-bool` primitive converts a Boolean expression to a simple sequence
 of length 1.
 
 Simple sequence primitives
 """""""""""""""""""""""""""
+For an explanation of primitives, see
+:ref:`clocked sequence primitives <clocked sequence primitives>`.
 
+There is a reduced set of primitives for simple sequence. All derived
+primitives that can be expressed using other more basic primitives are removed
+in a rewriting pass as a step in the transformation from clocked sequences to
+simple sequences.
 
-..    For ``seq-delay``, ``seq-repeat``, ``seq-goto-repeat``, and
-..    ``seq-nonconsecutive-repeat``, the case with a single integer argument can
-..    be represented as a constant range with :math:`n = m` and is not
-..    handled as a separate case.
+.. note::
+
+    Simple sequences must not contain any subexpressions that admit
+    empty matches. Therefore, empty repeat :sexpr:`(seq-repeat (range 0 0) <seq>)`
+    must not be applied to simple sequences.
+    Any repeat expression with a lower bound :sexpr:`0` range should not be
+    used in simple sequences, since the empty repeat part will be ignored,
+    possibly leading to unexpected results.
+
 
 .. code-block:: sexpr
 
@@ -596,25 +627,36 @@ Simple sequence primitives
 Simple Property
 ^^^^^^^^^^^^^^^^^
 
-Uses the global clock and does not contain sequences that admit empty matches.
+A simple property uses the global clock and does not contain sequences that
+admit empty matches.
+See :doc:`/types` for more information on the differences to clocked properties.
+
 
 Simple property base primitives
 """""""""""""""""""""""""""""""""
 
 .. code-block:: sexpr
 
-    (prop-seq <seq>) ; convert sequence to sequence property
+    (prop-seq <seq>)
 
-    (prop-bool <bool>) ; convert boolean expression to sequence property
-                       ; equivalent to (prop-seq (seq-bool <bool>))
+    (prop-bool <bool>)
 
     (prop-strong <seq>)
 
     (prop-weak <seq>)
 
+These primitives convert Boolean expressions and simple sequences to
+simple properties. Strong or weak semantics can be specified, see
+:ref:`clocked property base primitives <clocked property base primitives>`
+for details.
+
 
 Simple property primitives
 """""""""""""""""""""""""""""
+
+Like for simple sequences, there is a reduced set of primitives for simple
+properties. For an explanation of primitives, see
+:ref:`clocked property primitives <clocked property primitives>`.
 
 .. code-block:: sexpr
 

@@ -123,7 +123,7 @@ Using this feature, recursive properties like the following
 
 .. figure:: /_images/spec_exp2.svg
     :class: width-helper invert-helper
-    :name: spec_exp1
+    :name: spec_exp2
 
     expression graph of ``always_a``
 
@@ -154,7 +154,7 @@ Similarly, mutually recursive properties can be expressed.
 
 .. figure:: /_images/spec_exp3.svg
     :class: width-helper invert-helper
-    :name: spec_exp1
+    :name: spec_exp3
 
     expression graph of ``prop1`` and ``prop2``
 
