@@ -109,6 +109,18 @@ clocked sequence of length 1. In SystemVerilog, there exists no
 equivalent operator because this happens implicitly by using a Boolean
 expression in a sequence context.
 
+
+.. code-block:: sexpr
+
+    (clk-seq-seq <seq>)
+
+The primitive :sexpr:`clk-seq-seq` serves as a wrapper to convert a simple
+sequence into a clocked sequence that uses the global clock.
+Then it can be used as a parameter for :ref:`assertions <assertion statements>`.
+Note that it is not possible to change the clock that is used by the
+resulting clocked sequence.
+
+
 Clocked sequence primitives
 """"""""""""""""""""""""""""
 
@@ -300,6 +312,17 @@ evaluates to true.
 When not specified, the default semantics depend on the
 assertion type: In the context of ``assert`` and ``assume``, weak semantics
 are used, else strong semantics are used.
+
+
+.. code-block:: sexpr
+
+    (clk-prop-prop <seq>)
+
+The primitive :sexpr:`clk-prop-prop` serves as a wrapper to convert a simple
+property into a clocked property that uses the global clock.
+Then it can be used as a parameter for :ref:`assertions <assertion statements>`.
+Note that it is not possible to change the clock that is used by the
+resulting clocked property.
 
 
 

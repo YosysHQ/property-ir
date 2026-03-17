@@ -220,7 +220,7 @@ These directives correspond directly to the respective assertion statements in S
 The :sexpr:`<bool1>` parameter is the *disable condition* (``disable iff``).
 If no disable condition is used, it should be set to
 :sexpr:`(constant false)` or :sexpr:`(false)`.
-Provided that a disable condition is used, if it is true anytime during the
+If the disable condition is true anytime during the
 evaluation attempt of the assertion, the assertion is disabled asynchronously and
 the evaluation attempt yields no result.
 
@@ -231,9 +231,6 @@ the evaluation attempt yields no result.
     if a sample value function is used, an explicit clock must be provided to
     the function.
     Note that these functions need to be handled outside of Property IR.
-
-
-TODO: More informatio on disable iff
 
 The :sexpr:`<bool2>` parameter is the *trigger condition*.
 It states whether the assertion is active. For example, an assertion might be
@@ -278,29 +275,13 @@ will be the same, with the only difference being the provided type.
     :sexpr:`trigger-sequence` directive can be used to implement the
     ``triggered`` and ``matched`` function.
 
-There exist variants of each of the directives that take simple sequences resp.
-properties as parameters.
+In order so apply assertions to simple sequences or simple properties,
+use the primitives :sexpr:`clk-seq-seq` and :sexpr:`clk-prop-prop`, respectively,
+to convert them to the clocked variants first.
 
-.. code-block:: sexpr
-
-    (assert-simple-property <bool1> <bool2> <bool_literal> <prop>)
-
-    (cover-simple-property <bool1> <bool2> <bool_literal> <prop>)
-    (cover-simple-sequence <bool1> <bool2> <bool_literal> <seq>)
-
-    (assume-simple-property <bool1> <bool2> <bool_literal> <prop>)
-
-    (restrict-simple-property <bool1> <bool2> <bool_literal> <prop>)
-
-    (trigger-simple-sequence <bool1> <bool2> <bool_literal> <prop>)
-
-ALTERNATIVE: wrapper for type conversion clk-seq-seq and clk-prop-prop
-instead of more directives
 
 TODO:
 
-* a clock can be provided to an assertion statement - is this different from
-    adding the clock to ``prop``?
+* a clock can be provided to an assertion statement - is this different from adding the clock to ``prop``?
 * explain vacuity parameter
-* explain disable iff
 
