@@ -12,8 +12,6 @@ logger = logging.getLogger(__name__)
 
 
 def identifier() -> st.SearchStrategy:
-    #return st.text(min_size=1)
-    #return st.from_regex(r"[A-Za-z0-9-_]+", fullmatch=True)
     return st.text(alphabet=string.ascii_letters + string.digits + "_", min_size=1, max_size=3)
 
 identifier_list: st.SearchStrategy = st.lists(elements=identifier(), min_size=1, max_size=5, unique=True)
@@ -75,11 +73,12 @@ def parsable_let_rec_boolean(draw, declared_signals: list[str]) -> RawSExprList:
     logger.debug('let_identifiers %s', let_identifiers)
     all_identifiers = declared_signals + let_identifiers
     let_rec_expr = []
-    for idf in let_identifiers:
-        expr: RawSExprList = draw(parsable_boolean(all_identifiers).filter(lambda x: x not in let_identifiers))
+    for (i, idf) in enumerate(let_identifiers):
+        expr: RawSExprList = draw(parsable_boolean(all_identifiers).filter(lambda x: x not in (let_identifiers+[None])[i:-1]))
         let_rec_expr.append([idf, expr])
+    permuted_let_rec_expr = draw(st.permutations(let_rec_expr))
     return_value = draw(st.sampled_from(let_identifiers))
-    return ['let-rec'] + let_rec_expr + [return_value] # type: ignore
+    return ['let-rec'] + permuted_let_rec_expr + [return_value] # type: ignore
 
 
 @st.composite
@@ -92,20 +91,55 @@ def parsable_let_rec_boolean_nested(draw, declared_names: list[str], inner=False
         inner_let_rec = draw(parsable_let_rec_boolean_nested(declared_names=all_identifiers, inner=True))
         nested_idf = draw(st.sampled_from(let_identifiers))
     let_rec_expr = []
-    for idf in let_identifiers:
+    for (i, idf) in enumerate(let_identifiers):
         if not inner:
             if idf == nested_idf:
                 let_rec_expr.append([idf, inner_let_rec])
                 continue
-        expr: RawSExprList = draw(parsable_boolean(all_identifiers).filter(lambda x: x not in all_identifiers))
+        if inner:
+            expr: RawSExprList = draw(parsable_boolean(all_identifiers).filter(lambda x: x not in declared_names and x not in (let_identifiers+[None])[i:-1]))
+        else:
+            expr: RawSExprList = draw(parsable_boolean(all_identifiers).filter(lambda x: x not in (let_identifiers+[None])[i:-1]))
         let_rec_expr.append([idf, expr])
+    permuted_let_rec_expr = draw(st.permutations(let_rec_expr))
     return_value = draw(st.sampled_from(let_identifiers))
-    return ['let-rec'] + let_rec_expr + [return_value] # type: ignore
+    return ['let-rec'] + permuted_let_rec_expr + [return_value] # type: ignore
 
 
+@st.composite
+def parsable_declare_rec_boolean_document(draw) -> RawSExpr:
+    signal_names = draw(identifier_list)
 
-def parsable_declare_rec():
-    pass
+    identifiers1 = draw(st.lists(elements=identifier().filter(lambda x: x not in signal_names), min_size=1, max_size=3, unique=True))
+    declare_identifiers1 = draw(st.lists(st.sampled_from(identifiers1), min_size=1, unique=True))
+    identifiers2 = draw(st.lists(elements=identifier().filter(lambda x: x not in signal_names and x not in declare_identifiers1), min_size=1, max_size=3, unique=True))
+    declare_identifiers2 = draw(st.lists(st.sampled_from(identifiers2), min_size=1, unique=True))
+    usable_identifiers1 = signal_names + identifiers1
+    usable_identifiers2 = signal_names + declare_identifiers1 + identifiers2
+
+    declare_rec_expr1 = []
+    for (i, idf) in enumerate(identifiers1):
+        expr: RawSExprList = draw(parsable_boolean(usable_identifiers1).filter(lambda x: x not in (identifiers1+[None])[i:-1]))
+        if idf in declare_identifiers1:
+            declare_rec_expr1.append(['declare', idf, expr])
+        else:
+            declare_rec_expr1.append([idf, expr])
+    permuted_declare_rec_expr1 = draw(st.permutations(declare_rec_expr1))
+
+    declare_rec_expr2 = []
+    for (i, idf) in enumerate(identifiers2):
+        expr: RawSExprList = draw(parsable_boolean(usable_identifiers2).filter(lambda x: x not in (identifiers2+[None])[i:-1]))
+        if idf in declare_identifiers2:
+            declare_rec_expr2.append(['declare', idf, expr])
+        else:
+            declare_rec_expr2.append([idf, expr])
+    permuted_declare_rec_expr2 = draw(st.permutations(declare_rec_expr2))
+
+    return ['document',
+        ['add-signals'] + signal_names,
+        ['declare-rec'] + permuted_declare_rec_expr1,
+        ['declare-rec'] + permuted_declare_rec_expr2
+    ]
 
 
 @st.composite
