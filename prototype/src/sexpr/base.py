@@ -310,6 +310,7 @@ class IrContainer:
         node_expr_defs: dict[str, RawSExprList] = self.generate_raw_sexpr_node_defs(inner_node_reprs, declared_nodes, node_names_to_use)
 
         logger.debug('node_expr_defs while generating inner nodes expr: %s', node_expr_defs)
+        logger.debug('declared_nodes: %s', declared_nodes)
 
         output_expr: RawSExprList = ['declare-rec']
         for (name, expr) in node_expr_defs.items():
@@ -322,8 +323,9 @@ class IrContainer:
 
         for name in unprocessed_names:
             node_id = self.merged_nodes.find(self.global_nodes[name])
-            used_name = declared_nodes[node_id]
-            if used_name is None:
+            if node_id in declared_nodes:
+                used_name = declared_nodes[node_id]
+            else:
                 used_name = global_names_to_use[node_id]
             output_expr.append(['declare', name, used_name])
 
