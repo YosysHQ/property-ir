@@ -15,8 +15,9 @@ automata, and circuits.
 
 This document focuses on the public interface of Property IR, that is, the part
 relevant to someone who wants to construct Property IR expressions from SVA.
-For more information on representations later in the verification flow
-and other implementation details, see ...
+
+.. For more information on representations later in the verification flow
+.. and other implementation details, see ...
 
 
 General Concept
@@ -42,18 +43,19 @@ for boolean expressions, sequences, and temporal properties
 (and internally used types for automata and circuits).
 When specifying the signature of primitives in this document, we write
 parameters enclosed in angle brackets
-(e.g., :sexpr:`<seq>`), which needs to be replaced by an expression with the correct
+(e.g., :sexpr:`<clk_seq>`), which needs to be replaced by an expression with the correct
 type to yield a valid expression.
 The (return) type of the first element (or *root*) of an expression is also the
 (return) type of the whole expression.
 
-Consider overlapped implication (``seq |-> prop`` in SVA) as an example primitive.
-It expects two arguments having the types sequence (``seq``) and property (``prop``),
-and returns a property (indicated by the prefix ``prop-`` of the primitive).
+Consider overlapped implication (``clk_seq |-> clk_prop`` in SVA) as an example primitive.
+It expects two arguments having the types clocked sequence (``clk-seq``) and clocked
+property (``clk-prop``),
+and returns a clocked property (indicated by the prefix ``clk-prop-`` of the primitive).
 
 .. code-block:: sexpr
 
-    (prop-overlapped-implication <seq> <prop>)
+    (clk-prop-overlapped-implication <clk_seq> <clk_prop>)
 
 Property IR provides primitives that closely match the operators of SVA,
 which allows for a direct syntactic translation of elaborated SVA.
@@ -73,15 +75,15 @@ It corresponds to the following Property IR expression.
 .. code-block:: sexpr
 
     (declare p
-        (prop-overlapped-implication
-            (seq-concat (seq-bool a) (seq-bool b))
-            (prop-always (prop-bool c))))
+        (clk-prop-overlapped-implication
+            (clk-seq-concat (clk-seq-bool a) (clk-seq-bool b))
+            (clk-prop-always (clk-prop-bool c))))
 
 The signals ``a``, ``b``, and ``c`` have type ``bool``.
-Concatenation (:sexpr:`seq-concat`) expects arguments of type ``seq``, therefore
-:sexpr:`seq-bool` is used to convert the signals to sequences of length 1.
-Similarly, :sexpr:`prop-bool` converts signal ``c`` to a sequence property,
-because :sexpr:`prop-always` requires an argument of type ``prop``.
+Concatenation (:sexpr:`clk-seq-concat`) expects arguments of type ``clk-seq``, therefore
+:sexpr:`clk-seq-bool` is used to convert the signals to clocked sequences of length 1.
+Similarly, :sexpr:`clk-prop-bool` converts signal ``c`` to a clocked sequence property,
+because :sexpr:`clk-prop-always` requires an argument of type ``clk-prop``.
 With :sexpr:`declare` we can bind expressions to identifiers to reference them later.
 
 Expressions can be regarded as an expression graph, and this is also how they
@@ -114,10 +116,10 @@ Using this feature, recursive properties like the following
 
     (declare-rec
         (declare always_a
-            (prop-and
-                (prop-bool a)
-                (prop-non-overlapped-implication
-                    (seq-bool (constant true))
+            (clk-prop-and
+                (clk-prop-bool a)
+                (clk-prop-non-overlapped-implication
+                    (clk-seq-bool (constant true))
                     always_a))))
 
 
@@ -144,12 +146,12 @@ Similarly, mutually recursive properties can be expressed.
 .. code-block:: sexpr
 
     (declare-rec
-        (declare prop1 (prop-and
-            (prop-bool a)
-            (prop-non-overlapped-implication (seq-bool (constant true)) prop2)))
-        (declare prop2 (prop-and
-            (prop-bool b)
-            (prop-non-overlapped-implication (seq-bool (constant true)) prop1))))
+        (declare prop1 (clk-prop-and
+            (clk-prop-bool a)
+            (clk-prop-non-overlapped-implication (clk-seq-bool (constant true)) prop2)))
+        (declare prop2 (clk-prop-and
+            (clk-prop-bool b)
+            (clk-prop-non-overlapped-implication (clk-seq-bool (constant true)) prop1))))
 
 
 .. figure:: /_images/spec_exp3.svg
@@ -180,10 +182,6 @@ Property IR code and can include:
 * checker status of properties as outputs
 * sequence matches as outputs
 
-Note that ``x`` and ``z`` do not exist inside Property IR, and
-are interpreted as ``false`` (as usual in SystemVerilog in a purely
-Boolean context, like ``if`` conditions).
-
 There are certain SystemVerilog expressions that can be used in SystemVerilog
 assertions but can not be represented in Property IR.
 This concerns the *extended Booleans*, including sampled value functions like
@@ -193,24 +191,14 @@ The reason is that Property IR expects *time-variable Booleans* as input,
 that is, functions from time to Boolean. Allowing ``$past`` and similar
 operators would deviate from this stateless notion of input.
 
-
-Extended Boolean expressions need to be synthesized outside of Property IR, and
-the output signals of the synthesized circuits become input signals of the
-``$property`` cell. Then they are treated like any other Boolean input inside Property IR.
-
-.. note::
-
-    TODO: a few notes on local variables
-
-    * local variable assignments as inputs
-    * local variable values as outputs (undefined if used outside of local
-      variable assignments)
-
 .. note::
 
     Future revisions of Property IR might include native support for some of these
     functions.
 
+Extended Boolean expressions need to be synthesized outside of Property IR, and
+the output signals of the synthesized circuits become input signals of the
+``$property`` cell. Then they are treated like any other Boolean input inside Property IR.
 
 .. code-block:: systemverilog
 
@@ -226,7 +214,7 @@ synthesized for ``$rose(b)`` and becomes an input for a ``$property`` cell.
 
     (declare-input a)
     (declare-input rose_b)
-    (declare prop (prop-overlapped-implication (seq-bool rose_b) (prop-bool a)))
+    (declare prop (clk-prop-overlapped-implication (clk-seq-bool rose_b) (clk-prop-bool a)))
 
 
 Registering properties for FV continues to use the existing ``$check`` cell
@@ -234,6 +222,23 @@ Registering properties for FV continues to use the existing ``$check`` cell
 The synthesis of checker circuits will be done in multiple passes with
 intermediate results representable as Property IR.
 
-The MLIR dialect for RTLIL will be extended to represent Property IR in order
-to ensure interoperability with CIRCT.
+.. note::
+
+    This revision of Property IR does not include support for local variables yet,
+    but it will be added in future revisions.
+
+    .. Local variable assignments can contain arbitrary SV logic that needs to be
+    .. handled outside of Property IR.
+    .. There will be a ``$property`` cell input for external local variable
+    .. assignments, several simple operations for local variables inside Property IR,
+    .. and a ``$property`` cell output for local variable values.
+    .. Note that this output value is undefined if used outside of local variable assignments
+    .. due to the nature of local variables, involving several overlapping sequence matches
+    .. with possibly conflicting variable values.
+
+
+.. note::
+
+    The MLIR dialect for RTLIL will be extended to represent Property IR in order
+    to ensure interoperability with CIRCT.
 

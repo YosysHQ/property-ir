@@ -36,6 +36,10 @@ They are used internally during the verification flow and are not part of the
 public interface.
 
 
+Note that ``x`` and ``z`` do not exist inside Property IR, and
+are interpreted as ``false`` (as usual in SystemVerilog in a purely
+Boolean context, like ``if`` conditions).
+
 
 Clocked vs Simple Sequences/Properties
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
