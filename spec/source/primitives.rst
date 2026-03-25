@@ -316,7 +316,7 @@ are used, else strong semantics are used.
 
 .. code-block:: sexpr
 
-    (clk-prop-prop <seq>)
+    (clk-prop-prop <prop>)
 
 The primitive :sexpr:`clk-prop-prop` serves as a wrapper to convert a simple
 property into a clocked property that uses the global clock.
