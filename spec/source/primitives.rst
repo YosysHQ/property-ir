@@ -169,7 +169,7 @@ coincides with the first time step of the subsequent argument sequence.
 
 .. code-block:: sexpr
 
-    (clk-seq-goto-repeat <range> <bool>) ; bool [m->n]
+    (clk-seq-goto-repeat <range> <bool>) ; bool [->m:n]
 
     (clk-seq-nonconsecutive-repeat <range> <bool>) ; bool [=m:n]
 
