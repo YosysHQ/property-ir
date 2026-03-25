@@ -58,7 +58,7 @@ Boolean primitives
     (or <bool1> <bool2> ...)
 
 These primitives correspond to the logical operators ``!``, ``&&``, and ``||`` of SystemVerilog.
-The primitives ``and`` and ``or`` accept any positive number of arguments of type ``bool``.
+The primitives :sexpr:`and` and :sexpr:`or` accept any positive number of arguments of type ``bool``.
 
 
 
@@ -149,22 +149,26 @@ Concatenation, repetition, and delay
     (clk-seq-fusion <clk_seq1> <clk_seq2> ...) ; clk_seq1 ##0 clk_seq2
 
 
-:sexpr:`clk-seq-repeat` -- The sequence :sexpr:`<clk_seq>` is repeated
-the number of times specified by :sexpr:`<range>` (may be unbounded).
+:sexpr:`clk-seq-repeat`
+    The sequence :sexpr:`<clk_seq>` is repeated
+    the number of times specified by :sexpr:`<range>` (may be unbounded).
 
-:sexpr:`clk-seq-delay` -- The sequence :sexpr:`<clk_seq>` is delayed
-by the number of time steps specified by :sexpr:`<range>` (may be
-unbounded). Equivalent to
-:sexpr:`(clk-seq-concat (clk-seq-repeat (seq-bool (true)) <range>) <clk_seq>)` .
+:sexpr:`clk-seq-delay`
+    The sequence :sexpr:`<clk_seq>` is delayed
+    by the number of time steps specified by :sexpr:`<range>` (may be
+    unbounded). Equivalent to
+    :sexpr:`(clk-seq-concat (clk-seq-repeat (seq-bool (true)) <range>) <clk_seq>)` .
 
-:sexpr:`clk-seq-concat` -- Non-overlapping concatenation of any positive number
-of argument sequences.
-The first time step of each argument sequence is the time step after the last
-time step of the previous argument sequence.
+:sexpr:`clk-seq-concat`
+    Non-overlapping concatenation of any positive number
+    of argument sequences.
+    The first time step of each argument sequence is the time step after the last
+    time step of the previous argument sequence.
 
-:sexpr:`clk-seq-fusion`-- Overlapping concatenation of any positive number of
-argument sequences. The last time step of each argument sequence
-coincides with the first time step of the subsequent argument sequence.
+:sexpr:`clk-seq-fusion`
+    Overlapping concatenation of any positive number of
+    argument sequences. The last time step of each argument sequence
+    coincides with the first time step of the subsequent argument sequence.
 
 
 .. code-block:: sexpr
@@ -175,19 +179,21 @@ coincides with the first time step of the subsequent argument sequence.
 
 These repetition primitives operate on Boolean expressions and not on sequences.
 
-:sexpr:`clk-seq-goto-repeat` -- Boolean expression :sexpr:`<bool>` holds
-:sexpr:`<range>` number of time steps (may be unbounded), with gaps allowed in
-between, where it does not hold.
-The matched sequence needs to end in a time step where :sexpr:`<bool>` holds.
+:sexpr:`clk-seq-goto-repeat`
+    Boolean expression :sexpr:`<bool>` holds
+    :sexpr:`<range>` number of time steps (may be unbounded), with gaps allowed in
+    between, where it does not hold.
+    The matched sequence needs to end in a time step where :sexpr:`<bool>` holds.
 
-:sexpr:`clk-seq-nonconsecutive-repeat` -- Boolean expression :sexpr:`<bool>` holds
-:sexpr:`<range>` number of time steps (may be unbounded), with gaps allowed in
-between, where it does not hold.
-The matched sequence may end with a gap.
+:sexpr:`clk-seq-nonconsecutive-repeat`
+    Boolean expression :sexpr:`<bool>` holds
+    :sexpr:`<range>` number of time steps (may be unbounded), with gaps allowed in
+    between, where it does not hold.
+    The matched sequence may end with a gap.
 
 
 
-Parallel sequences
+Combining sequences in parallel
 ''''''''''''''''''''''''''''''''''''''
 
 .. code-block:: sexpr
@@ -201,17 +207,20 @@ Parallel sequences
 
 These primitives take any positive number of argument sequences.
 
-:sexpr:`clk-seq-and` -- All argument sequences need to match and have the same
-start point, but they may have different end points. The end point of the match
-is the latest end point of an argument sequence.
+:sexpr:`clk-seq-and`
+    All argument sequences need to match and have the same
+    start point, but they may have different end points. The end point of the match
+    is the latest end point of an argument sequence.
 
 
-:sexpr:`clk-seq-intersect` -- All argument sequences need to match and have the same
-start point and end point.
+:sexpr:`clk-seq-intersect`
+    All argument sequences need to match and have the same
+    start point and end point.
 
-:sexpr:`clk-seq-or` -- At least one of the argument sequences needs to match
-in order to produce a match in a given time step. The set of matches of the
-sequence is the union of the matches of argument sequences.
+:sexpr:`clk-seq-or`
+    At least one of the argument sequences needs to match
+    in order to produce a match in a given time step. The set of matches of the
+    sequence is the union of the matches of argument sequences.
 
 
 
@@ -234,12 +243,14 @@ The first match is the match with the earliest end point.
     (clk-seq-within <clk_seq1> <clk_seq2>)
 
 
-:sexpr:`clk-seq-throughout` -- Boolean expression :sexpr:`<bool>` must hold on
-each time step of :sexpr:`<clk_seq>`.
+:sexpr:`clk-seq-throughout`
+    Boolean expression :sexpr:`<bool>` must hold on
+    each time step of :sexpr:`<clk_seq>`.
 
-:sexpr:`clk-seq-within` -- Sequence :sexpr:`<clk_seq1>` must have a match in
-a subinterval of :sexpr:`<clk_seq2>`.
-It may span over the complete length of :sexpr:`<clk_seq2>`.
+:sexpr:`clk-seq-within`
+    Sequence :sexpr:`<clk_seq1>` must have a match in
+    a subinterval of :sexpr:`<clk_seq2>`.
+    It may span over the complete length of :sexpr:`<clk_seq2>`.
 
 
 
@@ -349,13 +360,15 @@ These primitives correspond to the logical operators applied to properties.
 
 The primitives :sexpr:`clk-prop-or` and  :sexpr:`clk-prop-and`
 take any positive number of argument properties.
+The first primitive evaluates to true if at least one of the argument properties is satisfied,
+and the second primitive evaluates to true if all argument properties are satisfied.
 
 
 Primitive :sexpr:`clk-prop-iff` is the logical operator :math:`\Leftrightarrow`
 that is true iff both argument properties have the same truth value.
 
 Primitive :sexpr:`clk-prop-implies` is the logical operator :math:`\Rightarrow`
-that is true if the first argument property is false or if the second
+that evaluates to true if the first argument property is false or if the second
 argument property is true.
 Do not confuse with implication operators ``|->`` (overlapped)
 and ``|=>`` (non-overlapped), which take a sequence and a property as arguments.
@@ -481,7 +494,7 @@ Until
 
     (clk-prop-until-with <clk_prop1> <clk_prop2>)
 
-    (clk-prop-strong-until <clk_prop1> <clk_prop2>)
+    (clk-prop-strong-until-with <clk_prop1> <clk_prop2>)
 
 These primitives requires that :sexpr:`<clk_prop1>` holds up until to the point
 where :sexpr:`<clk_prop2>` holds for the first time.
@@ -698,12 +711,30 @@ properties. For an explanation of primitives, see
     (prop-accept-on <bool> <prop>)
 
 
+The following primitives are derived, which means that they can be expressed using
+only the primitives above, but they are added here because they represent dual operations
+to nonderived primitives and are therefore necessary in order to establish the
+negation normal form.
+
+
+.. code-block:: sexpr
+
+    (prop-strong-nexttime <int> <prop>)
+
+    (prop-overlapped-followed-by <seq> <prop>) ; seq #-# prop
+
+    (prop-reject-on <bool> <prop>)
+
+    (prop-strong-until-with <prop1> <prop2>)
+
+
+
+
 
 ..    (prop-strong-until <prop1> <prop2>)
 ..
 ..    (prop-until-with <prop1> <prop2>)
 ..
-..    (prop-strong-until <prop1> <prop2>)
 
 
 ..    (prop-always <prop>) ; Question: should we omit the version without a range?
@@ -735,8 +766,6 @@ properties. For an explanation of primitives, see
 ..    (prop-non-overlapped-followed-by <seq> <prop>) ; seq #=# prop
 
 
-..    (prop-reject-on <bool> <prop>)
-..
 ..    (prop-sync-accept-on <bool> <prop>)
 ..
 ..    (prop-sync-reject-on <bool> <prop>)
