@@ -1,5 +1,6 @@
 (document
-    (add-signals a b)
+    (declare-input a)
+    (declare-input b)
     (declare-rec
         (declare prop1 (prop-and
             (prop-bool a)

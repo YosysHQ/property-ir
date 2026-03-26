@@ -6,37 +6,28 @@ from sexpr import parse_document, IrContainer
 
 logger = logging.getLogger(__name__)
 
+document_beginning: RawSExprList = ['document',
+        ['declare-input', 'a'],
+        ['declare-input', 'b'],
+        ['declare-input', 'c'],
+        ['declare-input', 'd']]
 
 def wrap_in_document(expr: RawSExprList) -> RawSExprList:
-    return ['document',
-        ['add-signals', 'a', 'b'],
-        ['add-signals', 'c', 'd'],
-        ['parse-sexpr', expr]
-    ]
+    return document_beginning + [['parse-sexpr', expr]]
 
 def wrap_multiple_expr_in_document(expr_list: list[RawSExprList]) -> RawSExprList:
-    parse_expr_list = [['parse-sexpr', expr] for expr in expr_list]
-    return ['document', ['add-signals', 'a', 'b', 'c', 'd']] + parse_expr_list
+    return document_beginning + [['parse-sexpr', expr] for expr in expr_list]
 
 
 def wrap_statement_in_document(expr: RawSExprList) -> RawSExprList:
-    return ['document',
-        ['add-signals', 'a', 'b'],
-        ['add-signals', 'c', 'd'],
-        expr
-    ]
+    return document_beginning + [expr]
 
 def wrap_multiple_statements_in_document(expr_list: list[RawSExprList]) -> RawSExprList:
-    return ['document',
-        ['add-signals', 'a', 'b'],
-        ['add-signals', 'c', 'd'],
-    ] + expr_list
+    return document_beginning + expr_list
 
-def wrap_signals_and_expr_in_document(signals: list[str], expr: RawSExprList):
-    return ['document',
-        ['add-signals'] + signals,
-        ['parse-sexpr', expr]
-    ]
+def wrap_signals_and_expr_in_document(signals: list[str], expr: RawSExprList) -> RawSExprList:
+    signal_list: RawSExprList = [['declare-input', signal] for signal in signals]
+    return ['document'] + signal_list + [['parse-sexpr', expr]]
 
 
 def apply_roundtrip(document: RawSExprList):

@@ -1,5 +1,7 @@
 (document
-    (add-signals a b c)
+    (declare-input a)
+    (declare-input b)
+    (declare-input c)
     (declare p (let-rec
             (q1 (and a b))
             (q2 (let-rec

@@ -274,7 +274,7 @@ class IrContainer:
         statements: list[RawSExprList] = []
 
         for node_name in self.source_nodes:
-            statements.append(['add-signals', node_name])
+            statements.append(['declare-input', node_name])
 
         if len(self.inner_nodes) != 0:
             inner_nodes_expr = self.generate_raw_sexpr_inner_nodes()

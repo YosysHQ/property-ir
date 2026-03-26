@@ -135,11 +135,9 @@ def parsable_declare_rec_boolean_document(draw) -> RawSExpr:
             declare_rec_expr2.append([idf, expr])
     permuted_declare_rec_expr2 = draw(st.permutations(declare_rec_expr2))
 
-    return ['document',
-        ['add-signals'] + signal_names,
-        ['declare-rec'] + permuted_declare_rec_expr1,
-        ['declare-rec'] + permuted_declare_rec_expr2
-    ]
+    signal_list: RawSExprList = [['declare-input', signal] for signal in signal_names]
+
+    return ['document'] + signal_list + [['declare-rec'] + permuted_declare_rec_expr1] + [['declare-rec'] + permuted_declare_rec_expr2]
 
 
 @st.composite

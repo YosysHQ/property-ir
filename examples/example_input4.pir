@@ -1,5 +1,8 @@
 (document
-    (add-signals a b c d)
+    (declare-input a)
+    (declare-input b)
+    (declare-input c)
+    (declare-input d)
     (declare p (let-rec
             (q1 (seq-concat (seq-bool a) q3))
             (q2 (seq-concat (seq-bool b) q4))

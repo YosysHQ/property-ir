@@ -1,5 +1,5 @@
 (document
-    (add-signals a)
+    (declare-input a)
     (declare-rec
         (declare always_a
             (prop-and
