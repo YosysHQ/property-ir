@@ -66,13 +66,21 @@ Assertions
 |                  |                             |                                    |                                      |
 +------------------+-----------------------------+-----------------------+------------+--------------------------------------+
 | disable          | ``disable iff``             | assertion statement                | 16.12 Declaring properties           |
-|                  |                             | parameter                          | (p. 441)                             |
+| condition        |                             | parameter                          | (p. 441)                             |
 |                  |                             |                                    |                                      |
 |                  |                             | ``:disable-iff``                   | 16.14.6.4 Disabling procedural       |
 |                  |                             |                                    | concurrent assertions (p. 487)       |
 |                  |                             |                                    |                                      |
 |                  |                             |                                    |                                      |
 |                  |                             |                                    |                                      |
+|                  |                             |                                    |                                      |
++------------------+-----------------------------+-----------------------+------------+--------------------------------------+
+| enable           | depends on location         | assertion statement                | 16.14.6 Embedding concurrent         |
+| condition        | of assertion in             | parameter                          | assertions in procedural             |
+|                  | procedural code             |                                    | code (p. 481)                        |
+|                  |                             | ``:enable``                        |                                      |
+|                  |                             |                                    | F.5.3.1 Neutral satisfaction         |
+|                  |                             |                                    | (p. 1247)                            |
 |                  |                             |                                    |                                      |
 +------------------+-----------------------------+-----------------------+------------+--------------------------------------+
 | vacuity          |                             | assertion statement                | 16.14.8 Nonvacuous evaluations       |
