@@ -516,9 +516,11 @@ Always and eventually
 If the evaluation attempt begins in between clock ticks,
 the evaluation is moved to the next clock tick.
 
+..  (clk-prop-always <clk_prop>) is not strictly necessary as a primitive
+
 .. code-block:: sexpr
 
-    (clk-prop-always <clk_prop>) ; Question: should we omit the version without a range?
+    (clk-prop-always <clk_prop>)
 
     (clk-prop-always-ranged <range> <clk_prop>)
 
@@ -535,11 +537,14 @@ provided bounded range, and each of these time steps has to exist.
 
 In LTL, the ``always`` operator is called *globally*.
 
+
+..  (clk-prop-strong-eventually <clk_prop>) is not strictly necessary as a primitive
+
 .. code-block:: sexpr
 
     (clk-prop-eventually <bounded_range> <clk_prop>)
 
-    (clk-prop-strong-eventually <clk_prop>)  ; Question: should we omit the version without a range?
+    (clk-prop-strong-eventually <clk_prop>)
 
     (clk-prop-strong-eventually-ranged <range> <clk_prop>)
 

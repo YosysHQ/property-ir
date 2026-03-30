@@ -274,7 +274,7 @@ different options (see explanation below).
 
 .. code-block:: sexpr
 
-    <mode> = satisfied | nonvacuously-satisfied | nonvacuous
+    <mode> ::= satisfied | nonvacuously-satisfied | nonvacuous
 
 As defined by the SystemVerilog standard, there exist two cover statements:
 While :sexpr:`cover-sequence` counts all matches per evaluation attempt,
