@@ -146,7 +146,7 @@ Establishing these restrictions will facilitate the subsequent automata construc
 These separate types were introduced to avoid
 inconsistencies that would result from clock rewriting.
 
-The following explanations can be skipped if wanting to use Property IR,
+The following explanations can be skipped,
 but might be interesting as a background.
 
 Smaller primitive set
@@ -216,11 +216,11 @@ the following expression.
 .. to inconsistencies.
 
 
-Empty Matches
+Empty matches
 """"""""""""""""
 
-A separate rewriting pass removes the empty part of sequences in order
-to exclude special cases.
+In the process of translating a clocked property into a simple property,
+the empty part of sequences is removed in order to exclude special cases.
 This is possible because on the level of
 properties, empty matches only play a role insofar that they
 have an influence on non-empty sequences via concatenation.
@@ -228,36 +228,115 @@ In an overlapped implication, an empty match of the antecedent sequence does not
 cause it to trigger.
 According to the SystemVerilog standard, the sequence expression of a sequential
 property shall not admit an empty match.
+To exclude sequences with empty matches, empty repeat
+:sexpr:`(seq-repeat (range 0 0) <seq>)` (and more generally, repeat with lower bound 0)
+must not be applied to simple sequences.
 
-example
+Consider the following example showing equivalent expressions,
+where the first expression is split
+into a disjunction of the empty and the nonempty part.
 
-
-Transformation to Simple Sequence
-"""""""""""""""""""""""""""""""""""
-
-The clocked sequence can be rewritten to a simple sequence using the macros
-``#clk-seq-apply-clock``, ``#clk-seq-nonempty-part``, and ``#seq-remove-clock`` in
-this order.
-
-The tranformation of a clocked property to a simple property is analogous to sequences, using the
-macros ``#clk-prop-apply-clock``, ``#clk-prop-nonempty-part``, and
-``#prop-remove-clock`` in this order.
 
 .. code-block:: sexpr
 
-    (clk-seq-clocked <bool> <clk_seq>)  ; clocked
+   (clk-seq-concat
+      (clk-seq-bool a)
+      (clk-seq-repeat (range 0 1) (clk-seq-bool b))
+      (clk-seq-bool c))
 
-    |   #clk-seq-apply-clock
+   (clk-seq-or
+      (clk-seq-concat (clk-seq-bool a) (clk-seq-bool c))
+      (clk-seq-concat (clk-seq-bool a) (clk-seq-bool b) (clk-seq-bool c)))
+
+..   (clk-seq-or
+..      (clk-seq-concat
+..         (clk-seq-bool a)
+..         (clk-seq-bool c))
+..      (clk-seq-concat
+..         (clk-seq-bool a)
+..         (clk-seq-repeat (range 1 1) (clk-seq-bool b))
+..         (clk-seq-bool c)))
+
+..    (clk-seq-or
+..       (clk-seq-concat
+..          (clk-seq-bool a)
+..          (clk-seq-repeat (range 0 0) (clk-seq-bool b))
+..          (clk-seq-bool c))
+..       (clk-seq-concat
+..          (clk-seq-bool a)
+..          (clk-seq-repeat (range 1 1) (clk-seq-bool b))
+..          (clk-seq-bool c)))
+
+
+Transformation steps
+"""""""""""""""""""""""""""""""""""
+
+Translating a clocked property to a simple property is performed in several steps
+in the same order as these points are discussed above:
+
+* rewrite primitives to use smaller subset
+* rewrite to global clock
+* remove empty part
+
+Note that all these steps operate on clocked properties.
+In particular, during the clock rewriting pass, the level-sensitive clock of
+:sexpr:`(clk-seq-clocked <bool> <clk_seq>)` becomes the constant :sexpr:`(true)`.
+Only after removing the empty part, the clock specification is removed and
+all primitives are replaced by their simple counterparts.
+
+
+.. The clocked sequence can be rewritten to a simple sequence using the macros
+.. ``#clk-seq-apply-clock``, ``#clk-seq-nonempty-part``, and ``#seq-remove-clock`` in
+.. this order.
+..
+.. The tranformation of a clocked property to a simple property is analogous to sequences, using the
+.. macros ``#clk-prop-apply-clock``, ``#clk-prop-nonempty-part``, and
+.. ``#prop-remove-clock`` in this order.
+
+
+.. code-block:: sexpr
+
+    (clk-prop-clocked <bool> <clk_prop>)    ; clocked
+
+    |   reduce primitives
     V
 
-    (clk-seq-clocked (true) <clk_seq2>)   ; global-clocked
+    (clk-prop-clocked <bool> <clk_prop2>)   ; fewer primitives
 
-    |  #clk-seq-nonempty-part
+    |   apply clock
     V
 
-    (clk-seq-clocked (true) <clk_seq3>)   ; global-clocked and non-empty-matching
+    (clk-prop-clocked (true) <clk_prop3>)   ; global-clocked
 
-    |  #seq-remove-clock
+    |  nonempty part
     V
 
-    <seq>                               ; simple/unclocked
+    (clk-prop-clocked (true) <clk_prop4>)   ; global-clocked and non-empty-matching
+
+    |  remove clock
+    V
+
+    <prop>                                  ; simple/unclocked
+
+
+..    (clk-seq-clocked <bool> <clk_seq>)    ; clocked
+..
+..    |   #clk-seq-reduce-primitives
+..    V
+..
+..    (clk-seq-clocked <bool> <clk_seq2>)    ; fewer primitives
+..
+..    |   #clk-seq-apply-clock
+..    V
+..
+..    (clk-seq-clocked (true) <clk_seq3>)   ; global-clocked
+..
+..    |  #clk-seq-nonempty-part
+..    V
+..
+..    (clk-seq-clocked (true) <clk_seq4>)   ; global-clocked and non-empty-matching
+..
+..    |  #seq-remove-clock
+..    V
+..
+..    <seq>                                 ; simple/unclocked

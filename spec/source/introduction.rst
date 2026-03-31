@@ -187,9 +187,9 @@ assertions but can not be represented in Property IR.
 This concerns the *extended Booleans*, including sampled value functions like
 ``$past``, ``$rose`` etc. and
 the ``matched`` and ``triggered`` functions.
-The reason is that Property IR expects *time-variable Booleans* as input,
-that is, functions from time to Boolean. Allowing ``$past`` and similar
-operators would deviate from this stateless notion of input.
+The reason is that Property IR operates on *time-variable Booleans*,
+that is, stateless functions from time to Boolean, whose value depends only on the current
+input values, and not on previous output values.
 
 .. note::
 
