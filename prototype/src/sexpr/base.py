@@ -566,11 +566,12 @@ class IrContainer:
         self.nodes[new_node_id] = new_node
         return new_node
 
-    def add_placeholder_node(self, name: str, expected_type: Optional[type] = None) -> PlaceholderNode:
+    def add_placeholder_node(self, name: Optional[str] = None, expected_type: Optional[type] = None) -> PlaceholderNode:
         new_node_id = self._get_next_node_id()
         new_node = PlaceholderNode(ir_container=self, node_id=new_node_id, expected_type=expected_type)
         self.nodes[new_node_id] = new_node
-        self.node_names[name] = new_node_id
+        if name is not None:
+            self.node_names[name] = new_node_id
         return new_node
 
     def add_signal_node(self, signal_name: str) -> PropertyIrNode:
