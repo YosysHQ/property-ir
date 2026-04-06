@@ -83,16 +83,18 @@ def nnf_process_node(
 
     if isinstance(current_node, Signal):
         if invert:
-            added_node = container.add_node_by_kwargs(Not, {'child': corresponding_nodes[(repr_id, False)]})
+            added_node = output_container.add_node_by_kwargs(Not, {'child': corresponding_nodes[(repr_id, False)]})
             corresponding_nodes[(repr_id, True)] = added_node.node_id
+            logger.debug('Added Not node: %s', added_node.node_id)
             return added_node.node_id
         else:
             raise ValueError('Signal with node id %s is missing in corresponding_nodes', repr_id)
 
     elif isinstance(current_node, Constant):
         new_value = current_node.value if not invert else not current_node.value
-        added_node = container.add_node_by_kwargs(Constant, {'value': new_value})
+        added_node = output_container.add_node_by_kwargs(Constant, {'value': new_value})
         corresponding_nodes[(repr_id, invert)] = added_node.node_id
+        logger.debug('Added Constant node: %s', added_node.node_id)
         return added_node.node_id
 
     # add current node to recursion stack
@@ -103,8 +105,11 @@ def nnf_process_node(
     if isinstance(current_node, Not):
         placeholder_node = output_container.add_placeholder_node()
         corresponding_nodes[(repr_id, invert)] = placeholder_node.node_id
+        logger.debug('Added placeholder node: %s', placeholder_node.node_id)
         result_id = nnf_process_node(current_node.child, container, not invert, output_container, corresponding_nodes, nodes_in_call_stack)
+        logger.debug('Output container nodes %s', output_container.nodes)
         placeholder_node.instantiate_placeholder(output_container[result_id])
+        logger.debug('Instantiated placeholder node %s with %s', placeholder_node.node_id, result_id)
         nodes_in_call_stack.remove((repr_id, invert))
         return result_id
 
@@ -115,6 +120,7 @@ def nnf_process_node(
     new_primitive_type = type(current_node) if not invert else dual_primitives[type(current_node)]
     placeholder_node = output_container.add_placeholder_node(expected_type=new_primitive_type)
     corresponding_nodes[(repr_id, invert)] = placeholder_node.node_id
+    logger.debug('Added placeholder node: %s', placeholder_node.node_id)
 
     # call recursion for all non-literal children, with correct polarity
     # obtain child node ids
@@ -144,6 +150,7 @@ def nnf_process_node(
     # instantiate current placeholder node and set its children
     new_node = output_container.add_node_by_kwargs(new_primitive_type, kwargs)
     placeholder_node.instantiate_placeholder(new_node)
+    logger.debug('Instantiated placeholder node %s with %s', placeholder_node.node_id, new_node.node_id)
 
     # remove current node from call stack
     nodes_in_call_stack.remove((repr_id, invert))
@@ -169,8 +176,10 @@ def nnf(container: IrContainer) -> IrContainer:
         signal_repr_id = container.merged_nodes.find(node_id)
         signal_node = output_container.add_signal_node(name)
         corresponding_nodes[(signal_repr_id, False)] = signal_node.node_id
+        logger.debug('Added Signal node %s', signal_node)
         output_container.global_nodes[name] = signal_node.node_id
         output_container.node_names[name] = signal_node.node_id
+        output_container.sink_nodes.append(signal_node.node_id)
 
     # depth-first search through expression graph
     # start recursion at unnamed roots (sink nodes), which will later be those used directly in assertion statements
@@ -199,6 +208,7 @@ def nnf(container: IrContainer) -> IrContainer:
     # TODO set inner nodes of output container accordingly
 
     # TODO: keep global node names of input nodes and transfer to output nodes
+    # if negated node, add negation indicator to node label
     # if negation has global name, move to child node
 
     return output_container
