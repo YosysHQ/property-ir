@@ -24,18 +24,18 @@ def check_nnf_equivalence(input_document: RawSExprList, expected_output_document
     expected_output_container.bypass_placeholders()
     expected_output_container.canonical_id_renaming()
 
-    output_directory: Path = Path('./output')
-    container.show_graph(output_directory / 'check_nnf_equ_input.png')
-    expected_output_container.show_graph(output_directory / 'check_nnf_equ_expected_output.png')
+    #output_directory: Path = Path('./output')
+    #container.show_graph(output_directory / 'check_nnf_equ_input.png')
+    #expected_output_container.show_graph(output_directory / 'check_nnf_equ_expected_output.png')
 
     output_container = nnf(container)
 
-    output_container.show_graph(output_directory / 'check_nnf_equ_output_before_renaming.png')
+    #output_container.show_graph(output_directory / 'check_nnf_equ_output_before_renaming.png')
 
     output_container.bypass_placeholders()
     output_container.canonical_id_renaming()
 
-    output_container.show_graph(output_directory / 'check_nnf_equ_output_after_renaming.png')
+    #output_container.show_graph(output_directory / 'check_nnf_equ_output_after_renaming.png')
 
     assert output_container == expected_output_container
 
@@ -95,10 +95,49 @@ def test_nnf_boolean_shared_subgraph():
     input_statement3: RawSExprList = ['declare', 'q', ['and', 'c', 'p']]
     expected_output_statement2: RawSExprList = ['declare', 'h', ['and', ['not', 'a'], ['not', 'b']]]
     expected_output_statement3: RawSExprList = ['declare', 'q', ['and', 'c', 'p']]
+    expected_output_statement4: RawSExprList = ['declare', 'p_neg', 'h']
     root_node_statement1: RawSExprList = ['parse-sexpr', 'p']
     root_node_statement2: RawSExprList = ['parse-sexpr', 'h']
     root_node_statement3: RawSExprList = ['parse-sexpr', 'q']
 
     input_document = wrap_multiple_statements_in_document([input_statement1, input_statement2, input_statement3, root_node_statement1, root_node_statement2, root_node_statement3])
-    expected_output_document = wrap_multiple_statements_in_document([input_statement1, expected_output_statement2, expected_output_statement3, root_node_statement1, root_node_statement2, root_node_statement3])
+    expected_output_document = wrap_multiple_statements_in_document([input_statement1, expected_output_statement2, expected_output_statement3, expected_output_statement4, root_node_statement1, root_node_statement2, root_node_statement3])
+    check_nnf_equivalence(input_document, expected_output_document)
+
+def test_nnf_boolean_global_name_of_not_unchanged():
+    input_statement1: RawSExprList = ['declare', 'p', ['not', 'a']]
+    input_statement2: RawSExprList = ['declare', 'q', ['not', 'b']]
+    input_statement3: RawSExprList = ['declare', 'h', ['and', 'p', 'q']]
+    root_node_statement1: RawSExprList = ['parse-sexpr', 'p']
+    root_node_statement2: RawSExprList = ['parse-sexpr', 'q']
+    root_node_statement3: RawSExprList = ['parse-sexpr', 'h']
+
+    input_document = wrap_multiple_statements_in_document([input_statement1, input_statement2, input_statement3, root_node_statement1, root_node_statement2, root_node_statement3])
+    expected_output_document = wrap_multiple_statements_in_document([input_statement1, input_statement2, input_statement3, root_node_statement1, root_node_statement2, root_node_statement3])
+    check_nnf_equivalence(input_document, expected_output_document)
+
+
+
+def test_nnf_boolean_constant_even_cycle():
+    input_raw_sexpr: RawSExprList = ['declare-rec', ['declare', 'p', ['not', ['and', ['or', ['true'], ['false']], ['not', ['or', ['constant', 'true'], 'p']]]]]]
+    expected_output_raw_sexpr: RawSExprList = ['declare-rec', ['declare', 'p', ['or', ['and', ['false'], ['true']], ['or', ['true'], 'p']]]]
+    root_node_statement1: RawSExprList = ['parse-sexpr', 'p']
+
+    input_document: RawSExprList = wrap_multiple_statements_in_document([input_raw_sexpr, root_node_statement1])
+    expected_output_document = wrap_multiple_statements_in_document([expected_output_raw_sexpr, root_node_statement1])
+    check_nnf_equivalence(input_document, expected_output_document)
+
+def test_nnf_boolean_constant_shared_subgraph():
+    input_statement1: RawSExprList = ['declare', 'p', ['or', ['true'], ['false']]]
+    input_statement2: RawSExprList = ['declare', 'h', ['not', 'p']]
+    input_statement3: RawSExprList = ['declare', 'q', ['and', 'c', 'p']]
+    expected_output_statement2: RawSExprList = ['declare', 'h', ['and', ['false'], ['true']]]
+    expected_output_statement3: RawSExprList = ['declare', 'q', ['and', 'c', 'p']]
+    expected_output_statement4: RawSExprList = ['declare', 'p_neg', 'h']
+    root_node_statement1: RawSExprList = ['parse-sexpr', 'p']
+    root_node_statement2: RawSExprList = ['parse-sexpr', 'h']
+    root_node_statement3: RawSExprList = ['parse-sexpr', 'q']
+
+    input_document = wrap_multiple_statements_in_document([input_statement1, input_statement2, input_statement3, root_node_statement1, root_node_statement2, root_node_statement3])
+    expected_output_document = wrap_multiple_statements_in_document([input_statement1, expected_output_statement2, expected_output_statement3, expected_output_statement4, root_node_statement1, root_node_statement2, root_node_statement3])
     check_nnf_equivalence(input_document, expected_output_document)

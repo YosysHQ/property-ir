@@ -179,7 +179,7 @@ def nnf(container: IrContainer) -> IrContainer:
         logger.debug('Added Signal node %s', signal_node)
         output_container.global_nodes[name] = signal_node.node_id
         output_container.node_names[name] = signal_node.node_id
-        output_container.sink_nodes.append(signal_node.node_id)
+        output_container.source_nodes[name] = (signal_node.node_id)
 
     # depth-first search through expression graph
     # start recursion at unnamed roots (sink nodes), which will later be those used directly in assertion statements
@@ -205,10 +205,38 @@ def nnf(container: IrContainer) -> IrContainer:
         output_container.sink_nodes.append(output_node_id)
 
 
-    # TODO set inner nodes of output container accordingly
+    # keep global node names of input nodes and transfer to output nodes
+    # and set inner nodes of output container accordingly
+    # (ignoring local node names)
 
-    # TODO: keep global node names of input nodes and transfer to output nodes
-    # if negated node, add negation indicator to node label
-    # if negation has global name, move to child node
+    # if negation (Not etc.) has global name, it is moved to child node, except for literal case
+    # (the negation is not removed, so the corresponding negation keeps the label unnegated)
+    # (this happens without any special treatment of these cases)
+
+    for (name, node_id) in container.global_nodes.items():
+
+        logger.debug('Process global name %s of node %s', name, node_id)
+
+        if name not in container.inner_nodes: # ignore Signal nodes without other global names
+            continue
+
+        # if uninverted, add to output container
+        if (node_id, False) in corresponding_nodes:
+            new_name = output_container.uniquify(name)
+            output_container.global_nodes[new_name] = corresponding_nodes[(node_id, False)]
+            output_container.node_names[new_name] = corresponding_nodes[(node_id, False)]
+            output_container.inner_nodes[new_name] = corresponding_nodes[(node_id, False)]
+
+        # if negated node, add negation indicator to node label
+        if (node_id, True) in corresponding_nodes:
+            new_name = output_container.uniquify(name + '_neg')
+            output_container.global_nodes[new_name] = corresponding_nodes[(node_id, True)]
+            output_container.node_names[new_name] = corresponding_nodes[(node_id, True)]
+            output_container.inner_nodes[new_name] = corresponding_nodes[(node_id, True)]
+
+
+    logger.debug('Global names output: %s', output_container.global_nodes.items())
+    logger.debug('Inner nodes output: %s', output_container.inner_nodes.items())
+
 
     return output_container

@@ -465,6 +465,11 @@ class IrContainer:
 
         visited: set[NodeId] = set()
 
+        logger.debug('canonical_id_renaming source_nodes: %s', self.source_nodes.values())
+        logger.debug('canonical_id_renaming inner_nodes: %s', self.inner_nodes.values())
+        logger.debug('canonical_id_renaming sink_nodes: %s', self.sink_nodes)
+        logger.debug('canonical_id_renaming visit_next: %s', visit_next)
+
         while len(visit_next) > 0:
             current_id: NodeId = visit_next.popleft()
             if current_id in visited:
