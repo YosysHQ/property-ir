@@ -19,6 +19,7 @@ class SExprLexer(RegexLexer):
             (r'\$', Number),
             (r'\#[a-z\-]+', String),
             (r'\b(not|or|and|constant|initial)\b', Name.Tag),
+            (r'\b([a-z\-]+\-gclk)\b', Name.Tag),
             (r'\b((prop\-|seq\-|bool\-|clk\-prop\-|clk\-seq\-|state\-)[a-z\-]+)\b', Name.Tag),
             (r'\s+', Whitespace),
             (r'.', Text)

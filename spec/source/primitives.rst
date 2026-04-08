@@ -49,6 +49,9 @@ the first time step.
 Boolean primitives
 """"""""""""""""""""
 
+Logical operators
+''''''''''''''''''''
+
 .. code-block:: sexpr
 
     (not <bool>)
@@ -60,7 +63,43 @@ Boolean primitives
 These primitives correspond to the logical operators ``!``, ``&&``, and ``||`` of SystemVerilog.
 The primitives :sexpr:`and` and :sexpr:`or` accept any positive number of arguments of type ``bool``.
 
+Global clocking future sampled value functions
+''''''''''''''''''''''''''''''''''''''''''''''''
 
+.. code-block:: sexpr
+
+    (future-gclk <bool1> <bool2>)
+
+    (changing-gclk <bool1> <bool2>)
+
+    (rising-gclk <bool1> <bool2>)
+
+    (falling-gclk <bool1> <bool2>)
+
+These primitives correspond to the respective global clocking future sampled
+value functions.
+They can be used to convert an edge-sensitive clock control to a level-sensitive
+clock control inside Property IR.
+The parameter :sexpr:`<bool1>` is the (edge-sensitive clock) input signal and should correspond
+``clock === 1`` (computed outside of Property IR),
+and :sexpr:`<bool2>` is a signal that states whether the (edge-sensitive clock) input signal is defined, and
+should correspond to ``(clock === 1) || (clock === 0)``
+(also computed outside of Property IR), in order to exclude values ``x`` and ``z``.
+
+TODO: add crossrefs to sva table and types section explanation
+
+
+:sexpr:`future-gclk`
+    Evaluates to true iff the input signal is defined and true in the next global time step.
+
+:sexpr:`changing-gclk`
+    Evaluates to true iff the input signal is defined and differs in the current and in the next global time step.
+
+:sexpr:`rising-gclk`
+    Evaluates to true iff the input signal is defined and changes from false to true in the next global time step.
+
+:sexpr:`falling-gclk`
+    Evaluates to true iff the input signal is defined and changes from true to false in the next global time step.
 
 
 Clocked Sequence
