@@ -83,7 +83,9 @@ They can only take the values true or false.
 
 Also note that extended expressions, that depend not only on the current values
 of inputs, like sampled value functions and the ``triggered`` and ``matched``
-functions, need to be handled outside of Property IR.
+functions, need to be handled outside of Property IR. An exception are the
+:ref:`global clocking future sampled value functions <global clocking future sampled value functions>`
+that are used for clock control.
 
 Clocked Sequences
 ^^^^^^^^^^^^^^^^^^
@@ -94,7 +96,6 @@ Clocked sequences use a clock that may be different from the global clock.
 The basic building blocks of sequences are sequences of length 1, consisting of
 one value of a Boolean expression. They can be combined via concatenation, repetition,
 and more complex operations.
-
 
 .. code-block:: sexpr
 
@@ -107,6 +108,29 @@ and more complex operations.
          (clk-seq-bool (or a b)))
       (clk-seq-repeat (range 3 $) (clk-seq-bool c))))
 
+All clock controls are of type ``bool`` and expected to be *level-sensitive*
+(or rather a time-discrete global-clock sampled clock control), i.e., they are high
+in the global clock tick immediately before they have their
+rising (resp. falling) edge (because that is when values are sampled) and low else.
+It is possible to convert an edge-sensitive clock to a level-sensitive clock
+inside Property IR using the :ref:`global clocking future sampled value functions <global clocking future sampled value functions>`.
+For example, the clock control of the sequence ``seq_1`` can be set to ``@(posedge clk)``
+as follows, where, roughly speaking, ``clk`` is the edge-sensitive clock, and ``clk_def`` states
+whether ``clk`` has a defined value.
+
+.. code-block:: sexpr
+
+   (declare-input clk)
+   (declare-input clk_def)
+   (declare seq_1_clk (clk-seq-clocked (rising-gclk clk clk_def) seq_1))
+
+.. note::
+
+   Primitives corresponding to future sampled
+   value functions, like :sexpr:`rising-gclk`, are based on :sexpr:`future-gclk`
+   and are not synthesizable. However, it is possible to remove :sexpr:`future-gclk`
+   from the checker circuit by delaying the rest of the circuit by one
+   global time step in order to obtain a synthesizable circuit again.
 
 Clocked Properties
 ^^^^^^^^^^^^^^^^^^
@@ -185,9 +209,6 @@ rewritten in the following way.
 Global clock
 """""""""""""""
 
-All clock controls are expected to be *level-sensitive*
-(or rather a time-discrete global-clock sampled clock control), i.e., they are high
-in the global clock tick where they have their rising (resp. falling) edge.
 Clocked properties, that can have one or multiple clocks,
 are rewritten in such a way that they use the global clock.
 Roughly speaking, this is achieved by recursively rewriting property expressions
