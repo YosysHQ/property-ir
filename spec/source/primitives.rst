@@ -13,14 +13,14 @@ to disambiguate between for example :sexpr:`and`, :sexpr:`seq-and`, and :sexpr:`
 Boolean Expression
 ^^^^^^^^^^^^^^^^^^^^
 
-.. Recall that ``x`` and ``z`` do not exist inside Property IR, and are treated
-.. as they usually are in SystemVerilog in a purely Boolean context.
 
 .. note::
 
     Extended Booleans like sampled value functions (``$past``, ``$rose``, ``$fell``, ``$stable`` etc.)
     as well as ``triggered`` and ``matched``
     need to be handled outside of Property IR.
+    An exception are several :ref:`global clocking future sampled value functions <global clocking future sampled value functions>`
+    that are needed to represent various clock expressions.
 
 
 Base Booleans
@@ -80,26 +80,72 @@ These primitives correspond to the respective global clocking future sampled
 value functions.
 They can be used to convert an edge-sensitive clock control to a level-sensitive
 clock control inside Property IR.
-The parameter :sexpr:`<bool1>` is the (edge-sensitive clock) input signal and should correspond
-``clock === 1`` (computed outside of Property IR),
-and :sexpr:`<bool2>` is a signal that states whether the (edge-sensitive clock) input signal is defined, and
-should correspond to ``(clock === 1) || (clock === 0)``
-(also computed outside of Property IR), in order to exclude values ``x`` and ``z``.
 
-TODO: add crossrefs to sva table and types section explanation
+See the Table on :ref:`clock control <clock control>` for a reference of how to
+use these primitives to represent various clock expressions.
+
+
+:sexpr:`<bool1>` = ``clock_value``
+    The first parameter  is the (edge-sensitive clock) input signal and should be set
+    to ``clock_value`` = ``clk === 1`` (computed outside of Property IR).
+
+:sexpr:`<bool2>` = ``clock_defined``
+    The second parameter  is a signal that states whether the (edge-sensitive clock) input signal is defined, and
+    should be set to
+    ``clock_defined`` = ``(clk === 1'b0) || (clk === 1'b1)``
+    (also computed outside of Property IR), in order to exclude values ``x`` and ``z``.
+
 
 
 :sexpr:`future-gclk`
     Evaluates to true iff the input signal is defined and true in the next global time step.
 
-:sexpr:`changing-gclk`
-    Evaluates to true iff the input signal is defined and differs in the current and in the next global time step.
-
 :sexpr:`rising-gclk`
-    Evaluates to true iff the input signal is defined and changes from false to true in the next global time step.
+    Evaluates to true iff the input signal is false or undefined in the current time step
+    and is defined and true in the next global time step.
 
 :sexpr:`falling-gclk`
-    Evaluates to true iff the input signal is defined and changes from true to false in the next global time step.
+    Evaluates to true iff the input signal is true or undefined in the current time step
+    and is defined and false in the next global time step.
+
+:sexpr:`changing-gclk`
+    Evaluates to true iff the input signal or the clock defined value differ in the current
+    and in the next global time step.
+
+If also changes between values ``x`` and ``z`` should be regarded by :sexpr:`changing-gclk`,
+this can be achieved by setting ``clock_value`` = ``(clk === 1'b1) || (clk === 1'bx)`` to encode the four input values:
+
++---------+-------------+---------------+
+|clk      | clock_value | clock_defined |
++=========+=============+===============+
+|  0      |           0 |       1       |
++---------+-------------+---------------+
+|  1      |           1 |       1       |
++---------+-------------+---------------+
+|  z      |           0 |       0       |
++---------+-------------+---------------+
+|  x      |           1 |       0       |
++---------+-------------+---------------+
+
+Note that :sexpr:`changing-gclk`, :sexpr:`rising-gclk`, and :sexpr:`falling-gclk`
+are all derived from :sexpr:`future-gclk`.
+
+.. code-block:: sexpr
+
+    (rising-gclk clock_value clock_defined) ===
+        (and (not (and clock_value clock_defined))
+             (future-gclk (and clock_value clock_defined)))
+
+    (falling-gclk clock_value clock_defined) ===
+        (and (not (and (not clock_value) clock_defined))
+             (future-gclk (and (not clock_value) clock_defined)))
+
+    (changing-gclk clock_value clock_defined) ===
+        (or (xor (clock_value (future-gclk clock_value)))
+            (xor (clock_defined (future-gclk clock_defined))))
+
+
+
 
 
 Clocked Sequence
@@ -122,7 +168,13 @@ The clock can be changed anywhere within the sequence.
 
 .. code-block:: sexpr
 
-    (clk-seq-clocked <bool> <clk_seq>) ; @(bool) clk_seq
+    (clk-seq-clocked <bool> <clk_seq>) ; @(clk_expr) clk_seq
+
+
+It expects a level-sensitive clock control as a ``bool`` parameter.
+See the Table on :ref:`clock control <clock control>` for a reference of how to
+use :ref:`global clocking future sampled value functions <global clocking future sampled value functions>`
+to represent SVA clock expressions.
 
 The clock can explicitly be specified to be the global clock by using
 the argument :sexpr:`(constant true)` or :sexpr:`(true)`.
@@ -313,7 +365,12 @@ The clock can be changed anywhere within the property.
 
 .. code-block:: sexpr
 
-    (clk-prop-clocked <bool> <clk_prop>) ; @(bool) clk_prop
+    (clk-prop-clocked <bool> <clk_prop>) ; @(clk_expr) clk_prop
+
+It expects a level-sensitive clock control as a ``bool`` parameter.
+See the Table on :ref:`clock control <clock control>` for a reference of how to
+use :ref:`global clocking future sampled value functions <global clocking future sampled value functions>`
+to represent SVA clock expressions.
 
 The clock can explicitly be specified to be the global clock by using
 the argument :sexpr:`(constant true)` or :sexpr:`(true)`.

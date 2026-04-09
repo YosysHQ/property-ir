@@ -1,11 +1,15 @@
 SVA Table
 --------------------------------
 
+.. role:: sexpr(code)
+   :language: sexpr
 
 .. note::
 
-    Sampled value functions, ``triggered``, ``matched``, and local variables
-    can not be expressed in Property IR.
+    Sampled value functions
+    (except for some :ref:`global clocking future sampled value functions <global clocking future sampled value functions>`),
+    ``triggered``, ``matched``, and local variables
+    need to be handled outside of Property IR.
     Some of these features might be added in later revisions.
 
 
@@ -111,32 +115,56 @@ Clock Control
 ^^^^^^^^^^^^^^^^^^
 
 
-+----------------------------------+--------------------------------+------------------------------------------------+------------------------------+
-|     concept                      | SVA operation                  | Property IR primitive                          | SV Standard                  |
-|                                  |                                |                                                |                              |
-+==================================+================================+================================================+==============================+
-| global clock                     |                                | ``(constant true)``                            |                              |
-|                                  |                                |                                                | 16.9.4 Global clocking past  |
-|                                  |                                |                                                | and future sampled value     |
-|                                  |                                |                                                | functions (p. 418)           |
-+----------------------------------+--------------------------------+------------------------------------------------+                              |
-| event                            | ``@(event)``                   | ``future-gclk``                                |                              |
-|                                  |                                |                                                |                              |
-|                                  |                                |                                                |                              |
-+----------------------------------+--------------------------------+------------------------------------------------+                              |
-| rising edge                      | ``@(posedge clk)``             | ``rising-gclk``                                | F.3.1 Clock control          |
-|                                  |                                |                                                | (p. 1235)                    |
-+----------------------------------+--------------------------------+------------------------------------------------+                              |
-| falling edge                     | ``@(negedge clk)``             | ``falling-gclk``                               |                              |
-|                                  |                                |                                                | F.3.4.4 Derived sampled      |
-+----------------------------------+--------------------------------+------------------------------------------------+ value functions (p. 1240)    |
-| any edge                         | ``@(edge clk)``                | ``changing-gclk``                              |                              |
-| (``clk`` not global clock)       |                                |                                                |                              |
-|                                  |                                |                                                |                              |
-+----------------------------------+--------------------------------+------------------------------------------------+------------------------------+
++----------------------------------+--------------------------------+-------------------------------------------------------------------+------------------------------+
+|     concept                      | SVA operation                  | Property IR primitive                                             | SV Standard                  |
+|                                  |                                |                                                                   |                              |
++==================================+================================+===================================================================+==============================+
+|                                  |                                |                                                                   | 9.4.2 Event control (p. 232) |
+|                                  |                                |                                                                   |                              |
+| global clock                     | ``@($global_clock)``           | ``(constant true)``                                               |                              |
+|                                  |                                |                                                                   | 16.9.4 Global clocking past  |
+|                                  |                                |                                                                   | and future sampled value     |
+|                                  |                                |                                                                   | functions (p. 418)           |
++----------------------------------+--------------------------------+-------------------------------------------------------------------+                              |
+| rising edge                      | ``@(posedge clk)``             | ``rising-gclk``                                                   | F.3.1 Clock control          |
+|                                  |                                |                                                                   | (p. 1235)                    |
++----------------------------------+--------------------------------+-------------------------------------------------------------------+                              |
+| falling edge                     | ``@(negedge clk)``             | ``falling-gclk``                                                  |                              |
+|                                  |                                |                                                                   | F.3.4.4 Derived sampled      |
++----------------------------------+--------------------------------+-------------------------------------------------------------------+ value functions (p. 1240)    |
+| any edge                         | ``@(edge clk)``                | ``(or (rising-gclk clk clk_def) (falling-gclk clk clk_def)``      |                              |
+|                                  |                                |                                                                   |                              |
+|                                  |                                |                                                                   |                              |
+|                                  |                                |                                                                   |                              |
++----------------------------------+--------------------------------+-------------------------------------------------------------------+                              |
+| changing clock                   | ``@(clk)``                     | ``changing-gclk``                                                 |                              |
+|                                  |                                |                                                                   |                              |
+| (``clk`` not global clock)       |                                |                                                                   |                              |
++----------------------------------+--------------------------------+-------------------------------------------------------------------+------------------------------+
+| conditional clock                | ``@(clk_expr iff bool)``       | ``(and pir_clk_expr bool)``                                       | 9.4.2.3 Conditional event    |
+|                                  |                                |                                                                   | controls (p.235)             |
+|                                  |                                |                                                                   |                              |
+|                                  |                                |                                                                   |                              |
+|                                  |                                |                                                                   |                              |
+|                                  |                                |                                                                   |                              |
+|                                  |                                |                                                                   |                              |
++----------------------------------+--------------------------------+-------------------------------------------------------------------+------------------------------+
+| clock disjunction                | ``@(clk_expr1 or clk_expr2)``  | ``(or pir_clk_expr1 pir_clk_expr2)``                              | 9.4.2.1 Event OR operator    |
+|                                  |                                |                                                                   | (p. 232)                     |
+|                                  | ``@(clk_expr1, clk_expr2)``    |                                                                   |                              |
+|                                  |                                |                                                                   |                              |
+|                                  |                                |                                                                   |                              |
+|                                  |                                |                                                                   |                              |
++----------------------------------+--------------------------------+-------------------------------------------------------------------+------------------------------+
 
+.. note::
 
-
+    The corresponding Property IR clock expressions ``pir_clk_expr`` etc. in
+    conditional clock and clock disjunction need to use the correct
+    primitives necessary for the SVA clock expressions ``clk_expr`` etc.
+    For example, ``@(posedge clk iff bool)`` corresponds to :sexpr:`(and (rising-gclk clk clk_def) bool)`.
+    Also take note of the details on the
+    :ref:`global clocking future sampled value functions <global clocking future sampled value functions>`.
 
 Boolean Expressions
 ^^^^^^^^^^^^^^^^^^^^^

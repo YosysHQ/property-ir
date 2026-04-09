@@ -73,8 +73,7 @@ Boolean Expressions
 
 Boolean expressions correspond to signals, either directly through the declaration of
 and external signal, as Boolean constants, or as a Boolean function using a basic set of logical operators.
-They can only take the values true or false, and signal values ``x`` and ``z``
-are interpreted as false.
+They can only take the values true or false.
 
 .. code-block:: sexpr
 

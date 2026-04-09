@@ -190,6 +190,8 @@ the ``matched`` and ``triggered`` functions.
 The reason is that Property IR operates on *time-variable Booleans*,
 that is, stateless functions from time to Boolean, whose value depends only on the current
 input values, and not on previous output values.
+(An exception are several :ref:`global clocking future sampled value functions <global clocking future sampled value functions>`
+that are needed to represent various clock expressions.)
 
 .. note::
 
@@ -225,7 +227,7 @@ intermediate results representable as Property IR.
 .. note::
 
     This revision of Property IR does not include support for local variables yet,
-    but it will be added in future revisions.
+    but it is planned for future revisions.
 
     .. Local variable assignments can contain arbitrary SV logic that needs to be
     .. handled outside of Property IR.
