@@ -602,7 +602,7 @@ Until
 
     (clk-prop-strong-until-with <clk_prop1> <clk_prop2>)
 
-These primitives requires that :sexpr:`<clk_prop1>` holds up until to the point
+These primitives require that :sexpr:`<clk_prop1>` holds up until to the point
 where :sexpr:`<clk_prop2>` holds for the first time.
 The ``until-with`` variants are overlapping, meaning that it is required that
 :sexpr:`<clk_prop1>` and :sexpr:`<clk_prop2>` hold simultaneously for at least
