@@ -81,11 +81,11 @@ They can only take the values true or false.
    (declare-input b)
    (declare c (and (or a b) (not b) (constant true)))
 
-Also note that extended expressions, that depend not only on the current values
-of inputs, like sampled value functions and the ``triggered`` and ``matched``
-functions, need to be handled outside of Property IR. An exception are the
-:ref:`global clocking future sampled value functions <global clocking future sampled value functions>`
-that are used for clock control.
+.. Also note that extended expressions, that depend not only on the current values
+.. of inputs, like sampled value functions and the ``triggered`` and ``matched``
+.. functions, need to be handled outside of Property IR. An exception are the
+.. :ref:`global clocking future sampled value functions <global clocking future sampled value functions>`
+.. that are used for clock control.
 
 Clocked Sequences
 ^^^^^^^^^^^^^^^^^^

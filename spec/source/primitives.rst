@@ -63,6 +63,16 @@ Logical operators
 These primitives correspond to the logical operators ``!``, ``&&``, and ``||`` of SystemVerilog.
 The primitives :sexpr:`and` and :sexpr:`or` accept any positive number of arguments of type ``bool``.
 
+.. code-block:: sexpr
+
+    (eq <bool1> <bool2>)
+
+    (xor <bool1> <bool2>)
+
+
+These primitives correspond to the SVA operations ``==`` and ``!=`` used
+with purely Boolean arguments.
+
 Global clocking future sampled value functions
 ''''''''''''''''''''''''''''''''''''''''''''''''
 

@@ -188,10 +188,10 @@ This concerns the *extended Booleans*, including sampled value functions like
 ``$past``, ``$rose`` etc. and
 the ``matched`` and ``triggered`` functions.
 The reason is that Property IR operates on *time-variable Booleans*,
-that is, stateless functions from time to Boolean, whose value depends only on the current
+that is, stateless functions from time to Boolean, whose current value depends only on the current
 input values, and not on previous output values.
-(An exception are several :ref:`global clocking future sampled value functions <global clocking future sampled value functions>`
-that are needed to represent various clock expressions.)
+(An exception are the :ref:`global clocking future sampled value functions <global clocking future sampled value functions>`,
+which can look one global time step into the future and are used to represent clock expressions.)
 
 .. note::
 
