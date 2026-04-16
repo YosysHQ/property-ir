@@ -20,8 +20,8 @@ Property IR documentation
 
 .. toctree::
    :maxdepth: 2
-   :caption: Contents:
 
+   Contents <self>
    introduction
    syntax
    types

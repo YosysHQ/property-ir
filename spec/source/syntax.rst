@@ -34,7 +34,7 @@ Identifier form
 An identifier that is declared previously via a
 :ref:`declare statement <declare statements>` is a valid
 expression and can appear anywhere where expressions are allowed,
-given that it has the correct type.
+provided that it has the correct type.
 
 Recursive form
 ^^^^^^^^^^^^^^^^^^^^^^^
@@ -51,15 +51,16 @@ The :sexpr:`let-rec` expression can be used to model cycles and (mutual) recursi
 The identifiers bound in a :sexpr:`let-rec` expression can only be accessed locally,
 either inside any of the named subexpressions (including the same and earlier ones),
 or in the return expression.
-Note that it is not possible to bind literals to identifiers.
+Note that it is not possible to bind literals to identifiers,
+for example :sexpr:`(declare n 5)` and :sexpr:`(let-rec (c true) (constant c))` are forbidden.
 :sexpr:`let-rec` expressions can appear anywhere where expressions are allowed,
-given that they have the correct type. The type of a :sexpr:`let-rec` expression is
+provided that they have the correct type. The type of a :sexpr:`let-rec` expression is
 the type of its return expression.
 They can be nested, but
 reusing identifiers in nested :sexpr:`let-rec` expressions,
 and reusing identifiers that are declared previously via a
 :ref:`declare statement <declare statements>`,
-is forbidden, i.e., *shadowig* is forbidden.
+is forbidden, i.e., *shadowing* is forbidden.
 
 Moreover, it is forbidden to define circular references of identifiers
 involving no primitives, like in the following example.
@@ -122,7 +123,7 @@ expression and then declare it later.
 
 .. Globally declared identifiers may not be redeclared, and also not used as local
 .. identifiers later in a document. Nested ``let-rec`` may not reuse identifiers,
-.. i.e., *shadowig* is forbidden.
+.. i.e., *shadowing* is forbidden.
 
 
 
@@ -320,7 +321,7 @@ Trigger sequence
 
 The additional directive :sexpr:`trigger-sequence` does not have a corresponding
 SVA statement, and is used to declare an output bit that is high in each time step
-that the sequence matches, and low else.
+that the sequence matches, and low otherwise.
 
 .. code-block:: sexpr
 
@@ -346,7 +347,7 @@ Notes
   Property IR does not provide this option because it is semantically equivalent
   to adding the clock directly to the property.
 
-* In order so apply assertions to simple sequences or simple properties,
+* In order to apply assertions to simple sequences or simple properties,
   use the primitives :sexpr:`clk-seq-seq` and :sexpr:`clk-prop-prop`, respectively,
   to convert them to the clocked variants first.
 

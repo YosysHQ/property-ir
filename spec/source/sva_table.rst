@@ -169,8 +169,8 @@ The Property IR primitives in this table have return type ``bool``.
     :ref:`global clocking future sampled value functions <global clocking future sampled value functions>`.
 
 
-Boolean Expressions
-^^^^^^^^^^^^^^^^^^^^^
+Boolean Operations
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 
 

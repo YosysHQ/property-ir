@@ -24,26 +24,31 @@ bound, which are both non-negative integers, with the upper bound being equal to
 or higher than the lower bound. The constant range can have the upper bound :sexpr:`$`,
 indicating that it is unbounded.
 It is important to use the correct range type expected by a primitive.
-For example, delay accepts unbounded ranges, but weak eventually does not.
+For example, delay accepts unbounded ranges, so it requires the :sexpr:`range` keyword even if the provided range is bounded,
+whereas weak eventually accepts only bounded ranges and therefore requires the :sexpr:`bounded-range` keyword.
 
 .. code-block:: sexpr
+
+   (clk-seq-delay (range 2 4) (clk-seq-bool b)) ; ##[2:4] b
 
    (clk-seq-delay (range 2 $) (clk-seq-bool b)) ; ##[2:$] b
 
    (clk-prop-eventually (bounded-range 3 5) (clk-prop-bool b)) ; eventually [3:5] b
 
 
-Most SVA operations with integer parameters also accept ranges.
-In that case, Property IR has only a primitive that accepts a range, and a
-single integer can be provided by having the same lower and upper bound.
+For most SVA operations with integer parameters, the corresponding Property IR
+primitive expects a range argument where the lower and upper bound have the same value.
+
+.. Most SVA operations with integer parameters also accept ranges.
+.. In that case, Property IR has only a primitive that accepts a range, and a
+.. single integer can be provided by having the same lower and upper bound.
 
 .. code-block:: sexpr
 
    (clk-seq-delay (range 2 2) (clk-seq-bool b)) ; ##2 b
 
-An exception are the primitives corresponding to ``nexttime``,
-which have only an integer parameter.
-
+The primitives corresponding to ``nexttime``,
+having only an integer parameter, are exempt from this rule.
 
 .. code-block:: sexpr
 

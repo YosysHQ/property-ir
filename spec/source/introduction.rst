@@ -8,7 +8,7 @@ Introduction
 Property IR is an intermediate representation for temporal properties as
 specified by SystemVerilog Assertions (SVA).
 The goal is to support formal verificaton flows, while decoupling front-end
-tasks like parsing, name resolution, etc. from checker circuit synthesis and
+tasks (parsing, name resolution, etc.) from checker circuit synthesis and
 optimization.
 This is achieved by providing a unified representation for SVA assertions,
 automata, and circuits.
@@ -171,7 +171,7 @@ Embedding in Yosys
 Property IR embeds into RTLIL via a new ``$property`` cell that stores
 the textual Property IR code in a parameter.
 One ``$property`` cell may contain several assertions, which enables optimizations
-that were else not possible. We call the contents of one ``$property`` cell
+that were otherwise not possible. We call the contents of one ``$property`` cell
 a Property IR *document*.
 The ``$property`` cell takes a parametric number of input bits and produces a
 parametric number of output bits.
@@ -190,7 +190,7 @@ the ``matched`` and ``triggered`` functions.
 The reason is that Property IR operates on *time-variable Booleans*,
 that is, stateless functions from time to Boolean, whose current value depends only on the current
 input values, and not on previous output values.
-(An exception are the :ref:`global clocking future sampled value functions <global clocking future sampled value functions>`,
+(An exception is made for the :ref:`global clocking future sampled value functions <global clocking future sampled value functions>`,
 which can look one global time step into the future and are used to represent clock expressions.)
 
 .. note::
@@ -229,14 +229,6 @@ intermediate results representable as Property IR.
     This revision of Property IR does not include support for local variables yet,
     but it is planned for future revisions.
 
-    .. Local variable assignments can contain arbitrary SV logic that needs to be
-    .. handled outside of Property IR.
-    .. There will be a ``$property`` cell input for external local variable
-    .. assignments, several simple operations for local variables inside Property IR,
-    .. and a ``$property`` cell output for local variable values.
-    .. Note that this output value is undefined if used outside of local variable assignments
-    .. due to the nature of local variables, involving several overlapping sequence matches
-    .. with possibly conflicting variable values.
 
 
 .. note::

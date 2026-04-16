@@ -19,7 +19,7 @@ Boolean Expression
     Extended Booleans like sampled value functions (``$past``, ``$rose``, ``$fell``, ``$stable`` etc.)
     as well as ``triggered`` and ``matched``
     need to be handled outside of Property IR.
-    An exception are several :ref:`global clocking future sampled value functions <global clocking future sampled value functions>`
+    An exception is made for several :ref:`global clocking future sampled value functions <global clocking future sampled value functions>`
     that are needed to represent various clock expressions.
 
 
@@ -37,9 +37,18 @@ Base Booleans
 After declaring a one-bit signal as external input using :sexpr:`declare-input`,
 it can be used as an expression of type ``bool``.
 
-A Boolean that is constant high (``1'b1``) resp. low (``1'b0``) is written as
-:sexpr:`(constant true)` resp. :sexpr:`(constant false)`, or abbreviated as
-:sexpr:`(true)` resp. :sexpr:`(false)`.
+A Boolean that is constant high (``1'b1``) or low (``1'b0``) is written
+using the :sexpr:`constant` primitive as follows.
+
++-----------------+-------------+----------------------------+-------------------------------+
+| meaning         | SVA value   | boolean expression         | abbreviated expression        |
++=================+=============+============================+===============================+
+| constant high   | ``1'b1``    | :sexpr:`(constant true)`   | :sexpr:`(true)`               |
++-----------------+-------------+----------------------------+-------------------------------+
+| constant low    | ``1'b0``    | :sexpr:`(constant false)`  | :sexpr:`(false)`              |
++-----------------+-------------+----------------------------+-------------------------------+
+
+
 
 The Boolean primitive :sexpr:`initial` corresponds to a signal that is high only in
 the first time step.
@@ -61,7 +70,7 @@ Logical operators
     (or <bool1> <bool2> ...)
 
 These primitives correspond to the logical operators ``!``, ``&&``, and ``||`` of SystemVerilog.
-The primitives :sexpr:`and` and :sexpr:`or` accept any positive number of arguments of type ``bool``.
+The primitives :sexpr:`and` and :sexpr:`or` accept any non-zero number of arguments of type ``bool``.
 
 .. code-block:: sexpr
 
@@ -142,17 +151,17 @@ are all derived from :sexpr:`future-gclk`.
 
 .. code-block:: sexpr
 
-    (rising-gclk clock_value clock_defined) ===
-        (and (not (and clock_value clock_defined))
-             (future-gclk (and clock_value clock_defined)))
+    ; (rising-gclk clock_value clock_defined) is equivalent to:
+    (and (not (and clock_value clock_defined))
+         (future-gclk (and clock_value clock_defined)))
 
-    (falling-gclk clock_value clock_defined) ===
-        (and (not (and (not clock_value) clock_defined))
-             (future-gclk (and (not clock_value) clock_defined)))
+    ; (falling-gclk clock_value clock_defined) is equivalent to:
+    (and (not (and (not clock_value) clock_defined))
+         (future-gclk (and (not clock_value) clock_defined)))
 
-    (changing-gclk clock_value clock_defined) ===
-        (or (xor (clock_value (future-gclk clock_value)))
-            (xor (clock_defined (future-gclk clock_defined))))
+    ; (changing-gclk clock_value clock_defined) is equivalent to:
+    (or (xor (clock_value (future-gclk clock_value)))
+        (xor (clock_defined (future-gclk clock_defined))))
 
 
 
@@ -234,7 +243,7 @@ Clocked sequence primitives
 
     Unbounded delay (``##[*]``, ``##[+]``) and unbounded
     repetition (``clk_seq [*]``, ``clk_seq [+]``) shorthand notation is written
-    out with :sexpr:`(range 0 $)` resp. :sexpr:`(range 1 $)`.
+    out with :sexpr:`(range 0 $)` and :sexpr:`(range 1 $)`, respectively.
 
 Concatenation, repetition, and delay
 ''''''''''''''''''''''''''''''''''''''
@@ -258,16 +267,16 @@ Concatenation, repetition, and delay
     The sequence :sexpr:`<clk_seq>` is delayed
     by the number of time steps specified by :sexpr:`<range>` (may be
     unbounded). Equivalent to
-    :sexpr:`(clk-seq-concat (clk-seq-repeat (seq-bool (true)) <range>) <clk_seq>)` .
+    :sexpr:`(clk-seq-concat (clk-seq-repeat (seq-bool (true)) <range>) <clk_seq>)`\ .
 
 :sexpr:`clk-seq-concat`
-    Non-overlapping concatenation of any positive number
+    Non-overlapping concatenation of any non-zero number
     of argument sequences.
     The first time step of each argument sequence is the time step after the last
     time step of the previous argument sequence.
 
 :sexpr:`clk-seq-fusion`
-    Overlapping concatenation of any positive number of
+    Overlapping concatenation of any non-zero number of
     argument sequences. The last time step of each argument sequence
     coincides with the first time step of the subsequent argument sequence.
 
@@ -306,7 +315,7 @@ Combining sequences in parallel
     (clk-seq-or <clk_seq1> <clk_seq2> ...)
 
 
-These primitives take any positive number of argument sequences.
+These primitives take any non-zero number of argument sequences.
 
 :sexpr:`clk-seq-and`
     All argument sequences need to match and have the same
@@ -465,7 +474,7 @@ Logical property operators
 These primitives correspond to the logical operators applied to properties.
 
 The primitives :sexpr:`clk-prop-or` and  :sexpr:`clk-prop-and`
-take any positive number of argument properties.
+take any non-zero number of argument properties.
 The first primitive evaluates to true if at least one of the argument properties is satisfied,
 and the second primitive evaluates to true if all argument properties are satisfied.
 
