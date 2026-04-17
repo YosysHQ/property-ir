@@ -6,6 +6,7 @@ from sexpr.parsing import parse_document
 from tests.helpers import wrap_multiple_statements_in_document, wrap_statement_in_document
 from sexpr import IrContainer, nnf
 from sexpr.base import RawSExprList
+from input_data import raw_sexpr6_declare_rec
 
 
 logger = logging.getLogger(__name__)
@@ -39,6 +40,10 @@ def check_nnf_equivalence(input_document: RawSExprList, expected_output_document
 
     assert output_container == expected_output_container
 
+
+
+
+# NNF booleans
 
 
 def test_nnf_boolean_no_cycle():
@@ -141,3 +146,132 @@ def test_nnf_boolean_constant_shared_subgraph():
     input_document = wrap_multiple_statements_in_document([input_statement1, input_statement2, input_statement3, root_node_statement1, root_node_statement2, root_node_statement3])
     expected_output_document = wrap_multiple_statements_in_document([input_statement1, expected_output_statement2, expected_output_statement3, expected_output_statement4, root_node_statement1, root_node_statement2, root_node_statement3])
     check_nnf_equivalence(input_document, expected_output_document)
+
+
+
+
+
+# NNF sequences
+
+
+def test_nnf_sequence_type_unchanged():
+    input_statement_str1: str = """(declare s (seq-concat (seq-or (seq-bool a) (seq-bool b)) (seq-repeat (range 2 3) (seq-bool c))))"""
+    root_node_statement1: RawSExprList = ['parse-sexpr', 's']
+
+def test_nnf_sequence_unchanged_positive():
+    input_statement_str1: str = """(declare p (prop-seq (seq-concat (seq-or (seq-bool a) (seq-bool b)) (seq-repeat (range 2 3) (seq-bool c)))))"""
+    root_node_statement1: RawSExprList = ['parse-sexpr', 'p']
+
+
+def test_nnf_sequence_unchanged_negative():
+    input_statement_str1: str = """(declare p (prop-not (prop-seq (seq-concat (seq-or (seq-bool a) (seq-bool b)) (seq-repeat (range 2 3) (seq-bool c))))))"""
+    root_node_statement1: RawSExprList = ['parse-sexpr', 'p']
+
+
+
+
+def test_nnf_sequence_weak_unchanged():
+    input_statement_str1: str = """(declare p (prop-not (prop-weak (seq-bool a))))"""
+    root_node_statement1: RawSExprList = ['parse-sexpr', 'p']
+
+
+
+
+def test_nnf_sequence_strong():
+    input_statement_str1: str = """(declare p (prop-not (prop-strong (seq-bool a)))"""
+    root_node_statement1: RawSExprList = ['parse-sexpr', 'p']
+
+    output_statement_str1: str = """(declare p (prop-overlapped-implication (seq-bool a) (constant false)))"""
+
+
+
+
+
+
+# NNF properties single primitives
+
+
+
+def test_nnf_property_reject_on():
+    input_statement_str1: str = """(declare p (prop-not (prop-reject-on (seq-bool a) (prop-bool b)))"""
+    root_node_statement1: RawSExprList = ['parse-sexpr', 'p']
+
+    output_statement_str1: str = """(declare p (prop-accept-on (seq-bool a) (prop-not (prop-bool b)))"""
+
+
+def test_nnf_property_accept_on():
+    input_statement_str1: str = """(declare p (prop-not (prop-accept-on (seq-bool a) (prop-bool b)))"""
+    root_node_statement1: RawSExprList = ['parse-sexpr', 'p']
+
+    output_statement_str1: str = """(declare p (prop-reject-on (seq-bool a) (prop-not (prop-bool b)))"""
+
+
+def test_nnf_property_implication():
+    input_statement_str1: str = """(declare p (prop-not (prop-overlapped-implication (seq-bool a) (prop-bool b))))"""
+    root_node_statement1: RawSExprList = ['parse-sexpr', 'p']
+
+    output_statement_str1: str = """(declare p (prop-overlapped-followed-by (seq-bool a) (prop-not (prop-bool b))))"""
+
+
+def test_nnf_property_followed_by():
+    input_statement_str1: str = """(declare p (prop-not (prop-overlapped-followed-by (seq-bool a) (prop-bool b))))"""
+    root_node_statement1: RawSExprList = ['parse-sexpr', 'p']
+
+    output_statement_str1: str = """(declare p (prop-overlapped-implication (seq-bool a) (prop-not (prop-bool b))))"""
+
+
+def test_nnf_property_until():
+    input_statement_str1: str = """(declare p (prop-not (prop-until (prop-bool a) (prop-bool b))))"""
+
+    output_statement_str1: str = """(declare p (prop-strong-until-with (prop-not (prop-bool b)) (prop-not (prop-bool a))))"""
+
+
+def test_nnf_property_s_until_with():
+    input_statement_str1: str = """(declare p (prop-not (prop-strong-until-with (prop-bool a) (prop-bool b))))"""
+
+    output_statement_str1: str = """(declare p (prop-until (prop-not (prop-bool b)) (prop-not (prop-bool a))))"""
+
+def test_nnf_property_nexttime():
+    input_statement_str1: str = """(declare p (prop-not (prop-nexttime 5 (prop-bool a))))"""
+
+    output_statement_str1: str = """(declare p (prop-strong-nexttime 5 (prop-not (prop-bool a))))"""
+
+
+def test_nnf_property_s_nexttime():
+    input_statement_str1: str = """(declare p (prop-not (prop-strong-nexttime 5 (prop-bool a))))"""
+
+    output_statement_str1: str = """(declare p (prop-nexttime 5 (prop-not (prop-bool a))))"""
+
+
+
+
+def test_nnf_property_or_and():
+    input_statement_str1: str = """(declare p (prop-not (prop-and (prop-or (prop-bool a) (prop-bool b)) (prop-and (prop-bool c) (prop-bool d)) )))"""
+
+    output_statement_str1: str = """(declare p (prop-or
+        (prop-and (prop-not (prop-bool a)) (prop-not (prop-bool b)) )
+        (prop-or (prop-not (prop-bool c)) (prop-not (prop-bool d)) ) ))"""
+
+
+
+
+# NNF properties larger examples
+
+def test_nnf_property_unchanged_positive():
+    input_statement1: RawSExprList = raw_sexpr6_declare_rec
+    root_node_statement1: RawSExprList = ['parse-sexpr', 'prop1']
+    root_node_statement1: RawSExprList = ['parse-sexpr', 'prop2']
+
+
+def test_nnf_property_multiple_replacements():
+    pass
+
+
+def test_nnf_property_even_cycle():
+    pass
+
+def test_nnf_property_odd_cycle():
+    pass
+
+def test_nnf_property_shared_subgraph():
+    pass
