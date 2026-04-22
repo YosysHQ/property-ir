@@ -1,9 +1,11 @@
 from collections import deque
 from typing import get_origin, Any
 import logging
+from typeguard import typechecked
 
-from sexpr.base import PropertyIrNode, PlaceholderNode, IrContainer, RawSExpr, NodeId, Signal, LiteralType
-from sexpr.primitives import And, Constant, Not, Or
+from sexpr.base import PropertyIrNode, PlaceholderNode, IrContainer, RawSExpr, NodeId, Signal, LiteralType, Property, Sequence, Bool
+from sexpr.primitives import And, Constant, Not, Or, PropAcceptOn, PropNexttime, PropAnd, PropNot, PropOr, PropStrong, PropWeak, PropSeq, PropBool
+from sexpr.primitives import PropOverlappedFollowedBy, PropOverlappedImplication, PropRejectOn, PropStrongNexttime, PropUntil, PropStrongUntilWith
 
 
 
@@ -21,8 +23,21 @@ logger = logging.getLogger(__name__)
 type RewriteRule = tuple[RawSExpr, RawSExpr]
 
 dual_primitives: dict[type[PropertyIrNode], type[PropertyIrNode]] = {
+
     And: Or,
-    Or: And
+    Or: And,
+
+    PropOverlappedImplication: PropOverlappedFollowedBy, # child1 (seq) not negated
+    PropOverlappedFollowedBy: PropOverlappedImplication, # child1 (seq) not negated
+    PropRejectOn: PropAcceptOn, # child1 (bool) not negated
+    PropAcceptOn: PropRejectOn, # child1 (bool) not negated
+    PropNexttime: PropStrongNexttime,
+    PropStrongNexttime: PropNexttime,
+    PropUntil: PropStrongUntilWith, # swap child1 and child2
+    PropStrongUntilWith: PropUntil, # swap child1 and child2
+    PropOr: PropAnd,
+    PropAnd: PropOr,
+
 }
 
 
@@ -49,7 +64,7 @@ def rewrite_clocks(container: IrContainer):
 
 
 
-
+@typechecked
 def nnf_process_node(
     node_id: NodeId,
     container: IrContainer,
@@ -97,12 +112,76 @@ def nnf_process_node(
         logger.debug('Added Constant node: %s', added_node.node_id)
         return added_node.node_id
 
+
+    # negation of strong can be replaced by implication with consequent constant false
+    # special case because the inverted primitive has not the same fields as the positive one
+    elif invert and isinstance(current_node, PropStrong):
+
+        placeholder_node = output_container.add_placeholder_node() # placeholder for implication with unknown child
+        corresponding_nodes[(repr_id, True)] = placeholder_node.node_id
+        logger.debug('Added placeholder node: %s', placeholder_node.node_id)
+
+        nodes_in_call_stack.add((repr_id, True))
+
+        result_id = nnf_process_node(current_node.child, container, False, output_container, corresponding_nodes, nodes_in_call_stack) # sequence type child of strong
+        logger.debug('Output container nodes %s', output_container.nodes)
+
+        # consequent of implication
+        added_constant_false = output_container.add_node_by_kwargs(Constant, {'value': False})
+        added_prop_bool = output_container.add_node_by_kwargs(PropBool, {'child': added_constant_false.node_id})
+
+        added_node_impl = output_container.add_node_by_kwargs(PropOverlappedImplication, {'child1': result_id, 'child2': added_prop_bool.node_id})
+        placeholder_node.instantiate_placeholder(added_node_impl)
+        logger.debug('Instantiated placeholder node %s with %s', placeholder_node.node_id, added_node_impl.node_id)
+
+        nodes_in_call_stack.remove((repr_id, True))
+
+        return added_node_impl.node_id
+
+
+    # other negated sequences are just copied as they are - if they should be negated, a prop-not primitive is created
+    elif invert and (\
+        isinstance(current_node, PropWeak) or \
+        isinstance(current_node, PropSeq) or \
+        isinstance(current_node, PropBool) or \
+        isinstance(current_node, PropSeq)):
+
+        if (repr_id, False) in corresponding_nodes:
+            positive_seq_id = corresponding_nodes[(repr_id, False)]
+            added_node_not = output_container.add_node_by_kwargs(PropNot, {'child': positive_seq_id})
+            corresponding_nodes[(repr_id, True)] = added_node_not.node_id
+            logger.debug('Added PropNot node: %s', added_node_not.node_id)
+            return added_node_not.node_id
+        else:
+            placeholder_node = output_container.add_placeholder_node() # for the current node (positive) whose child does not exist yet
+            corresponding_nodes[(repr_id, False)] = placeholder_node.node_id
+            logger.debug('Added placeholder node: %s', placeholder_node.node_id)
+            positive_seq_id = placeholder_node.node_id
+
+            added_node_not = output_container.add_node_by_kwargs(PropNot, {'child': positive_seq_id})
+            corresponding_nodes[(repr_id, True)] = added_node_not.node_id
+            logger.debug('Added PropNot node: %s', added_node_not.node_id)
+
+            nodes_in_call_stack.add((repr_id, False))
+            nodes_in_call_stack.add((repr_id, True))
+
+            result_id = nnf_process_node(current_node.child, container, False, output_container, corresponding_nodes, nodes_in_call_stack)
+            logger.debug('Output container nodes %s', output_container.nodes)
+            added_node_current = output_container.add_node_by_kwargs(type(current_node), {'child': result_id})
+            placeholder_node.instantiate_placeholder(added_node_current)
+            logger.debug('Instantiated placeholder node %s with %s', placeholder_node.node_id, added_node_current.node_id)
+
+            nodes_in_call_stack.remove((repr_id, True))
+            nodes_in_call_stack.remove((repr_id, False))
+
+            return added_node_not.node_id
+
     # add current node to recursion stack
     # which detects when there is a cycle and not just a shared subgraph
     nodes_in_call_stack.add((repr_id, invert))
 
     # handle negation, which does not cause a primitive to be generated, but only invokes a subcall with flipped polarity
-    if isinstance(current_node, Not):
+    if isinstance(current_node, Not) or isinstance(current_node, PropNot):
         placeholder_node = output_container.add_placeholder_node()
         corresponding_nodes[(repr_id, invert)] = placeholder_node.node_id
         logger.debug('Added placeholder node: %s', placeholder_node.node_id)
@@ -112,6 +191,7 @@ def nnf_process_node(
         logger.debug('Instantiated placeholder node %s with %s', placeholder_node.node_id, result_id)
         nodes_in_call_stack.remove((repr_id, invert))
         return result_id
+
 
     # generate output nodes for other non-leaf cases
 
@@ -140,12 +220,26 @@ def nnf_process_node(
 
         elif issubclass(field_type, PropertyIrNode):
             child_id = getattr(current_node, field.name)
-            output_child_id = nnf_process_node(child_id, container, invert, output_container, corresponding_nodes, nodes_in_call_stack)
+            if issubclass(field_type, Property):
+                output_child_id = nnf_process_node(child_id, container, invert, output_container, corresponding_nodes, nodes_in_call_stack)
+            elif issubclass(field_type, Sequence) or \
+                (issubclass(field_type, Bool) and (isinstance(current_node, PropAcceptOn) or isinstance(current_node, PropRejectOn))) or \
+                isinstance(current_node, Sequence) or \
+                isinstance(current_node, PropBool): # PropBool only positive because inverted case handled above
+                output_child_id = nnf_process_node(child_id, container, False, output_container, corresponding_nodes, nodes_in_call_stack)
+            else:
+                raise ValueError(f'Unexpected child node with name {field.name} of type {field_type} while processing {current_node}')
             kwargs[field.name] = output_child_id
 
         elif issubclass(field_type, LiteralType.__value__):
             child_literal = getattr(current_node, field.name)
             kwargs[field.name] = child_literal
+
+    # swap children of PropUntil / PropStrongUntilWith
+    if(isinstance(current_node, PropUntil) or isinstance(current_node, PropStrongUntilWith)):
+        child1_temp = kwargs['child1']
+        kwargs['child1'] = kwargs['child2']
+        kwargs['child2'] = child1_temp
 
     # instantiate current placeholder node and set its children
     new_node = output_container.add_node_by_kwargs(new_primitive_type, kwargs)
@@ -160,6 +254,7 @@ def nnf_process_node(
 
 
 
+@typechecked
 def nnf(container: IrContainer) -> IrContainer:
     """Create a new expression graph that is the negation normal form of the
     graph stored in the container. If there are cycles with an odd number of
@@ -193,7 +288,10 @@ def nnf(container: IrContainer) -> IrContainer:
         current_id: NodeId = nodes_to_process.popleft()
 
         # if the node is already finished with positive polarity through another recursive function call, skip it
-        if (current_id, True) in corresponding_nodes:
+        # (but it is an unnamed root, so add it to sink nodes, or else it might get removed)
+        if (current_id, False) in corresponding_nodes:
+            corresponding_id = corresponding_nodes[current_id, False]
+            output_container.sink_nodes.append(corresponding_id)
             continue
 
         logger.debug('nnf rewriting process node %s', container[current_id])

@@ -264,7 +264,7 @@ def test_nnf_property_multiple_replacements():
 def test_nnf_property_even_cycle():
     input_statement_str1: str = """(declare-rec (declare p
         (prop-not (prop-overlapped-implication
-            (seq-concat (seq-bool a) (constant true))
+            (seq-concat (seq-bool a) (seq-bool (constant true)))
             (prop-not (prop-and (prop-bool b) p))
         ))))"""
     output_statement_str1: str = """(declare-rec (declare p
@@ -295,18 +295,19 @@ def test_nnf_property_shared_subgraph():
     input_statement1 = parse_raw_sexpr(input_statement_str1)
     input_statement2 = parse_raw_sexpr(input_statement_str2)
 
+    output_statement_str0: str = """(declare q_neg (prop-bool c))"""
+    output_statement_str1: str = """(declare q (prop-not q_neg))"""
     output_statement_str2: str = """(declare p
-        (prop-not (prop-overlapped-implication
+        (prop-overlapped-followed-by
             (seq-bool a)
-            (prop-until (prop-bool b) q_neg)
-        )))"""
-    output_statement_str3: str = """(declare q_neg (prop-bool c))"""
-    output_statement2 = parse_raw_sexpr(output_statement_str2)
-    output_statement3 = parse_raw_sexpr(output_statement_str3)
+            (prop-strong-until-with q_neg (prop-not (prop-bool b)) )
+        ))"""
+    output_statement_str: str = '(declare-rec' + output_statement_str1 + output_statement_str2 + output_statement_str0 + ')'
+    output_statement = parse_raw_sexpr(output_statement_str)
 
     root_statement1: RawSExprList = ['parse-sexpr', 'q']
     root_statement2: RawSExprList = ['parse-sexpr', 'p']
 
     input_document: RawSExprList = wrap_multiple_statements_in_document([input_statement1, input_statement2, root_statement1, root_statement2])
-    expected_output_document = wrap_multiple_statements_in_document([input_statement1, output_statement3, output_statement2, root_statement1, root_statement2])
+    expected_output_document = wrap_multiple_statements_in_document([output_statement, root_statement1, root_statement2])
     check_nnf_equivalence(input_document, expected_output_document)

@@ -113,6 +113,16 @@ class PropNot(Property):
 
 @typechecked
 @dataclass
+class PropAnd(Property):
+    children: list[NodeId[Property]]
+
+@typechecked
+@dataclass
+class PropOr(Property):
+    children: list[NodeId[Property]]
+
+@typechecked
+@dataclass
 class PropNexttime(Property):
     child1: int
     child2: NodeId[Property]
@@ -180,8 +190,3 @@ class PropAlways(Property):
 class PropAlwaysRanged(Property):
     child1: Range
     child2: NodeId[Property]
-
-@typechecked
-@dataclass
-class PropAnd(Property):
-    children: list[NodeId[Property]]
