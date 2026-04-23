@@ -15,9 +15,8 @@ automata, and circuits.
 
 This document focuses on the public interface of Property IR, that is, the part
 relevant to someone who wants to construct Property IR expressions from SVA.
-
-.. For more information on representations later in the verification flow
-.. and other implementation details, see ...
+We will start with an introduction to the general concept behind Property IR
+expressions before discussing all features in detail.
 
 
 General Concept

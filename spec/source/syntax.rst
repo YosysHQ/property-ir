@@ -8,6 +8,13 @@ Syntax
    :language: systemverilog
 
 
+We will now come to the more formal part of the Property IR specification,
+starting with the syntax of expressions and statements.
+While we have already seen many of the following features in the introduction,
+here we provide a comprehensive description.
+
+
+
 Expressions
 ~~~~~~~~~~~~~~
 
@@ -77,7 +84,9 @@ involving no primitives, like in the following example.
     several restrictions apply to them
     (that are expected to be checked by the frontend that reads Verilog):
 
-    * ``not`` can not be applied to recursive properties
+    * ``not`` and the strong operators ``s_nexttime``, ``s_eventually``,
+      ``s_always``, ``s_until``, and ``s_until_with`` can not be applied to
+      recursive properties (or to properties instantiating recursive properties)
     * no ``disable-iff`` in recursive properties
     * advance in time before reinstantiation
     * restrictions on arguments of recursive properties
@@ -120,10 +129,6 @@ expression and then declare it later.
     primitive symbols. This facilitates integration with other tools.
     Since the first element of each list in an expression is a primitive and all
     other elements are arguments, expressions can be parsed unambiguously.
-
-.. Globally declared identifiers may not be redeclared, and also not used as local
-.. identifiers later in a document. Nested ``let-rec`` may not reuse identifiers,
-.. i.e., *shadowing* is forbidden.
 
 
 
@@ -239,11 +244,9 @@ property in any order.
     asynchronously and the evaluation attempt yields no result.
 
 :sexpr:`:enable`
-    The *enabling condition* states whether the assertion is active.
-    For example, an assertion might be
-    located inside an ``if`` block and thus depend on the if
-    condition to be true.
-    Note how this is different from the disable condition.
+    The *enabling condition* states whether a procedural concurrent assertion is active.
+    For example, a procedural concurrent assertion that is located inside an
+    ``if`` block is only evaluated if the ``if`` condition is true.
 
 
 
