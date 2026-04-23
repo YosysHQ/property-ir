@@ -142,7 +142,6 @@ def nnf_process_node(
     # other negated sequences are just copied as they are - if they should be negated, a prop-not primitive is created
     elif invert and (\
         isinstance(current_node, PropWeak) or \
-        isinstance(current_node, PropSeq) or \
         isinstance(current_node, PropBool) or \
         isinstance(current_node, PropSeq)):
 

@@ -179,6 +179,19 @@ def test_nnf_sequence_weak_unchanged():
     input_statement_str1: str = """(declare p (prop-not (prop-weak (seq-bool a))))"""
     check_single_declaration_nnf_helper(input_statement_str1, input_statement_str1)
 
+def test_nnf_sequence_weak_unchanged_with_label():
+    input_statement_str1: str = """(declare p (prop-weak (seq-bool a)))"""
+    input_statement_str2: str = """(declare q (prop-not p))"""
+    output_statement_str3: str = """(declare p_neg q)"""
+    input_statement1 = parse_raw_sexpr(input_statement_str1)
+    input_statement2 = parse_raw_sexpr(input_statement_str2)
+    output_statement3 = parse_raw_sexpr(output_statement_str3)
+    root_statement1: RawSExprList = ['parse-sexpr', 'p']
+    root_statement2: RawSExprList = ['parse-sexpr', 'q']
+    input_document: RawSExprList = wrap_multiple_statements_in_document([input_statement1, input_statement2, root_statement1, root_statement2])
+    expected_output_document: RawSExprList = wrap_multiple_statements_in_document([input_statement1, input_statement2, output_statement3, root_statement1, root_statement2])
+    check_nnf_equivalence(input_document, expected_output_document)
+
 def test_nnf_sequence_strong():
     input_statement_str1: str = """(declare p (prop-not (prop-strong (seq-bool a))))"""
     output_statement_str1: str = """(declare p (prop-overlapped-implication (seq-bool a) (prop-bool (constant false))))"""
