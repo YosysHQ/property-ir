@@ -204,8 +204,8 @@ rewritten in the following way.
 .. code-block:: sexpr
 
    (seq-repeat <range> (seq-concat
-      (seq-repeat (range 0 $) (not <bool>))
-      <bool>))
+      (seq-repeat (range 0 $) (seq-bool (not <bool>)))
+      (seq-bool <bool>)))
 
 .. expr [->m:n]	for m < n
 .. ( !expr [*0:$] ##1 expr )[*m:n]

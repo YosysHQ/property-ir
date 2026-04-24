@@ -10,7 +10,7 @@ specified by SystemVerilog Assertions (SVA).
 The goal is to support formal verificaton flows, while decoupling front-end
 tasks (parsing, name resolution, etc.) from checker circuit synthesis and
 optimization.
-This is achieved by providing a unified representation for SVA assertions,
+This is achieved by providing a unified representation for assertions,
 automata, and circuits.
 
 This document focuses on the public interface of Property IR, that is, the part
