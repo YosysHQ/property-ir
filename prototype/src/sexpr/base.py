@@ -167,6 +167,16 @@ class Property(PropertyIrNode):
     def __init__(self):
         pass
 
+class ClockedSequence(PropertyIrNode):
+    @abstractmethod
+    def __init__(self):
+        pass
+
+class ClockedProperty(PropertyIrNode):
+    @abstractmethod
+    def __init__(self):
+        pass
+
 
 
 @typechecked
