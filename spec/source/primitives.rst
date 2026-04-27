@@ -175,8 +175,6 @@ Each primitive has the prefix ``clk-seq-``.
 All their arguments that are sequences need to be of type ``clk-seq`` as well.
 
 
-.. The extended Booleans ``triggered`` and ``matched`` operating on sequences
-.. are handled outside of Property IR.
 
 
 Specifying the sequence clock

@@ -19,6 +19,14 @@ We will start with an introduction to the general concept behind Property IR
 expressions before discussing all features in detail.
 
 
+.. note::
+
+    The new verification flow based on Property IR is at an early stage of development
+    and currently not yet available.
+    Note that details of this specification might still change throughout the
+    implementation process.
+
+
 General Concept
 ^^^^^^^^^^^^^^^^
 
@@ -48,8 +56,8 @@ The (return) type of the first element (or *root*) of an expression is also the
 (return) type of the whole expression.
 
 Consider overlapped implication (``clk_seq |-> clk_prop`` in SVA) as an example primitive.
-It expects two arguments having the types clocked sequence (``clk-seq``) and clocked
-property (``clk-prop``),
+It expects two arguments having the types clocked sequence (:sexpr:`<clk_seq>`) and clocked
+property (:sexpr:`<clk_prop>`),
 and returns a clocked property (indicated by the prefix ``clk-prop-`` of the primitive).
 
 .. code-block:: sexpr

@@ -48,67 +48,89 @@ Assertions
 
 
 
-+------------------+-----------------------------+------------------------------------+--------------------------------------+
-|     concept      | SVA statement               | Property IR statement              | SV Standard                          |
-|                  |                             |                                    |                                      |
-+==================+=============================+====================================+======================================+
-| assert           | ``assert``                  | ``assert-property``                | 16.14.1 Assert statement             |
-|                  |                             |                                    | (p. 476)                             |
-+------------------+-----------------------------+------------------------------------+--------------------------------------+
-| assume           | ``assume``                  | ``assume-property``                | 16.14.2 Assume statement             |
-|                  |                             |                                    | (p. 477)                             |
-+------------------+-----------------------------+-----------------------+------------+--------------------------------------+
-| cover            | ``cover``                   | ``cover-property``                 | 16.14.3 Cover statement              |
-|                  |                             |                                    | (p. 479)                             |
-+                  +-----------------------------+------------------------------------+                                      +
-|                  | ``cover``                   | ``cover-sequence``                 |                                      |
-|                  |                             |                                    |                                      |
-+------------------+-----------------------------+------------------------------------+--------------------------------------+
-| restrict         | ``restrict``                | ``restrict-property``              | 16.14.4 Restrict statement           |
-|                  |                             |                                    | (p. 480)                             |
-|                  |                             |                                    |                                      |
-|                  |                             |                                    |                                      |
-+------------------+-----------------------------+-----------------------+------------+--------------------------------------+
-| disable          | ``disable iff``             | assertion statement                | 16.12 Declaring properties           |
-| condition        |                             | parameter                          | (p. 441)                             |
-|                  |                             |                                    |                                      |
-|                  |                             | ``:disable-iff``                   | 16.14.6.4 Disabling procedural       |
-|                  |                             |                                    | concurrent assertions (p. 487)       |
-|                  |                             |                                    |                                      |
-|                  |                             |                                    |                                      |
-|                  |                             |                                    |                                      |
-|                  |                             |                                    |                                      |
-+------------------+-----------------------------+-----------------------+------------+--------------------------------------+
-| enable           | depends on location         | assertion statement                | 16.14.6 Embedding concurrent         |
-| condition        | of assertion in             | parameter                          | assertions in procedural             |
-|                  | procedural code             |                                    | code (p. 481)                        |
-|                  |                             | ``:enable``                        |                                      |
-|                  |                             |                                    | F.5.3.1 Neutral satisfaction         |
-|                  |                             |                                    | (p. 1247)                            |
-|                  |                             |                                    |                                      |
-+------------------+-----------------------------+-----------------------+------------+--------------------------------------+
-| vacuity          |                             | assertion statement                | 16.14.8 Nonvacuous evaluations       |
-|                  | assertion control           | parameter                          |                                      |
-|                  | system tasks                |                                    | 20.11 Assertion control system tasks |
-|                  |                             | ``:mode``                          |                                      |
-|                  |                             |                                    |                                      |
-|                  |                             | ``satisfied``                      |                                      |
-|                  | ``$assertnonvacuouson``     |                                    | F.5.3.3 Vacuity                      |
-|                  |                             | ``nonvacuously-satisfied``         |                                      |
-|                  | ``$assertnonvacuousoff``    |                                    |                                      |
-|                  |                             | ``nonvacuous``                     |                                      |
-|                  |                             |                                    |                                      |
-|                  |                             |                                    |                                      |
-|                  |                             |                                    |                                      |
-+------------------+-----------------------------+-----------------------+------------+--------------------------------------+
-| output           |                             |                                    |                                      |
-| sequence matches |                             | ``trigger-sequence``               |                                      |
-|                  |                             |                                    |                                      |
-|                  |                             |                                    |                                      |
-|                  |                             |                                    |                                      |
-|                  |                             |                                    |                                      |
-+------------------+-----------------------------+-----------------------+------------+--------------------------------------+
++------------------+----------------------------------------------+------------------------------------------+--------------------------------------+
+|     concept      | SVA statement                                | Property IR statement                    | SV Standard                          |
+|                  |                                              |                                          |                                      |
++==================+==============================================+==========================================+======================================+
+| assert           | ``assert``                                   | ``assert-property``                      | 16.14.1 Assert statement             |
+|                  |                                              |                                          | (p. 476)                             |
++------------------+----------------------------------------------+------------------------------------------+--------------------------------------+
+| assume           | ``assume``                                   | ``assume-property``                      | 16.14.2 Assume statement             |
+|                  |                                              |                                          | (p. 477)                             |
++------------------+----------------------------------------------+------------------------------------------+--------------------------------------+
+| cover            | ``cover``                                    | ``cover-property``                       | 16.14.3 Cover statement              |
+|                  |                                              |                                          | (p. 479)                             |
++                  +----------------------------------------------+------------------------------------------+                                      +
+|                  | ``cover``                                    | ``cover-sequence``                       |                                      |
+|                  |                                              |                                          |                                      |
++------------------+----------------------------------------------+------------------------------------------+--------------------------------------+
+| restrict         | ``restrict``                                 | ``restrict-property``                    | 16.14.4 Restrict statement           |
+|                  |                                              |                                          | (p. 480)                             |
+|                  |                                              |                                          |                                      |
+|                  |                                              |                                          |                                      |
++------------------+----------------------------------------------+------------------------------------------+--------------------------------------+
+| disable          | ``disable iff``                              | assertion statement                      | 16.12 Declaring properties           |
+| condition        |                                              | parameter                                | (p. 441)                             |
+|                  |                                              |                                          |                                      |
+|                  |                                              | ``:disable-iff``                         | 16.14.6.4 Disabling procedural       |
+|                  |                                              |                                          | concurrent assertions (p. 487)       |
+|                  |                                              |                                          |                                      |
+|                  |                                              |                                          |                                      |
+|                  |                                              |                                          |                                      |
+|                  |                                              |                                          |                                      |
++------------------+----------------------------------------------+------------------------------------------+--------------------------------------+
+| enabling         |                                              | assertion statement                      | 16.14.6 Embedding concurrent         |
+| condition        |                                              | parameter                                | assertions in procedural             |
+|                  |                                              |                                          | code (p. 481)                        |
+|                  |                                              |                                          |                                      |
+|                  |                                              |                                          | F.5.3.1 Neutral satisfaction         |
+|                  +                                              +                                          + (p. 1247)                            |
+|                  |                                              | ``:enable pir_clk_expr``                 |                                      |
+|                  | ``always @(clk_expr) begin``                 |                                          |                                      |
+|                  |                                              |                                          |                                      |
+|                  |                                              |                                          |                                      |
+|                  +----------------------------------------------+------------------------------------------+                                      |
+|                  |                                              |                                          |                                      |
+|                  | ``always @(clk_expr) begin``                 | ``:enable (and pir_clk_expr bool)``      |                                      |
+|                  |                                              |                                          |                                      |
+|                  | ``if (bool) begin``                          |                                          |                                      |
+|                  |                                              |                                          |                                      |
+|                  |                                              |                                          |                                      |
+|                  |                                              |                                          |                                      |
++------------------+----------------------------------------------+------------------------------------------+--------------------------------------+
+| vacuity          |                                              | assertion statement                      | 16.14.8 Nonvacuous evaluations       |
+|                  | assertion control                            | parameter                                |                                      |
+|                  | system tasks                                 |                                          | 20.11 Assertion control system tasks |
+|                  |                                              | ``:mode``                                |                                      |
+|                  |                                              |                                          |                                      |
+|                  |                                              | ``satisfied``                            |                                      |
+|                  | ``$assertnonvacuouson``                      |                                          | F.5.3.3 Vacuity                      |
+|                  |                                              | ``nonvacuously-satisfied``               |                                      |
+|                  | ``$assertnonvacuousoff``                     |                                          |                                      |
+|                  |                                              | ``nonvacuous``                           |                                      |
+|                  |                                              |                                          |                                      |
+|                  |                                              |                                          |                                      |
+|                  |                                              |                                          |                                      |
++------------------+----------------------------------------------+------------------------------------------+--------------------------------------+
+| output           |                                              |                                          |                                      |
+| sequence matches |                                              | ``trigger-sequence``                     |                                      |
+|                  |                                              |                                          |                                      |
+|                  |                                              |                                          |                                      |
+|                  |                                              |                                          |                                      |
+|                  |                                              |                                          |                                      |
++------------------+----------------------------------------------+------------------------------------------+--------------------------------------+
 
+
+.. note::
+
+    The enable condition depends on the specific location of the assertion in
+    procedural code. We gave two common examples.
+    The Property IR clock expression ``pir_clk_expr`` is obtained as described in
+    the table :ref:`Clock Control <Clock Control>` below.
+
+    When embedding a concurrent assertion in procedural code, the inferred clock
+    needs to be set explicitly in the property using :sexpr:`clk-prop-clocked`,
+    regardless of whether an enabling condition is specified.
 
 
 Clock Control

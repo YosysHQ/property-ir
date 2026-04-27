@@ -28,10 +28,6 @@ States:
 
 Check the boolean expression and enter an implicit accepting sink
 
-..
-    Question: Regarding the acceptance condition, would this not mean that the
-    computation of the whole automaton succeeds, because an accepting state is seen infinitely often?
-    Question: implicit accepting sink = sink has self-loop? Why is it called implicit?
 
 .. code-block:: sexpr
 
@@ -79,7 +75,6 @@ Guarded next:
 
 Works like a standard transition that checks a condition and enters the next state
 
-.. Question: Is the rewriting correct?
 
 
 ..

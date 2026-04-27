@@ -39,9 +39,6 @@ whereas weak eventually accepts only bounded ranges and therefore requires the :
 For most SVA operations with integer parameters, the corresponding Property IR
 primitive expects a range argument where the lower and upper bound have the same value.
 
-.. Most SVA operations with integer parameters also accept ranges.
-.. In that case, Property IR has only a primitive that accepts a range, and a
-.. single integer can be provided by having the same lower and upper bound.
 
 .. code-block:: sexpr
 
@@ -86,11 +83,6 @@ They can only take the values true or false.
    (declare-input b)
    (declare c (and (or a b) (not b) (constant true)))
 
-.. Also note that extended expressions, that depend not only on the current values
-.. of inputs, like sampled value functions and the ``triggered`` and ``matched``
-.. functions, need to be handled outside of Property IR. An exception are the
-.. :ref:`global clocking future sampled value functions <global clocking future sampled value functions>`
-.. that are used for clock control.
 
 Clocked Sequences
 ^^^^^^^^^^^^^^^^^^
@@ -195,7 +187,6 @@ For example, :sexpr:`(prop-overlapped-followed-by <seq> <prop>)` is equivalent t
 and is therefore the dual of the nonderived
 primitive :sexpr:`prop-overlapped-implication`.
 
-.. not (seq |-> not prop)
 
 On the other hand, an example for a derived primitive that can be removed
 is :sexpr:`(seq-goto-repeat <range> <bool>)`, because it can be
@@ -207,8 +198,6 @@ rewritten in the following way.
       (seq-repeat (range 0 $) (seq-bool (not <bool>)))
       (seq-bool <bool>)))
 
-.. expr [->m:n]	for m < n
-.. ( !expr [*0:$] ##1 expr )[*m:n]
 
 
 Global clock
@@ -229,16 +218,6 @@ the following expression.
 
    (seq-concat (seq-repeat (range 0 $) (not c)) (and c b))
 
-.. T s (b, c) = (!c[*0:$] ##1 c & b)
-
-
-.. Clocks are handled by applying a rewriting pass to an expression to let it use the global clock.
-
-.. For sequences and properties, there are two expression types, respectively:
-.. A clocked version and a *simple* version, which uses the global clock and does
-.. not contain sequences admitting empty matches.
-.. Different types are necessary because else rewriting of the clock would lead
-.. to inconsistencies.
 
 
 Empty matches
@@ -310,13 +289,6 @@ Only after removing the empty part, the clock specification is removed and
 all primitives are replaced by their simple counterparts.
 
 
-.. The clocked sequence can be rewritten to a simple sequence using the macros
-.. ``#clk-seq-apply-clock``, ``#clk-seq-nonempty-part``, and ``#seq-remove-clock`` in
-.. this order.
-..
-.. The tranformation of a clocked property to a simple property is analogous to sequences, using the
-.. macros ``#clk-prop-apply-clock``, ``#clk-prop-nonempty-part``, and
-.. ``#prop-remove-clock`` in this order.
 
 
 .. code-block:: sexpr
@@ -343,25 +315,3 @@ all primitives are replaced by their simple counterparts.
 
     <prop>                                  ; simple/unclocked
 
-
-..    (clk-seq-clocked <bool> <clk_seq>)    ; clocked
-..
-..    |   #clk-seq-reduce-primitives
-..    V
-..
-..    (clk-seq-clocked <bool> <clk_seq2>)    ; fewer primitives
-..
-..    |   #clk-seq-apply-clock
-..    V
-..
-..    (clk-seq-clocked (true) <clk_seq3>)   ; global-clocked
-..
-..    |  #clk-seq-nonempty-part
-..    V
-..
-..    (clk-seq-clocked (true) <clk_seq4>)   ; global-clocked and non-empty-matching
-..
-..    |  #seq-remove-clock
-..    V
-..
-..    <seq>                                 ; simple/unclocked

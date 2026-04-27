@@ -219,11 +219,6 @@ only certain cases, but it is not expected that these restrictions are
 necessarily always satisfied in the design.
 
 
-..   (assert-property <bool1> <bool2> <bool3> <clk_prop>)
-
-..   (assume-property <bool1> <bool2> <bool3> <clk_prop>)
-
-..   (restrict-property <bool1> <bool2> <bool3> <clk_prop>)
 
 .. code-block:: sexpr
 
@@ -246,9 +241,12 @@ property in any order.
 :sexpr:`:enable`
     The *enabling condition* states whether a procedural concurrent assertion is active.
     For example, a procedural concurrent assertion that is located inside an
-    ``if`` block is only evaluated if the ``if`` condition is true.
+    ``if`` block is only evaluated if the ``if`` condition is true
+    (see Table :ref:`Assertions <Assertions>`).
 
 
+While the disable condition controls whether an evaluation attempt yields a result,
+the enabling condition controls whether an evaluation attempt is performed.
 
 .. note::
 
