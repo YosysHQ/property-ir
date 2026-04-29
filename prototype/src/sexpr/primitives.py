@@ -40,6 +40,24 @@ class Eq(Bool):
     child1: NodeId[Bool]
     child2: NodeId[Bool]
 
+@typechecked
+@dataclass
+class FutureGclk(Bool):
+    child1: NodeId[Bool]
+    child2: NodeId[Bool]
+
+@typechecked
+@dataclass
+class ChangingGclk(Bool):
+    child1: NodeId[Bool]
+    child2: NodeId[Bool]
+
+@typechecked
+@dataclass
+class FallingGclk(Bool):
+    child1: NodeId[Bool]
+    child2: NodeId[Bool]
+
 
 # Sequence primitives
 
@@ -89,6 +107,16 @@ class SeqFirstMatch(Sequence):
 @typechecked
 @dataclass
 class PropBool(Property):
+    child: NodeId[Bool]
+
+@typechecked
+@dataclass
+class PropWeakBool(Property):
+    child: NodeId[Bool]
+
+@typechecked
+@dataclass
+class PropStrongBool(Property):
     child: NodeId[Bool]
 
 @typechecked
