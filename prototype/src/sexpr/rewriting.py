@@ -22,6 +22,10 @@ logger = logging.getLogger(__name__)
 
 type RewriteRule = tuple[RawSExpr, RawSExpr]
 
+goto_repeat_rule: RewriteRule = (['clk-seq-goto-repeat', '<range>', '<bool>'],
+    ['clk-seq-repeat', '<range>', ['clk-seq-concat', ['clk-seq-repeat', ['range', '0', '$'], ['clk-seq-bool', ['not', '<bool>']]], ['clk-seq-bool', '<bool>']]])
+
+
 dual_primitives: dict[type[PropertyIrNode], type[PropertyIrNode]] = {
 
     And: Or,
@@ -39,6 +43,31 @@ dual_primitives: dict[type[PropertyIrNode], type[PropertyIrNode]] = {
     PropAnd: PropOr,
 
 }
+
+
+
+
+def replace_single_node(container: IrContainer, node_id: NodeId, rule: RewriteRule):
+
+    node_to_replace: PropertyIrNode = container[node_id]
+
+    # get children of node to replace
+
+    # replace literals in RHS of rewrite rule
+
+    # assign local names to non-literal nodes
+
+    # call parse_expression on RHS
+
+    # replace node in container by root of parsed RHS expression (handle merged nodes properly)
+    # option 1: change all references to old node_id
+    # option 2: change node_id of new root to old node_id, and invalidate node_id of old node
+
+
+
+
+
+
 
 
 
