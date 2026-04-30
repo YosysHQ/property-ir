@@ -14,8 +14,8 @@ sys.path.insert(0, os.path.abspath('./_ext'))
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 
 project = 'Property IR'
-copyright = '2026 YosysHQ GmbH '
-author = 'YosysHQ'
+copyright = '2026 YosysHQ GmbH'
+author = 'YosysHQ GmbH'
 release = '0.1'
 
 # -- General configuration ---------------------------------------------------
