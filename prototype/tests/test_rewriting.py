@@ -171,80 +171,108 @@ def test_nnf_sequence_unchanged_positive():
     input_statement_str1: str = """(declare p (prop-seq (seq-concat (seq-or (seq-bool a) (seq-bool b)) (seq-repeat (range 2 3) (seq-bool c)))))"""
     check_single_declaration_nnf_helper(input_statement_str1, input_statement_str1)
 
-def test_nnf_sequence_unchanged_negative():
-    input_statement_str1: str = """(declare p (prop-not (prop-seq (seq-concat (seq-or (seq-bool a) (seq-bool b)) (seq-repeat (range 2 3) (seq-bool c))))))"""
+def test_nnf_sequence_weak_negative():
+    input_statement_str1: str = """(declare p (prop-not (prop-weak (seq-concat (seq-or (seq-bool a) (seq-bool b)) (seq-repeat (range 2 3) (seq-bool c))))))"""
+    input_statement_str1: str = """(declare p (prop-overlapped-implication (seq-concat (seq-or (seq-bool a) (seq-bool b)) (seq-repeat (range 2 3) (seq-bool c))) (prop-strong-bool (constant false)) ))"""
     check_single_declaration_nnf_helper(input_statement_str1, input_statement_str1)
 
-def test_nnf_sequence_weak_unchanged():
+def test_nnf_sequence_strong_negative():
+    input_statement_str1: str = """(declare p (prop-not (prop-strong (seq-concat (seq-or (seq-bool a) (seq-bool b)) (seq-repeat (range 2 3) (seq-bool c))))))"""
+    input_statement_str1: str = """(declare p (prop-overlapped-implication (seq-concat (seq-or (seq-bool a) (seq-bool b)) (seq-repeat (range 2 3) (seq-bool c))) (prop-weak-bool (constant false)) ))"""
+    check_single_declaration_nnf_helper(input_statement_str1, input_statement_str1)
+
+def test_nnf_boolean_weak():
+    input_statement_str1: str = """(declare p (prop-not (prop-weak-bool a)))"""
+    output_statement_str1: str = """(declare p (prop-strong-bool (not a)))"""
+    check_single_declaration_nnf_helper(input_statement_str1, input_statement_str1)
+
+def test_nnf_boolean_weak2():
     input_statement_str1: str = """(declare p (prop-not (prop-weak (seq-bool a))))"""
+    output_statement_str1: str = """(declare p (prop-overlapped-implication (seq-bool a) (prop-strong-bool (constant false)) ))"""
     check_single_declaration_nnf_helper(input_statement_str1, input_statement_str1)
 
-def test_nnf_sequence_weak_unchanged_with_label():
+def test_nnf_sequence_weak_with_label_single_root():
     input_statement_str1: str = """(declare p (prop-weak (seq-bool a)))"""
     input_statement_str2: str = """(declare q (prop-not p))"""
-    output_statement_str3: str = """(declare p_neg q)"""
+    output_statement_str1: str = """(declare q (prop-overlapped-implication (seq-bool a) (prop-strong-bool (false))))"""
+    output_statement_str2: str = """(declare p_neg q)"""
     input_statement1 = parse_raw_sexpr(input_statement_str1)
     input_statement2 = parse_raw_sexpr(input_statement_str2)
+    output_statement1 = parse_raw_sexpr(output_statement_str1)
+    output_statement2 = parse_raw_sexpr(output_statement_str2)
+    root_statement1: RawSExprList = ['parse-sexpr', 'q']
+    input_document: RawSExprList = wrap_multiple_statements_in_document([input_statement1, input_statement2, root_statement1])
+    expected_output_document: RawSExprList = wrap_multiple_statements_in_document([output_statement1, output_statement2, root_statement1])
+    check_nnf_equivalence(input_document, expected_output_document)
+
+def test_nnf_sequence_weak_with_label_two_roots():
+    input_statement_str1: str = """(declare p (prop-weak (seq-bool a)))"""
+    input_statement_str2: str = """(declare q (prop-not p))"""
+    output_statement_str2: str = """(declare p_neg (prop-overlapped-implication (seq-bool a) (prop-strong-bool (false))))"""
+    output_statement_str3: str = """(declare q p_neg)"""
+    input_statement1 = parse_raw_sexpr(input_statement_str1)
+    input_statement2 = parse_raw_sexpr(input_statement_str2)
+    output_statement2 = parse_raw_sexpr(output_statement_str2)
     output_statement3 = parse_raw_sexpr(output_statement_str3)
     root_statement1: RawSExprList = ['parse-sexpr', 'p']
     root_statement2: RawSExprList = ['parse-sexpr', 'q']
     input_document: RawSExprList = wrap_multiple_statements_in_document([input_statement1, input_statement2, root_statement1, root_statement2])
-    expected_output_document: RawSExprList = wrap_multiple_statements_in_document([input_statement1, input_statement2, output_statement3, root_statement1, root_statement2])
+    expected_output_document: RawSExprList = wrap_multiple_statements_in_document([input_statement1, output_statement2, output_statement3, root_statement1, root_statement2])
     check_nnf_equivalence(input_document, expected_output_document)
 
 def test_nnf_sequence_strong():
     input_statement_str1: str = """(declare p (prop-not (prop-strong (seq-bool a))))"""
-    output_statement_str1: str = """(declare p (prop-overlapped-implication (seq-bool a) (prop-bool (constant false))))"""
+    output_statement_str1: str = """(declare p (prop-overlapped-implication (seq-bool a) (prop-weak-bool (constant false))))"""
     check_single_declaration_nnf_helper(input_statement_str1, output_statement_str1)
 
 
 # NNF properties single primitives
 
 def test_nnf_property_reject_on():
-    input_statement_str1: str = """(declare p (prop-not (prop-reject-on a (prop-bool b))))"""
-    output_statement_str1: str = """(declare p (prop-accept-on a (prop-not (prop-bool b))))"""
+    input_statement_str1: str = """(declare p (prop-not (prop-reject-on a (prop-weak-bool b))))"""
+    output_statement_str1: str = """(declare p (prop-accept-on a (prop-overlapped-implication (seq-bool b) (prop-strong-bool (false))) ))"""
     check_single_declaration_nnf_helper(input_statement_str1, output_statement_str1)
 
 def test_nnf_property_accept_on():
-    input_statement_str1: str = """(declare p (prop-not (prop-accept-on a (prop-bool b))))"""
-    output_statement_str1: str = """(declare p (prop-reject-on a (prop-not (prop-bool b))))"""
+    input_statement_str1: str = """(declare p (prop-not (prop-accept-on a (prop-weak-bool b))))"""
+    output_statement_str1: str = """(declare p (prop-reject-on a (prop-strong-bool (not b)) ))"""
     check_single_declaration_nnf_helper(input_statement_str1, output_statement_str1)
 
 def test_nnf_property_implication():
-    input_statement_str1: str = """(declare p (prop-not (prop-overlapped-implication (seq-bool a) (prop-bool b))))"""
-    output_statement_str1: str = """(declare p (prop-overlapped-followed-by (seq-bool a) (prop-not (prop-bool b))))"""
+    input_statement_str1: str = """(declare p (prop-not (prop-overlapped-implication (seq-bool a) (prop-weak-bool b))))"""
+    output_statement_str1: str = """(declare p (prop-overlapped-followed-by (seq-bool a) (prop-strong-bool (not b)) ))"""
     check_single_declaration_nnf_helper(input_statement_str1, output_statement_str1)
 
 def test_nnf_property_followed_by():
-    input_statement_str1: str = """(declare p (prop-not (prop-overlapped-followed-by (seq-bool a) (prop-bool b))))"""
-    output_statement_str1: str = """(declare p (prop-overlapped-implication (seq-bool a) (prop-not (prop-bool b))))"""
+    input_statement_str1: str = """(declare p (prop-not (prop-overlapped-followed-by (seq-bool a) (prop-strong-bool b))))"""
+    output_statement_str1: str = """(declare p (prop-overlapped-implication (seq-bool a) (prop-weak-bool (not b)) ))"""
     check_single_declaration_nnf_helper(input_statement_str1, output_statement_str1)
 
 def test_nnf_property_until():
-    input_statement_str1: str = """(declare p (prop-not (prop-until (prop-bool a) (prop-bool b))))"""
-    output_statement_str1: str = """(declare p (prop-strong-until-with (prop-not (prop-bool b)) (prop-not (prop-bool a))))"""
+    input_statement_str1: str = """(declare p (prop-not (prop-until (prop-weak-bool a) (prop-weak-bool b))))"""
+    output_statement_str1: str = """(declare p (prop-strong-until-with (prop-strong-bool (not b)) (prop-strong-bool (not a)) ))"""
     check_single_declaration_nnf_helper(input_statement_str1, output_statement_str1)
 
 def test_nnf_property_s_until_with():
-    input_statement_str1: str = """(declare p (prop-not (prop-strong-until-with (prop-bool a) (prop-bool b))))"""
-    output_statement_str1: str = """(declare p (prop-until (prop-not (prop-bool b)) (prop-not (prop-bool a))))"""
+    input_statement_str1: str = """(declare p (prop-not (prop-strong-until-with (prop-strong-bool a) (prop-strong-bool b)) ))"""
+    output_statement_str1: str = """(declare p (prop-until (prop-weak-bool (not b)) (prop-weak-bool (not a)) ))"""
     check_single_declaration_nnf_helper(input_statement_str1, output_statement_str1)
 
 def test_nnf_property_nexttime():
-    input_statement_str1: str = """(declare p (prop-not (prop-nexttime 5 (prop-bool a))))"""
-    output_statement_str1: str = """(declare p (prop-strong-nexttime 5 (prop-not (prop-bool a))))"""
+    input_statement_str1: str = """(declare p (prop-not (prop-nexttime 5 (prop-weak-bool a))))"""
+    output_statement_str1: str = """(declare p (prop-strong-nexttime 5 (prop-strong-bool (not a)) ))"""
     check_single_declaration_nnf_helper(input_statement_str1, output_statement_str1)
 
 def test_nnf_property_s_nexttime():
-    input_statement_str1: str = """(declare p (prop-not (prop-strong-nexttime 5 (prop-bool a))))"""
-    output_statement_str1: str = """(declare p (prop-nexttime 5 (prop-not (prop-bool a))))"""
+    input_statement_str1: str = """(declare p (prop-not (prop-strong-nexttime 5 (prop-strong-bool a))))"""
+    output_statement_str1: str = """(declare p (prop-nexttime 5 (prop-weak-bool (not a)) ))"""
     check_single_declaration_nnf_helper(input_statement_str1, output_statement_str1)
 
 def test_nnf_property_or_and():
-    input_statement_str1: str = """(declare p (prop-not (prop-and (prop-or (prop-bool a) (prop-bool b)) (prop-and (prop-bool c) (prop-bool d)) )))"""
+    input_statement_str1: str = """(declare p (prop-not (prop-and (prop-or (prop-weak-bool a) (prop-weak-bool b)) (prop-and (prop-weak-bool c) (prop-weak-bool d)) )))"""
     output_statement_str1: str = """(declare p (prop-or
-        (prop-and (prop-not (prop-bool a)) (prop-not (prop-bool b)) )
-        (prop-or (prop-not (prop-bool c)) (prop-not (prop-bool d)) ) ))"""
+        (prop-and (prop-strong-bool (not a)) (prop-strong-bool (not b)) )
+        (prop-or (prop-strong-bool (not c)) (prop-strong-bool (not d)) ) ))"""
     check_single_declaration_nnf_helper(input_statement_str1, output_statement_str1)
 
 
@@ -264,12 +292,12 @@ def test_nnf_property_multiple_replacements():
     input_statement_str1: str = """(declare p
         (prop-not (prop-overlapped-implication
             (seq-bool a)
-            (prop-until (prop-bool b) (prop-not (prop-bool c)) )
+            (prop-until (prop-weak-bool b) (prop-not (prop-weak-bool c)) )
         )))"""
     output_statement_str1: str = """(declare p
         (prop-overlapped-followed-by
             (seq-bool a)
-            (prop-strong-until-with (prop-bool c) (prop-not (prop-bool b)) )
+            (prop-strong-until-with (prop-strong-bool c) (prop-strong-bool (not b)) )
         ))"""
     check_single_declaration_nnf_helper(input_statement_str1, output_statement_str1)
 
@@ -278,12 +306,12 @@ def test_nnf_property_even_cycle():
     input_statement_str1: str = """(declare-rec (declare p
         (prop-not (prop-overlapped-implication
             (seq-concat (seq-bool a) (seq-bool (constant true)))
-            (prop-not (prop-and (prop-bool b) p))
+            (prop-not (prop-and (prop-weak-bool b) p))
         ))))"""
     output_statement_str1: str = """(declare-rec (declare p
         (prop-overlapped-followed-by
             (seq-concat (seq-bool a) (seq-bool (constant true)))
-            (prop-and (prop-bool b) p)
+            (prop-and (prop-weak-bool b) p)
         )))"""
     check_single_declaration_nnf_helper(input_statement_str1, output_statement_str1)
 
@@ -299,21 +327,21 @@ def test_nnf_property_odd_cycle():
         check_single_declaration_nnf_helper(input_statement_str1, output_statement_str1)
 
 def test_nnf_property_shared_subgraph():
-    input_statement_str1: str = """(declare q (prop-not (prop-bool c)))"""
+    input_statement_str1: str = """(declare q (prop-not (prop-weak-bool c)))"""
     input_statement_str2: str = """(declare p
         (prop-not (prop-overlapped-implication
             (seq-bool a)
-            (prop-until (prop-bool b) q)
+            (prop-until (prop-weak-bool b) q)
         )))"""
     input_statement1 = parse_raw_sexpr(input_statement_str1)
     input_statement2 = parse_raw_sexpr(input_statement_str2)
 
-    output_statement_str0: str = """(declare q_neg (prop-bool c))"""
-    output_statement_str1: str = """(declare q (prop-not q_neg))"""
+    output_statement_str0: str = """(declare q_neg (prop-weak-bool c))"""
+    output_statement_str1: str = """(declare q (prop-strong-bool (not c)))"""
     output_statement_str2: str = """(declare p
         (prop-overlapped-followed-by
             (seq-bool a)
-            (prop-strong-until-with q_neg (prop-not (prop-bool b)) )
+            (prop-strong-until-with q_neg (prop-strong-bool (not b)) )
         ))"""
     output_statement_str: str = '(declare-rec' + output_statement_str1 + output_statement_str2 + output_statement_str0 + ')'
     output_statement = parse_raw_sexpr(output_statement_str)
@@ -324,3 +352,17 @@ def test_nnf_property_shared_subgraph():
     input_document: RawSExprList = wrap_multiple_statements_in_document([input_statement1, input_statement2, root_statement1, root_statement2])
     expected_output_document = wrap_multiple_statements_in_document([output_statement, root_statement1, root_statement2])
     check_nnf_equivalence(input_document, expected_output_document)
+
+
+
+def test_nnf_error_on_prop_bool():
+    with pytest.raises(ValueError, match='prop-bool'):
+        input_statement_str1: str = """(declare p (prop-not (prop-bool b)))"""
+        output_statement_str1: str = """(declare p (prop-bool a))""" # arbitrary because an error is expected anyway
+        check_single_declaration_nnf_helper(input_statement_str1, output_statement_str1)
+
+def test_nnf_error_on_prop_seq():
+    with pytest.raises(ValueError, match='seq-bool'):
+        input_statement_str1: str = """(declare p (prop-not (prop-seq (seq-bool b))))"""
+        output_statement_str1: str = """(declare p (prop-bool a))""" # arbitrary because an error is expected anyway
+        check_single_declaration_nnf_helper(input_statement_str1, output_statement_str1)
