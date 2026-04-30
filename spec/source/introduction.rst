@@ -7,7 +7,7 @@ Introduction
 
 Property IR is an intermediate representation for temporal properties as
 specified by SystemVerilog Assertions (SVA).
-The goal is to support formal verificaton flows, while decoupling front-end
+The goal is to support formal verification flows, while decoupling front-end
 tasks (parsing, name resolution, etc.) from checker circuit synthesis and
 optimization.
 This is achieved by providing a unified representation for assertions,
