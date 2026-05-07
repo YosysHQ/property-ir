@@ -4,7 +4,7 @@ import logging
 from typeguard import typechecked
 
 from sexpr.base import PropertyIrNode, PlaceholderNode, IrContainer, RawSExpr, NodeId, Signal, LiteralType, Property, Sequence, Bool
-from sexpr.primitives import And, Constant, Not, Or, PropAcceptOn, PropNexttime, PropAnd, PropNot, PropOr, PropStrong, PropWeak, PropSeq, PropBool
+from sexpr.primitives import And, Constant, Not, Or, PropAcceptOn, PropNexttime, PropAnd, PropNot, PropOr, PropStrong, PropWeak, PropSeq, PropBool, PropWeakBool, PropStrongBool
 from sexpr.primitives import PropOverlappedFollowedBy, PropOverlappedImplication, PropRejectOn, PropStrongNexttime, PropUntil, PropStrongUntilWith
 
 
@@ -41,6 +41,9 @@ dual_primitives: dict[type[PropertyIrNode], type[PropertyIrNode]] = {
     PropStrongUntilWith: PropUntil, # swap child1 and child2
     PropOr: PropAnd,
     PropAnd: PropOr,
+
+    PropStrongBool: PropWeakBool, # move negation into Bool
+    PropWeakBool: PropStrongBool  # move negation into Bool
 
 }
 
@@ -142,9 +145,10 @@ def nnf_process_node(
         return added_node.node_id
 
 
-    # negation of strong can be replaced by implication with consequent constant false
+    # negation of strong can be replaced by implication with consequent weak constant false
+    # negation of weak can be replaced by implication with consequent strong constant false
     # special case because the inverted primitive has not the same fields as the positive one
-    elif invert and isinstance(current_node, PropStrong):
+    elif invert and ((isinstance(current_node, PropStrong) or isinstance(current_node, PropWeak))):
 
         placeholder_node = output_container.add_placeholder_node() # placeholder for implication with unknown child
         corresponding_nodes[(repr_id, True)] = placeholder_node.node_id
@@ -157,7 +161,10 @@ def nnf_process_node(
 
         # consequent of implication
         added_constant_false = output_container.add_node_by_kwargs(Constant, {'value': False})
-        added_prop_bool = output_container.add_node_by_kwargs(PropBool, {'child': added_constant_false.node_id})
+        if isinstance(current_node, PropStrong):
+            added_prop_bool = output_container.add_node_by_kwargs(PropWeakBool, {'child': added_constant_false.node_id})
+        else: # PropWeak
+            added_prop_bool = output_container.add_node_by_kwargs(PropStrongBool, {'child': added_constant_false.node_id})
 
         added_node_impl = output_container.add_node_by_kwargs(PropOverlappedImplication, {'child1': result_id, 'child2': added_prop_bool.node_id})
         placeholder_node.instantiate_placeholder(added_node_impl)
@@ -167,42 +174,9 @@ def nnf_process_node(
 
         return added_node_impl.node_id
 
+    elif isinstance(current_node, PropSeq) or isinstance(current_node, PropBool):
+            raise ValueError(f'Encountered sequence property without weak or strong qualifier at node {current_node}')
 
-    # other negated sequences are just copied as they are - if they should be negated, a prop-not primitive is created
-    elif invert and (\
-        isinstance(current_node, PropWeak) or \
-        isinstance(current_node, PropBool) or \
-        isinstance(current_node, PropSeq)):
-
-        if (repr_id, False) in corresponding_nodes:
-            positive_seq_id = corresponding_nodes[(repr_id, False)]
-            added_node_not = output_container.add_node_by_kwargs(PropNot, {'child': positive_seq_id})
-            corresponding_nodes[(repr_id, True)] = added_node_not.node_id
-            logger.debug('Added PropNot node: %s', added_node_not.node_id)
-            return added_node_not.node_id
-        else:
-            placeholder_node = output_container.add_placeholder_node() # for the current node (positive) whose child does not exist yet
-            corresponding_nodes[(repr_id, False)] = placeholder_node.node_id
-            logger.debug('Added placeholder node: %s', placeholder_node.node_id)
-            positive_seq_id = placeholder_node.node_id
-
-            added_node_not = output_container.add_node_by_kwargs(PropNot, {'child': positive_seq_id})
-            corresponding_nodes[(repr_id, True)] = added_node_not.node_id
-            logger.debug('Added PropNot node: %s', added_node_not.node_id)
-
-            nodes_in_call_stack.add((repr_id, False))
-            nodes_in_call_stack.add((repr_id, True))
-
-            result_id = nnf_process_node(current_node.child, container, False, output_container, corresponding_nodes, nodes_in_call_stack)
-            logger.debug('Output container nodes %s', output_container.nodes)
-            added_node_current = output_container.add_node_by_kwargs(type(current_node), {'child': result_id})
-            placeholder_node.instantiate_placeholder(added_node_current)
-            logger.debug('Instantiated placeholder node %s with %s', placeholder_node.node_id, added_node_current.node_id)
-
-            nodes_in_call_stack.remove((repr_id, True))
-            nodes_in_call_stack.remove((repr_id, False))
-
-            return added_node_not.node_id
 
     # add current node to recursion stack
     # which detects when there is a cycle and not just a shared subgraph
@@ -248,13 +222,12 @@ def nnf_process_node(
 
         elif issubclass(field_type, PropertyIrNode):
             child_id = getattr(current_node, field.name)
-            if issubclass(field_type, Property):
-                output_child_id = nnf_process_node(child_id, container, invert, output_container, corresponding_nodes, nodes_in_call_stack)
-            elif issubclass(field_type, Sequence) or \
+            if issubclass(field_type, Sequence) or \
                 (issubclass(field_type, Bool) and (isinstance(current_node, PropAcceptOn) or isinstance(current_node, PropRejectOn))) or \
-                isinstance(current_node, Sequence) or \
-                isinstance(current_node, PropBool): # PropBool only positive because inverted case handled above
+                isinstance(current_node, Sequence):
                 output_child_id = nnf_process_node(child_id, container, False, output_container, corresponding_nodes, nodes_in_call_stack)
+            elif issubclass(field_type, Property) or issubclass(field_type, Bool):
+                output_child_id = nnf_process_node(child_id, container, invert, output_container, corresponding_nodes, nodes_in_call_stack)
             else:
                 raise ValueError(f'Unexpected child node with name {field.name} of type {field_type} while processing {current_node}')
             kwargs[field.name] = output_child_id
