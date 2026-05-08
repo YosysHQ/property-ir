@@ -134,6 +134,15 @@ class PropStrong(Property):
 class PropWeak(Property):
     child: NodeId[Sequence]
 
+# the primitive PropRefuted is equivalent to not(weak(seq))
+# it means that there is evidence that the sequence cannot match, regardless of how it is extended
+# it is a strong primitive because we need to observe that it provably fails on a finite prefix
+# used for negation normal form (NNF)
+@typechecked
+@dataclass
+class PropRefuted(Property):
+    child: NodeId[Sequence]
+
 @typechecked
 @dataclass
 class PropNot(Property):

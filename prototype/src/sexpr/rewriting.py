@@ -5,7 +5,7 @@ from typeguard import typechecked
 
 from sexpr.base import PropertyIrNode, PlaceholderNode, IrContainer, RawSExpr, NodeId, Signal, LiteralType, Property, Sequence, Bool
 from sexpr.primitives import And, Constant, Not, Or, PropAcceptOn, PropNexttime, PropAnd, PropNot, PropOr, PropStrong, PropWeak, PropSeq, PropBool, PropWeakBool, PropStrongBool
-from sexpr.primitives import PropOverlappedFollowedBy, PropOverlappedImplication, PropRejectOn, PropStrongNexttime, PropUntil, PropStrongUntilWith
+from sexpr.primitives import PropOverlappedFollowedBy, PropOverlappedImplication, PropRejectOn, PropStrongNexttime, PropUntil, PropStrongUntilWith, PropRefuted
 
 
 
@@ -43,8 +43,9 @@ dual_primitives: dict[type[PropertyIrNode], type[PropertyIrNode]] = {
     PropAnd: PropOr,
 
     PropStrongBool: PropWeakBool, # move negation into Bool
-    PropWeakBool: PropStrongBool  # move negation into Bool
+    PropWeakBool: PropStrongBool,  # move negation into Bool
 
+    PropWeak: PropRefuted # child (seq) not negated
 }
 
 
@@ -144,11 +145,9 @@ def nnf_process_node(
         logger.debug('Added Constant node: %s', added_node.node_id)
         return added_node.node_id
 
-
     # negation of strong can be replaced by implication with consequent weak constant false
-    # negation of weak can be replaced by implication with consequent strong constant false
     # special case because the inverted primitive has not the same fields as the positive one
-    elif invert and ((isinstance(current_node, PropStrong) or isinstance(current_node, PropWeak))):
+    elif invert and (isinstance(current_node, PropStrong)):
 
         placeholder_node = output_container.add_placeholder_node() # placeholder for implication with unknown child
         corresponding_nodes[(repr_id, True)] = placeholder_node.node_id
@@ -161,10 +160,7 @@ def nnf_process_node(
 
         # consequent of implication
         added_constant_false = output_container.add_node_by_kwargs(Constant, {'value': False})
-        if isinstance(current_node, PropStrong):
-            added_prop_bool = output_container.add_node_by_kwargs(PropWeakBool, {'child': added_constant_false.node_id})
-        else: # PropWeak
-            added_prop_bool = output_container.add_node_by_kwargs(PropStrongBool, {'child': added_constant_false.node_id})
+        added_prop_bool = output_container.add_node_by_kwargs(PropWeakBool, {'child': added_constant_false.node_id})
 
         added_node_impl = output_container.add_node_by_kwargs(PropOverlappedImplication, {'child1': result_id, 'child2': added_prop_bool.node_id})
         placeholder_node.instantiate_placeholder(added_node_impl)
@@ -222,6 +218,7 @@ def nnf_process_node(
 
         elif issubclass(field_type, PropertyIrNode):
             child_id = getattr(current_node, field.name)
+            # the following case includes PropWeak
             if issubclass(field_type, Sequence) or \
                 (issubclass(field_type, Bool) and (isinstance(current_node, PropAcceptOn) or isinstance(current_node, PropRejectOn))) or \
                 isinstance(current_node, Sequence):
