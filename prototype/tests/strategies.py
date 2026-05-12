@@ -109,10 +109,13 @@ def build_ir_from_random_data(strategy_drawn_data: tuple[list[IrGeneratingType],
                     candidates.append(f'(range {min(range_bounds) } {max(range_bounds)})')
                     candidates.append(f'(range {min(range_bounds) } $)')
 
-            elif issubclass(arg_type, int):
+            elif arg_type is int:
                 candidates.append(str(random_num % 5))
                 candidates.append(str(random_num % 7))
                 candidates.append(str(random_num % 13))
+
+            elif arg_type is bool:
+                candidates = ['true', 'false']
 
             elif issubclass(arg_type, PropertyIrNode):
 
@@ -126,11 +129,11 @@ def build_ir_from_random_data(strategy_drawn_data: tuple[list[IrGeneratingType],
                     candidates2 += [f'(seq-bool {signal})' for signal in signal_list]
 
                 elif issubclass(arg_type, Property):
-                    candidates2 += [f'(prop-bool-weak {signal})' for signal in signal_list]
-                    candidates2 += [f'(prop-bool-strong {signal})' for signal in signal_list]
+                    candidates2 += [f'(prop-weak-bool {signal})' for signal in signal_list]
+                    candidates2 += [f'(prop-strong-bool {signal})' for signal in signal_list]
 
-                # choose one of the candidate lists with 50% probability to select an argument from
-                if random_num % 2 == 0 and len(candidates1) > 0:
+                # choose one of the candidate lists to select an argument from (prefer preceding nodes over new leaves)
+                if random_num % 5 in [0, 1, 2, 3] and len(candidates1) > 0:
                     candidates = candidates1
                 else:
                     candidates = candidates2
@@ -148,7 +151,7 @@ def build_ir_from_random_data(strategy_drawn_data: tuple[list[IrGeneratingType],
 
         tuple_index_by_type[primitive_type].append(f'step{tuple_num}')
 
-    signals_str: str = " ".join([f"(declare-signal {signal})" for signal in signal_list])
+    signals_str: str = " ".join([f"(declare-input {signal})" for signal in signal_list])
     subexpressions_str: str = " ".join(let_rec_subexpressions)
 
     return f'(document {signals_str} (parse-sexpr (let-rec {subexpressions_str} step{len(generating_list) - 1})))'
