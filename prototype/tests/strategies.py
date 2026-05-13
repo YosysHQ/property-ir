@@ -5,8 +5,9 @@ from hypothesis import settings
 import logging
 import string
 
-from sexpr.base import RawSExpr, RawSExprList, PropertyIrNode
+from sexpr.base import RawSExpr, RawSExprList, PropertyIrNode, IrContainer
 from sexpr.base import Property, Sequence, Bool, Range, BoundedRange, IntOrUnbounded, Signal
+from sexpr.parsing import parse_document, parse_raw_sexpr
 import sexpr.primitives
 from tests.helpers import wrap_signals_and_expr_in_document
 
@@ -19,7 +20,7 @@ type IrGeneratingType = tuple[str, type[PropertyIrNode], list[type], list[int]]
 
 def random_ir(
     final_node_type: type[PropertyIrNode],
-    primitive_filter: Callable[[type[PropertyIrNode]], bool] = lambda node_type: False if node_type is Signal else True,
+    primitive_filter: Callable[[type[PropertyIrNode]], bool] = lambda node_type: True,
     **lists_params) -> st.SearchStrategy[str]:
     """Generate a random Property IR expression whose graph has the form of a DAG.
     For this, collect all strategies to generate data for each allowed primitive.
@@ -32,7 +33,7 @@ def random_ir(
 
     for node_type in allowed_types:
         for cls in node_type.__subclasses__():
-            if primitive_filter(cls):
+            if primitive_filter(cls) and not cls is Signal:
                 sub_strategy = random_ir_primitive_template_and_args(cls)
                 primitive_generators.append(sub_strategy)
                 if issubclass(cls, final_node_type):
@@ -44,23 +45,24 @@ def random_ir(
         identifier_list).map(build_ir_from_random_data)
 
 
-def random_ir_primitive_template_and_args(node_type: type[PropertyIrNode]) -> st.SearchStrategy[IrGeneratingType]:
+def random_ir_primitive_template_and_args(node_class: type[PropertyIrNode]) -> st.SearchStrategy[IrGeneratingType]:
     """Given a type of PropertyIrNode, returns a strategy to get a tuple that can
     be used to generate one line of a let-rec for a random Property IR expression,
     corresponding to one node."""
 
-    primitive_name: str = node_type.op_symbol()
-    primitive_type_signature: list[type] = node_type.signature()
+    primitive_name: str = node_class.op_symbol()
+    node_type: type[PropertyIrNode] = node_class.type_class()
+    primitive_class_signature: list[type] = node_class.signature()
 
-    min_s: int = len(primitive_type_signature)
-    max_s: int = len(primitive_type_signature)
+    min_s: int = len(primitive_class_signature)
+    max_s: int = len(primitive_class_signature)
 
-    if len(primitive_type_signature) == 1:
-        if get_origin(primitive_type_signature[0]) is list:
+    if len(primitive_class_signature) == 1:
+        if get_origin(primitive_class_signature[0]) is list:
             min_s: int = 2
             max_s: int = 5
 
-    return st.tuples(st.just(primitive_name), st.just(node_type), st.just(primitive_type_signature), st.lists(st.integers(), min_size=min_s, max_size=max_s))
+    return st.tuples(st.just(primitive_name), st.just(node_type), st.just(primitive_class_signature), st.lists(st.integers(), min_size=min_s, max_size=max_s))
 
 
 def build_ir_from_random_data(strategy_drawn_data: tuple[list[IrGeneratingType], IrGeneratingType, list[str]]) -> str:
@@ -120,6 +122,8 @@ def build_ir_from_random_data(strategy_drawn_data: tuple[list[IrGeneratingType],
             elif issubclass(arg_type, PropertyIrNode):
 
                 candidates1 += tuple_index_by_type[arg_type]
+                logger.debug('Candidates1: %s', candidates1)
+                logger.debug('tuple_index_by_type[arg_type]: %s', tuple_index_by_type)
 
                 if issubclass(arg_type, Bool):
                     candidates2 += ['(true)', '(false)']
@@ -133,7 +137,7 @@ def build_ir_from_random_data(strategy_drawn_data: tuple[list[IrGeneratingType],
                     candidates2 += [f'(prop-strong-bool {signal})' for signal in signal_list]
 
                 # choose one of the candidate lists to select an argument from (prefer preceding nodes over new leaves)
-                if random_num % 5 in [0, 1, 2, 3] and len(candidates1) > 0:
+                if random_num % 10 in range(0, 9) and len(candidates1) > 0:
                     candidates = candidates1
                 else:
                     candidates = candidates2
@@ -150,6 +154,7 @@ def build_ir_from_random_data(strategy_drawn_data: tuple[list[IrGeneratingType],
         let_rec_subexpressions.append(primitive_str)
 
         tuple_index_by_type[primitive_type].append(f'step{tuple_num}')
+        logger.debug('Add step%s for primitive type %s', tuple_num, primitive_type)
 
     signals_str: str = " ".join([f"(declare-input {signal})" for signal in signal_list])
     subexpressions_str: str = " ".join(let_rec_subexpressions)
@@ -333,10 +338,29 @@ def main():
         level=logging.DEBUG,
         format="%(asctime)s | %(levelname)s | %(name)s | %(message)s")
 
-    logger.info(random_ir(Bool).example())
+
+    #document: str = random_ir(Bool, primitive_filter=lambda node_type: False if not issubclass(node_type, Bool) else True).example()
+    #document: str = random_ir(Sequence, primitive_filter=lambda node_type: False if issubclass(node_type, Property) else True).example()
+    document: str = random_ir(Property).example()
+
+    logger.info(document)
+
+    container1 = IrContainer()
+    parse_document(parse_raw_sexpr(document), ir_container=container1)
+    container1.bypass_placeholders()
+    node_count_before: int = len(container1.nodes)
+    logger.info('Number of nodes before pruning: %s', len(container1.nodes))
+    container1.canonical_id_renaming()
+    node_count_after: int = len(container1.nodes)
+    output_document = container1.output_container()
+    logger.info(output_document)
+    logger.info('Number of nodes before pruning: %s', node_count_before)
+    logger.info('Number of nodes after pruning: %s', node_count_after)
+
+    return
+
     logger.info(random_ir(Sequence).example())
     logger.info(random_ir(Property).example())
-    return
 
     logger.info(identifier().example())
     logger.info(raw_sexpr().example())

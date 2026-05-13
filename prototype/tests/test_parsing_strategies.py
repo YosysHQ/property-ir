@@ -50,19 +50,19 @@ def test_roundtrip_declare_rec_boolean(doc):
 
 
 
-@settings(verbosity=Verbosity.verbose, max_examples=30, deadline=3000)
-@given((random_ir(final_node_type=Bool, primitive_filter=lambda node_type: False if node_type is Signal or not issubclass(node_type, Bool) else True)))
+@settings(verbosity=Verbosity.verbose, max_examples=50, deadline=3000)
+@given((random_ir(final_node_type=Bool, primitive_filter=lambda node_type: False if not issubclass(node_type, Bool) else True)))
 def test_roundtrip_dag_formed_bool(doc):
     doc_raw_sexpr: RawSExprList = parse_raw_sexpr(doc)
     apply_roundtrip(doc_raw_sexpr)
 
-@settings(verbosity=Verbosity.verbose, max_examples=30, deadline=3000)
-@given((random_ir(final_node_type=Sequence, primitive_filter=lambda node_type: False if node_type is Signal or issubclass(node_type, Property) else True)))
+@settings(verbosity=Verbosity.verbose, max_examples=50, deadline=3000)
+@given((random_ir(final_node_type=Sequence, primitive_filter=lambda node_type: False if issubclass(node_type, Property) else True)))
 def test_roundtrip_dag_formed_sequence(doc):
     doc_raw_sexpr: RawSExprList = parse_raw_sexpr(doc)
     apply_roundtrip(doc_raw_sexpr)
 
-@settings(verbosity=Verbosity.verbose, max_examples=30, deadline=3000)
+@settings(verbosity=Verbosity.verbose, max_examples=50, deadline=3000)
 @given((random_ir(final_node_type=Property)))
 def test_roundtrip_dag_formed_property(doc):
     doc_raw_sexpr: RawSExprList = parse_raw_sexpr(doc)
