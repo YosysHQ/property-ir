@@ -58,6 +58,17 @@ class FallingGclk(Bool):
     child1: NodeId[Bool]
     child2: NodeId[Bool]
 
+@typechecked
+@dataclass
+class RisingGclk(Bool):
+    child1: NodeId[Bool]
+    child2: NodeId[Bool]
+
+@typechecked
+@dataclass
+class Initial(Bool):
+    pass
+
 
 # Sequence primitives
 

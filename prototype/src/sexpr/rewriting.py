@@ -4,7 +4,7 @@ import logging
 from typeguard import typechecked
 
 from sexpr.base import PropertyIrNode, PlaceholderNode, IrContainer, RawSExpr, NodeId, Signal, LiteralType, Property, Sequence, Bool
-from sexpr.primitives import And, Constant, Not, Or, PropAcceptOn, PropNexttime, PropAnd, PropNot, PropOr, PropStrong, PropWeak, PropSeq, PropBool, PropWeakBool, PropStrongBool
+from sexpr.primitives import And, Constant, FutureGclk, Not, Or, Initial, PropAcceptOn, PropNexttime, PropAnd, PropNot, PropOr, PropStrong, PropWeak, PropSeq, PropBool, PropWeakBool, PropStrongBool
 from sexpr.primitives import PropOverlappedFollowedBy, PropOverlappedImplication, PropRejectOn, PropStrongNexttime, PropUntil, PropStrongUntilWith, PropRefuted
 
 
@@ -30,6 +30,7 @@ dual_primitives: dict[type[PropertyIrNode], type[PropertyIrNode]] = {
 
     And: Or,
     Or: And,
+    FutureGclk: FutureGclk, # child1 (bool) negated, child2 (bool) not negated
 
     PropOverlappedImplication: PropOverlappedFollowedBy, # child1 (seq) not negated
     PropOverlappedFollowedBy: PropOverlappedImplication, # child1 (seq) not negated
@@ -105,9 +106,12 @@ def nnf_process_node(
     output_container: IrContainer,
     corresponding_nodes: dict[tuple[NodeId, bool], NodeId],
     nodes_in_call_stack: set[tuple[NodeId, bool]]) -> NodeId:
-    """Recursive function to process a node and all nodes reachablgge from it,
+    """Recursive function to process a node and all nodes reachable from it,
     to create corresponding expression graph in negation normal form.
-    Bool parameter invert states whether the input node needs to change polarity."""
+    Bool parameter 'invert' states whether the input node needs to change polarity.
+    The input expression is expected to be simple (unclocked, no empty matches)
+    and contain none of the following primitives:
+    xor, eq, glkc_rising, gclk_falling, gclk_changing."""
 
 
     # dicts should store representatives
@@ -144,6 +148,15 @@ def nnf_process_node(
         corresponding_nodes[(repr_id, invert)] = added_node.node_id
         logger.debug('Added Constant node: %s', added_node.node_id)
         return added_node.node_id
+
+    elif isinstance(current_node, Initial) and invert:
+        added_initial_node = output_container.add_node_by_kwargs(Initial, {})
+        corresponding_nodes[(repr_id, False)] = added_initial_node.node_id
+        added_not_node = output_container.add_node_by_kwargs(Not, {'child': corresponding_nodes[(repr_id, False)]})
+        corresponding_nodes[(repr_id, True)] = added_not_node.node_id
+        logger.debug('Added Not node: %s', added_not_node.node_id)
+        logger.debug('Added Initial node: %s', added_initial_node.node_id)
+        return added_not_node.node_id
 
     # negation of strong can be replaced by implication with consequent weak constant false
     # special case because the inverted primitive has not the same fields as the positive one
@@ -221,6 +234,7 @@ def nnf_process_node(
             # the following case includes PropWeak
             if issubclass(field_type, Sequence) or \
                 (issubclass(field_type, Bool) and (isinstance(current_node, PropAcceptOn) or isinstance(current_node, PropRejectOn))) or \
+                (issubclass(field_type, Bool) and (isinstance(current_node, FutureGclk) and field.name == 'child2')) or \
                 isinstance(current_node, Sequence):
                 output_child_id = nnf_process_node(child_id, container, False, output_container, corresponding_nodes, nodes_in_call_stack)
             elif issubclass(field_type, Property) or issubclass(field_type, Bool):
@@ -257,7 +271,10 @@ def nnf(container: IrContainer) -> IrContainer:
     """Create a new expression graph that is the negation normal form of the
     graph stored in the container. If there are cycles with an odd number of
     negations, this results in an error. Cycles with an even number of negations
-    are acceptable."""
+    are acceptable.
+    The input expression is expected to be simple (unclocked, no empty matches)
+    and contain none of the following primitives:
+    xor, eq, glkc_rising, gclk_falling, gclk_changing."""
 
     output_container: IrContainer = IrContainer()
 

@@ -72,6 +72,32 @@ def test_nnf_boolean_no_change():
     expected_output_document = wrap_multiple_statements_in_document([input_statement1, input_statement2, input_statement3, root_node_statement1, root_node_statement2, root_node_statement3])
     check_nnf_equivalence(input_document, expected_output_document)
 
+def test_nnf_boolean_initial_positive():
+    input_statement: RawSExprList = ['declare', 'p', ['and', ['or', 'a', 'b'], ['initial']]]
+    root_node_statement: RawSExprList = ['parse-sexpr', 'p']
+
+    input_document = wrap_multiple_statements_in_document([input_statement, root_node_statement])
+    expected_output_document = input_document
+    check_nnf_equivalence(input_document, expected_output_document)
+
+def test_nnf_boolean_initial_negative():
+    input_statement: RawSExprList = ['declare', 'p', ['not', ['and', ['or', 'a', 'b'], ['initial']]]]
+    expected_output_statement: RawSExprList = ['declare', 'p', ['or', ['and', ['not', 'a'], ['not', 'b']], ['not', ['initial']]]]
+    root_node_statement: RawSExprList = ['parse-sexpr', 'p']
+
+    input_document = wrap_multiple_statements_in_document([input_statement, root_node_statement])
+    expected_output_document = wrap_multiple_statements_in_document([expected_output_statement, root_node_statement])
+    check_nnf_equivalence(input_document, expected_output_document)
+
+def test_nnf_boolean_future_gclk():
+    input_statement: RawSExprList = ['declare', 'p', ['not', ['and', ['or', ['future-gclk', 'a', 'c'], 'b']]]]
+    expected_output_statement: RawSExprList = ['declare', 'p', ['or', ['and', ['future-gclk', ['not', 'a'], 'c'], ['not', 'b']]]]
+    root_node_statement: RawSExprList = ['parse-sexpr', 'p']
+
+    input_document = wrap_multiple_statements_in_document([input_statement, root_node_statement])
+    expected_output_document = wrap_multiple_statements_in_document([expected_output_statement, root_node_statement])
+    check_nnf_equivalence(input_document, expected_output_document)
+
 
 def test_nnf_boolean_even_cycle():
     input_raw_sexpr: RawSExprList = ['declare-rec', ['declare', 'p', ['not', ['and', ['or', 'a', 'b'], ['not', ['or', 'c', 'p']]]]]]
