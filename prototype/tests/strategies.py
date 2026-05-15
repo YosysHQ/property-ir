@@ -76,6 +76,7 @@ def build_ir_from_random_data(strategy_drawn_data: tuple[list[IrGeneratingType],
     logger.debug('generating_list: %s', generating_list)
 
     tuple_index_by_type: defaultdict[type[PropertyIrNode], list[str]] = defaultdict(list) # store for each node type the tuple index identifiers with that type
+    unused_tuple_index_by_type: defaultdict[type[PropertyIrNode], list[str]] = defaultdict(list) # unused preceding nodes should be chosen with a higher probability
 
     signal_list: list[str] = strategy_drawn_data[2] # the signal identifiers cannot overlap with other node identifiers because they have max 3 letters
 
@@ -94,10 +95,11 @@ def build_ir_from_random_data(strategy_drawn_data: tuple[list[IrGeneratingType],
             else:
                 arg_type: type = signature[arg_num]
 
-            # collect earlier list elements with correct type (candidates1)
-            # and default values for type (candidates2), if applicable
-            candidates1: list[Any] = []
-            candidates2: list[Any] = []
+            # collect earlier list elements with correct type
+            # and default values for type, if applicable
+            candidates_unused_preceding_nodes: list[Any] = []
+            candidates_preceding_nodes: list[Any] = []
+            candidates_default: list[Any] = []
             candidates: list[Any] = []
 
             if issubclass(arg_type, Range) or issubclass(arg_type, BoundedRange):
@@ -121,26 +123,29 @@ def build_ir_from_random_data(strategy_drawn_data: tuple[list[IrGeneratingType],
 
             elif issubclass(arg_type, PropertyIrNode):
 
-                candidates1 += tuple_index_by_type[arg_type]
-                logger.debug('Candidates1: %s', candidates1)
+                candidates_preceding_nodes += tuple_index_by_type[arg_type]
+                candidates_unused_preceding_nodes += unused_tuple_index_by_type[arg_type]
+                logger.debug('candidates_preceding_nodes: %s', candidates_preceding_nodes)
+                logger.debug('candidates_unused_preceding_nodes: %s', candidates_unused_preceding_nodes)
                 logger.debug('tuple_index_by_type[arg_type]: %s', tuple_index_by_type)
 
                 if issubclass(arg_type, Bool):
-                    candidates2 += ['(true)', '(false)']
-                    candidates2 += signal_list
+                    candidates_default += ['(true)', '(false)']
+                    candidates_default += signal_list
 
                 elif issubclass(arg_type, Sequence):
-                    candidates2 += [f'(seq-bool {signal})' for signal in signal_list]
+                    candidates_default += [f'(seq-bool {signal})' for signal in signal_list]
 
                 elif issubclass(arg_type, Property):
-                    candidates2 += [f'(prop-weak-bool {signal})' for signal in signal_list]
-                    candidates2 += [f'(prop-strong-bool {signal})' for signal in signal_list]
+                    candidates_default += [f'(prop-weak-bool {signal})' for signal in signal_list]
+                    candidates_default += [f'(prop-strong-bool {signal})' for signal in signal_list]
 
-                # choose one of the candidate lists to select an argument from (prefer preceding nodes over new leaves)
-                if random_num % 10 in range(0, 9) and len(candidates1) > 0:
-                    candidates = candidates1
+                # choose candidates to select an argument from (prefer unused nodes over used ones and default values)
+                if random_num % 10 in range(0, 9) and len(candidates_unused_preceding_nodes) > 0:
+                    candidates = candidates_unused_preceding_nodes
                 else:
-                    candidates = candidates2
+                    candidates = candidates_preceding_nodes
+                    candidates += candidates_default
 
             else:
                 raise TypeError(f'Unexpected argument type {arg_type} while building expression for primitive {primitive_name}')
@@ -149,11 +154,16 @@ def build_ir_from_random_data(strategy_drawn_data: tuple[list[IrGeneratingType],
             chosen_element: str = candidates[random_num % len(candidates)]
             arguments.append(chosen_element)
 
+            if issubclass(arg_type, PropertyIrNode):
+                if chosen_element in unused_tuple_index_by_type[arg_type]:
+                    unused_tuple_index_by_type[arg_type].remove(chosen_element)
+
         # create string expression for the node
         primitive_str: str = f'(step{tuple_num} ({primitive_name} {" ".join(arguments)}))'
         let_rec_subexpressions.append(primitive_str)
 
         tuple_index_by_type[primitive_type].append(f'step{tuple_num}')
+        unused_tuple_index_by_type[primitive_type].append(f'step{tuple_num}')
         logger.debug('Add step%s for primitive type %s', tuple_num, primitive_type)
 
     signals_str: str = " ".join([f"(declare-input {signal})" for signal in signal_list])
