@@ -1,11 +1,12 @@
 from collections import deque
-from typing import get_origin, Any
+from typing import get_origin, get_args, Any, Optional
 import logging
 from typeguard import typechecked
 
-from sexpr.base import PropertyIrNode, PlaceholderNode, IrContainer, RawSExpr, NodeId, Signal, LiteralType, Property, Sequence, Bool
+from sexpr.base import PropertyIrNode, PlaceholderNode, IrContainer, RawSExpr, NodeId, RawSExprList, Signal, LiteralType, Property, Sequence, Bool
 from sexpr.primitives import And, Constant, FutureGclk, Not, Or, Initial, PropAcceptOn, PropNexttime, PropAnd, PropNot, PropOr, PropStrong, PropWeak, PropSeq, PropBool, PropWeakBool, PropStrongBool
 from sexpr.primitives import PropOverlappedFollowedBy, PropOverlappedImplication, PropRejectOn, PropStrongNexttime, PropUntil, PropStrongUntilWith, PropRefuted
+from sexpr.parsing import get_op_symbols, parse_expression
 
 
 
@@ -20,7 +21,7 @@ logger = logging.getLogger(__name__)
 #   (seq-repeat (range 0 $) (not <bool>))
 #   <bool>))
 
-type RewriteRule = tuple[RawSExpr, RawSExpr]
+type RewriteRule = tuple[RawSExprList, RawSExprList]
 
 goto_repeat_rule: RewriteRule = (['clk-seq-goto-repeat', '<range>', '<bool>'],
     ['clk-seq-repeat', '<range>', ['clk-seq-concat', ['clk-seq-repeat', ['range', '0', '$'], ['clk-seq-bool', ['not', '<bool>']]], ['clk-seq-bool', '<bool>']]])
@@ -50,28 +51,148 @@ dual_primitives: dict[type[PropertyIrNode], type[PropertyIrNode]] = {
 }
 
 
+op_to_cls: dict[str, type[PropertyIrNode]] = get_op_symbols()
+
 
 
 def replace_single_node(container: IrContainer, node_id: NodeId, rule: RewriteRule):
+    """Replace a single node in the container in-place by an expression. The LHS of the rewrite rule has the form
+    ['new_primitive_name', 'argument_identifier1', ...] and the RHS is a RawSExprList that can use the
+    argument identifiers of the LHS to refer to the children of the node to replace.
+    Thus, the LHS must be a list of strings (might extend to more complex patterns as needed).
+    """
 
     node_to_replace: PropertyIrNode = container[node_id]
 
+    rhs: RawSExprList = rule[1]
+
+    new_primitive, arg_identifiers = get_lhs_primitive_and_identifiers(rule)
+
     # get children of node to replace
+    # and put them into dict associating with identifiers in rule
 
-    # replace literals in RHS of rewrite rule
+    signature = type(node_to_replace).signature()
+    if len(signature) != len(arg_identifiers):
+        raise ValueError(f'Number of argument identifiers in {rule} does not match with child count of node {node_id}')
 
-    # assign local names to non-literal nodes
+    children_dict: dict[str, NodeId | LiteralType] = dict() # individually named children
+    children_list: list[NodeId] = list() # children list of arbitrary length (for primitives like 'and', 'or', etc.)
+    children_list_identifier: Optional[str] = None # identifier the rule uses to refer to the list-type parameter
+
+    for index, field in enumerate(node_to_replace.get_child_fields()):
+        field_type: type = signature[index]
+        if get_origin(field_type) is list:
+            if len(arg_identifiers) != 1:
+                raise ValueError(f'Rewrite rule {rule} for node {node_to_replace} with list-type argument must have exactly 1 argument identifier')
+            children_list_identifier = arg_identifiers[0]
+            children_list += getattr(node_to_replace, field.name)
+        else:
+            children_dict[arg_identifiers[index]] = getattr(node_to_replace, field.name)
+
+    # prepare dicts to replace literals in RHS of rewrite rule
+    # (because they are not PropertyIr nodes, they cannot be bound to container identifiers)
+    # and expand list of non-literal nodes in case of argument list
+
+    children_node_dict: dict[str, NodeId] = dict()
+    literals_to_replace: dict[str, RawSExpr] = dict()
+
+    for identifier, child_elem in children_dict.items():
+        if isinstance(child_elem, NodeId):
+            assert identifier not in children_node_dict # an identifier can only be used once
+            children_node_dict[identifier] = child_elem
+        elif isinstance(child_elem, LiteralType.__value__):
+            literal_raw_sexpr: RawSExpr = container._generate_literal_raw_sexpr(child_elem)
+            literals_to_replace[identifier] = literal_raw_sexpr
+
+    if children_list_identifier is not None:
+        for index, elem in enumerate(children_list):
+            identifier: str = children_list_identifier + str(index)
+            assert identifier not in children_node_dict # an identifier can only be used once
+            children_node_dict[identifier] = elem
+
+    # uniquify names and put into new dict
+
+    uniquified_children_node_dict: dict[str, NodeId] = dict()
+    local_nodes: dict[str, NodeId] = dict(container.global_nodes)
+    child_name_mapping: dict[str, str] = dict()
+
+    expanded_children_list: list[str] = []
+    for name in children_node_dict:
+        unique_name: str = container.uniquify(name)
+        container.node_names[unique_name] = children_node_dict[name]
+        uniquified_children_node_dict[unique_name] = children_node_dict[name]
+        child_name_mapping[name] = unique_name
+        local_nodes[unique_name] = children_node_dict[name]
+        if children_list_identifier is not None:
+            expanded_children_list.append(unique_name)
+
+
+    # replace literals and child list identifier in RHS
+
+    prepared_rhs: RawSExprList = prepare_rhs(rhs, literals_to_replace, child_name_mapping, (children_list_identifier, expanded_children_list))
 
     # call parse_expression on RHS
 
+    root_nodes: NodeId = parse_expression(expr=prepared_rhs, expected_type=node_to_replace.type_class(), local_nodes=local_nodes, ir_container=container)
+
+    # TODO
     # replace node in container by root of parsed RHS expression (handle merged nodes properly)
+
+
     # option 1: change all references to old node_id
     # option 2: change node_id of new root to old node_id, and invalidate node_id of old node
 
 
 
+def prepare_rhs(rhs: RawSExprList, literals_to_replace: dict[str, RawSExpr], child_name_mapping: dict[str, str], children_list_to_expand: tuple[Optional[str], list[str]]) -> RawSExprList:
+
+    children_list_identifier: Optional[str] = children_list_to_expand[0]
+    expanded_children_list: list[str] = children_list_to_expand[1]
+
+    logger.debug('Prepare RHS subcall for input %s with children_list_identifier %s', rhs, children_list_identifier)
+    logger.debug('Prepare RHS subcall for input %s with literals_to_replace %s', rhs, literals_to_replace)
+    output_expression: RawSExprList = []
+    for index, elem in enumerate(rhs):
+        if index == 0 and type(elem) is str:
+            output_expression.append(elem)
+        elif index != 0 and type(elem) is str:
+            if elem in literals_to_replace:
+                output_expression.append(literals_to_replace[elem])
+            elif elem == children_list_identifier:
+                output_expression += expanded_children_list
+            elif elem in child_name_mapping:
+                output_expression.append(child_name_mapping[elem])
+            else:
+                output_expression.append(elem)
+        elif isinstance(elem, list):
+            prepared_sublist = prepare_rhs(elem, literals_to_replace, child_name_mapping, children_list_to_expand)
+            output_expression.append(prepared_sublist)
+
+    logger.debug('Prepared RHS subcall result for input %s: %s', rhs, output_expression)
+    return output_expression
 
 
+
+def get_lhs_primitive_and_identifiers(rule: RewriteRule) -> tuple[type[PropertyIrNode], list[str]]:
+
+    lhs: RawSExprList = rule[0]
+
+    new_primitive_name: Optional[str] = None
+    children_identifiers: list[str] = list()
+
+    for index, elem in enumerate(lhs):
+        if type(elem) is not str:
+            raise TypeError(f"LHS of rule {rule} must be list of strings of the form ['new_primitive_name', 'argument_identifier1', ...]")
+        if index == 0:
+            new_primitive_name = elem
+        else:
+            children_identifiers.append(elem)
+
+    if new_primitive_name is None:
+        raise TypeError(f"LHS of rule {rule} must be list of strings of the form ['new_primitive_name', 'argument_identifier1', ...]")
+    new_primitive: type[PropertyIrNode] = op_to_cls[new_primitive_name]
+
+    return new_primitive, children_identifiers
 
 
 
