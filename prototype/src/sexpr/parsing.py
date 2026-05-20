@@ -238,6 +238,7 @@ def parse_expression(
 
                 root_class: type = op_to_cls[root_symbol]
                 root_signature = root_class.signature()
+                child_fields = root_class.get_child_fields()
 
                 if expected_type:
                     if op_to_cls[root_symbol].type_class() is not expected_type:
@@ -245,7 +246,9 @@ def parse_expression(
 
                 kwargs: dict[str, Any] = {}
 
-                for (index, field) in enumerate(root_class.get_child_fields()):
+                assert (len(args) == len(child_fields)) or (len(child_fields) == 1 and get_origin(root_signature[0]) is list), f'Mismatch of number of arguments for primitive {root_symbol}'
+
+                for (index, field) in enumerate(child_fields):
 
                     field_type: type = root_signature[index]
 

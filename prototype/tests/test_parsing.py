@@ -428,3 +428,10 @@ def test_merge_with_type_conflict(expr):
 @pytest.mark.parametrize('expr', [merge_without_type_conflict])
 def test_merge_without_type_conflict(expr):
         apply_roundtrip(wrap_in_document(expr))
+
+
+@pytest.mark.parametrize('expr', [['rising-gclk', 'a', 'b', 'c'], ['rising-gclk', 'a'], ['seq-repeat', ['range', '1', '2'], ['seq-bool', 'a'], 'b']])
+def test_wrong_argument_count(expr):
+    with pytest.raises(AssertionError, match='number of arguments'):
+        container = IrContainer()
+        parse_document(wrap_in_document(expr), ir_container=container)
