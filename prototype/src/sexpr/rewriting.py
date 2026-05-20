@@ -63,6 +63,7 @@ def replace_single_node(container: IrContainer, node_id: NodeId, rule: RewriteRu
     """
 
     node_to_replace: PropertyIrNode = container[node_id]
+    node_id_repr: NodeId = node_to_replace.node_id
 
     rhs: RawSExprList = rule[1]
 
@@ -87,6 +88,7 @@ def replace_single_node(container: IrContainer, node_id: NodeId, rule: RewriteRu
             children_list_identifier = arg_identifiers[0]
             children_list += getattr(node_to_replace, field.name)
         else:
+            assert arg_identifiers[index] not in children_dict, f'Duplicate identifier {arg_identifiers[index]} in LHS of rewrite rule {rule}'
             children_dict[arg_identifiers[index]] = getattr(node_to_replace, field.name)
 
     # prepare dicts to replace literals in RHS of rewrite rule
@@ -98,7 +100,6 @@ def replace_single_node(container: IrContainer, node_id: NodeId, rule: RewriteRu
 
     for identifier, child_elem in children_dict.items():
         if isinstance(child_elem, NodeId):
-            assert identifier not in children_node_dict # an identifier can only be used once
             children_node_dict[identifier] = child_elem
         elif isinstance(child_elem, LiteralType.__value__):
             literal_raw_sexpr: RawSExpr = container._generate_literal_raw_sexpr(child_elem)
@@ -107,12 +108,11 @@ def replace_single_node(container: IrContainer, node_id: NodeId, rule: RewriteRu
     if children_list_identifier is not None:
         for index, elem in enumerate(children_list):
             identifier: str = children_list_identifier + str(index)
-            assert identifier not in children_node_dict # an identifier can only be used once
             children_node_dict[identifier] = elem
 
     # uniquify names and put into new dict
 
-    uniquified_children_node_dict: dict[str, NodeId] = dict()
+    uniquified_children_node_dict: dict[str, NodeId] = dict() # only used for debug information
     local_nodes: dict[str, NodeId] = dict(container.global_nodes)
     child_name_mapping: dict[str, str] = dict()
 
@@ -125,6 +125,7 @@ def replace_single_node(container: IrContainer, node_id: NodeId, rule: RewriteRu
         local_nodes[unique_name] = children_node_dict[name]
         if children_list_identifier is not None:
             expanded_children_list.append(unique_name)
+    logger.debug('uniquified children: %s', uniquified_children_node_dict)
 
 
     # replace literals and child list identifier in RHS
@@ -133,14 +134,17 @@ def replace_single_node(container: IrContainer, node_id: NodeId, rule: RewriteRu
 
     # call parse_expression on RHS
 
-    root_nodes: NodeId = parse_expression(expr=prepared_rhs, expected_type=node_to_replace.type_class(), local_nodes=local_nodes, ir_container=container)
+    root_node_id: NodeId = parse_expression(expr=prepared_rhs, expected_type=node_to_replace.type_class(), local_nodes=local_nodes, ir_container=container)
+    root_node: PropertyIrNode = container[root_node_id]
 
-    # TODO
-    # replace node in container by root of parsed RHS expression (handle merged nodes properly)
+    # replace node in container by root of parsed RHS expression
+    # for this, add new placeholder that has the (representative) node_id of the node to replace
+    # then instantiate/merge this new placeholder with root of the RHS (no references need to be rewritten this way)
 
+    new_placeholder_node: PropertyIrNode = PlaceholderNode(ir_container=container, node_id=node_id_repr, expected_type=node_to_replace.type_class())
+    container.nodes[node_id_repr] = new_placeholder_node
+    new_placeholder_node.instantiate_placeholder(root_node)
 
-    # option 1: change all references to old node_id
-    # option 2: change node_id of new root to old node_id, and invalidate node_id of old node
 
 
 
@@ -191,6 +195,8 @@ def get_lhs_primitive_and_identifiers(rule: RewriteRule) -> tuple[type[PropertyI
     if new_primitive_name is None:
         raise TypeError(f"LHS of rule {rule} must be list of strings of the form ['new_primitive_name', 'argument_identifier1', ...]")
     new_primitive: type[PropertyIrNode] = op_to_cls[new_primitive_name]
+
+    logger.debug('LHS: new primitive %s with children_identifiers %s', new_primitive, children_identifiers)
 
     return new_primitive, children_identifiers
 
