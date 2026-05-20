@@ -5,7 +5,7 @@ from dataclasses import dataclass, fields, Field, field
 import logging
 from typing import Literal, Optional, Any, get_origin, get_type_hints, get_args
 from typeguard import typechecked
-from graphviz import Digraph
+from graphviz import Digraph, escape
 from pathlib import Path
 import re
 
@@ -667,9 +667,9 @@ class IrContainer:
 
         for (node_name, node_id) in self.node_names.items():
             if node_name in self.global_nodes:
-                graph.node(f'__NODENAME__{node_name}', label=f'<<U>{node_name}</U>>', shape='plain')
+                graph.node(f'__NODENAME__{node_name}', label=f'<<U>{escape(node_name)}</U>>', shape='plain')
             else:
-                graph.node(f'__NODENAME__{node_name}', node_name, shape='plain')
+                graph.node(f'__NODENAME__{node_name}', escape(node_name), shape='plain')
             graph.edge(f'__NODENAME__{node_name}', repr(node_id), style='dashed')
 
         if not output_path.parent.exists():
