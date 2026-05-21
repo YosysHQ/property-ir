@@ -121,6 +121,22 @@ class PropertyIrNode(ABC):
         if not issubclass(self.node_type(), node_type):
             raise TypeError(f'Placeholder node {self} with type {self.node_type()} cannot be set to type {node_type}')
 
+    def get_child_ids(self) -> list[NodeId]:
+        child_ids = []
+        signature = type(self).signature()
+        for index, field in enumerate(self.get_child_fields()):
+            field_type: type = signature[index]
+            if get_origin(field_type) is list:
+                list_elems = getattr(self, field.name)
+                for child_id in list_elems:
+                    child_ids.append(self.ir_container[child_id].node_id)
+            elif issubclass(field_type, PropertyIrNode):
+                child_id = getattr(self, field.name)
+                child_ids.append(self.ir_container[child_id].node_id)
+            elif issubclass(field_type, LiteralType.__value__):
+                continue
+        return child_ids
+
 
 @typechecked
 @dataclass

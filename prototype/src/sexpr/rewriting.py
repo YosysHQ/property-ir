@@ -60,6 +60,8 @@ def replace_single_node(container: IrContainer, node_id: NodeId, rule: RewriteRu
     ['new_primitive_name', 'argument_identifier1', ...] and the RHS is a RawSExprList that can use the
     argument identifiers of the LHS to refer to the children of the node to replace.
     Thus, the LHS must be a list of strings (might extend to more complex patterns as needed).
+    If add_identifiers_to_container is True, the child identifiers of the LHS of the rule will be uniquified and
+    added to the container as local names (for debugging purposes).
     """
 
     node_to_replace: PropertyIrNode = container[node_id]
@@ -209,11 +211,55 @@ def get_lhs_primitive_and_identifiers(rule: RewriteRule) -> tuple[type[PropertyI
 
 
 
-def apply_rules(container: IrContainer, rules: list[RewriteRule]):
-    """Perform a single pass through the expression graph in the container
-    and create a new graph that results when at each node applying a rewrite
-    rule if there is a matching one."""
-    pass
+def apply_rules(container: IrContainer, rules: dict[type, RewriteRule]):
+    """Apply the provided rules to the expression graph in the container in a greedy way
+    in-place until none of the rules can be applied anymore. Use a seminaive approach,
+    where only nodes are considered for rewriting that changed in the previous pass
+    through the graph. The rules must not enable any circular rewriting, or else this will
+    end up in an infinite loop. For each node type, there can only be one rewrite rule."""
+
+    nodes_to_visit: deque[NodeId] = deque(container.sink_nodes)
+    encountered_nodes: set[NodeId] = set()
+
+    logger.debug('Apply rules %s to container %s', rules, container)
+    logger.debug('nodes_to_visit: %s', nodes_to_visit)
+
+    nodes_to_rewrite: dict[NodeId, RewriteRule] = dict()
+
+    # collect nodes to rewrite
+
+    while len(nodes_to_visit) > 0: # outer loop will terminate when there are not more nodes to rewrite (when graph does not change anymore)
+        while len(nodes_to_visit) > 0: # inner loop for one pass through the graph
+
+            current_id: NodeId = nodes_to_visit.popleft()
+            current_node = container[current_id]
+            current_id_repr: NodeId = current_node.node_id
+            current_cls = type(current_node)
+            if current_cls in rules:
+                nodes_to_rewrite[current_id_repr] = rules[current_cls]
+            child_ids: list[NodeId] = current_node.get_child_ids()
+            for child_id in child_ids:
+                child_node: PropertyIrNode = container[child_id]
+                child_cls = type(child_node)
+                logger.debug('Child class: %s', child_cls)
+                if child_id not in encountered_nodes:
+                    nodes_to_visit.append(child_id)
+                    encountered_nodes.add(child_id)
+
+        logger.debug('encountered_nodes: %s', encountered_nodes)
+        logger.debug('nodes_to_rewrite: %s', nodes_to_rewrite)
+
+        # apply rewriting to all collected nodes
+
+        for node_id, rewrite_rule in nodes_to_rewrite.items():
+            replace_single_node(container, node_id, rewrite_rule)
+
+            # consider newly added nodes for rewriting in the next pass and ignore the old ones
+            nodes_to_visit.append(node_id)
+
+        nodes_to_rewrite: dict[NodeId, RewriteRule] = dict()
+
+
 
 
 
