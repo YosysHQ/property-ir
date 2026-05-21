@@ -9,7 +9,7 @@ from sexpr.rewriting import replace_single_node, RewriteRule
 
 
 
-def check_replace_single_node(input_document_str: str, expected_output_document_str: str, rule: RewriteRule):
+def check_replace_single_node(input_document_str: str, expected_output_document_str: str, rule: RewriteRule, add_identifiers_to_container: bool = False):
 
     input_document: RawSExprList = parse_raw_sexpr(input_document_str)
     expected_output_document: RawSExprList = parse_raw_sexpr(expected_output_document_str)
@@ -22,7 +22,7 @@ def check_replace_single_node(input_document_str: str, expected_output_document_
     #container1.show_graph(output_directory / 'check_replace_node_input.png')
 
     node_id_to_replace = container1.global_nodes['p']
-    replace_single_node(container1, node_id_to_replace, rule)
+    replace_single_node(container1, node_id_to_replace, rule, add_identifiers_to_container)
 
     parse_document(expected_output_document, container2)
 
@@ -37,7 +37,8 @@ def check_replace_single_node(input_document_str: str, expected_output_document_
     assert container1 == container2
 
 
-def test_replace_single_node_goto():
+@pytest.mark.parametrize('add_identifiers_to_container', [True, False])
+def test_replace_single_node_goto(add_identifiers_to_container):
 
     goto_repeat_rule: RewriteRule = (['clk-seq-goto-repeat', '<range>', '<bool>'],
     ['clk-seq-repeat', '<range>', ['clk-seq-concat', ['clk-seq-repeat', ['range', '0', '$'], ['clk-seq-bool', ['not', '<bool>']]], ['clk-seq-bool', '<bool>']]])
@@ -52,10 +53,11 @@ def test_replace_single_node_goto():
         (declare q (clk-prop-seq p))
         (parse-sexpr q) )"""
 
-    check_replace_single_node(input_document_str, expected_output_document_str, goto_repeat_rule)
+    check_replace_single_node(input_document_str, expected_output_document_str, goto_repeat_rule, add_identifiers_to_container=add_identifiers_to_container)
 
 
-def test_replace_single_node_and_or():
+@pytest.mark.parametrize('add_identifiers_to_container', [True, False])
+def test_replace_single_node_and_or(add_identifiers_to_container):
 
     and_or_rule: RewriteRule = (['and', '<bool_list>'], ['or', '<bool_list>']) # made-up rule for testing
 
@@ -63,10 +65,11 @@ def test_replace_single_node_and_or():
 
     expected_output_document_str: str = """(document (declare-input a) (declare-input b) (declare p (or (false) b)) (declare q (or p (true)))  (parse-sexpr q))"""
 
-    check_replace_single_node(input_document_str, expected_output_document_str, and_or_rule)
+    check_replace_single_node(input_document_str, expected_output_document_str, and_or_rule, add_identifiers_to_container)
 
 
-def test_replace_single_node_not():
+@pytest.mark.parametrize('add_identifiers_to_container', [True, False])
+def test_replace_single_node_not(add_identifiers_to_container):
 
     not_rule: RewriteRule = (['not', '<bool>'], ['not', ['not', '<bool>']]) # made-up rule for testing
 
@@ -74,10 +77,11 @@ def test_replace_single_node_not():
 
     expected_output_document_str: str = """(document (declare-input a) (declare-input b) (declare p (not (not b))) (declare q (or p (true)))  (parse-sexpr q))"""
 
-    check_replace_single_node(input_document_str, expected_output_document_str, not_rule)
+    check_replace_single_node(input_document_str, expected_output_document_str, not_rule, add_identifiers_to_container)
 
 
-def test_replace_single_node_gclk():
+@pytest.mark.parametrize('add_identifiers_to_container', [True, False])
+def test_replace_single_node_gclk(add_identifiers_to_container):
 
     gclk_rule: RewriteRule = (['rising-gclk', '<bool1>', '<bool2>'], ['falling-gclk', '<bool1>', '<bool2>']) # made-up rule for testing
 
@@ -85,10 +89,11 @@ def test_replace_single_node_gclk():
 
     output_document_str: str = """(document (declare-input a) (declare-input b) (declare p (falling-gclk a b)) (parse-sexpr p))"""
 
-    check_replace_single_node(input_document_str, output_document_str, gclk_rule)
+    check_replace_single_node(input_document_str, output_document_str, gclk_rule, add_identifiers_to_container)
 
 
-def test_replace_single_node_error_lhs_name_collision():
+@pytest.mark.parametrize('add_identifiers_to_container', [True, False])
+def test_replace_single_node_error_lhs_name_collision(add_identifiers_to_container):
 
     gclk_rule: RewriteRule = (['rising-gclk', '<bool>', '<bool>'], ['falling-gclk', '<bool>', '<bool>']) # made-up rule for testing
 
@@ -100,10 +105,11 @@ def test_replace_single_node_error_lhs_name_collision():
     node_id_to_replace = container1.global_nodes['p']
 
     with pytest.raises(AssertionError, match='Duplicate identifier'):
-        replace_single_node(container1, node_id_to_replace, gclk_rule)
+        replace_single_node(container1, node_id_to_replace, gclk_rule, add_identifiers_to_container)
 
 
-def test_replace_single_node_twice_gclk():
+@pytest.mark.parametrize('add_identifiers_to_container', [True, False])
+def test_replace_single_node_twice_gclk(add_identifiers_to_container):
 
     gclk_rule1: RewriteRule = (['rising-gclk', '<bool1>', '<bool2>'], ['falling-gclk', '<bool1>', '<bool2>']) # made-up rule for testing
     gclk_rule2: RewriteRule = (['falling-gclk', '<bool1>', '<bool2>'], ['rising-gclk', '<bool1>', '<bool2>']) # made-up rule for testing
@@ -123,12 +129,12 @@ def test_replace_single_node_twice_gclk():
     #container1.show_graph(output_directory / 'check_replace_node_input.png')
 
     node_id_to_replace = container1.global_nodes['p']
-    replace_single_node(container1, node_id_to_replace, gclk_rule1)
+    replace_single_node(container1, node_id_to_replace, gclk_rule1, add_identifiers_to_container)
 
     #container1.show_graph(output_directory / 'check_replace_node_output1.png')
 
     node_id_to_replace = container1.global_nodes['p']
-    replace_single_node(container1, node_id_to_replace, gclk_rule2)
+    replace_single_node(container1, node_id_to_replace, gclk_rule2, add_identifiers_to_container)
 
     #container1.show_graph(output_directory / 'check_replace_node_output2.png')
 
@@ -141,3 +147,17 @@ def test_replace_single_node_twice_gclk():
     #container1.show_graph(output_directory / 'check_replace_node_output_after_renaming.png')
 
     assert container1 == container2
+
+
+ # using a RHS let-rec with the same identifiers as LHS child identifiers should cause an error
+@pytest.mark.parametrize('add_identifiers_to_container', [True, False])
+def test_replace_single_node_let_rec_error(add_identifiers_to_container):
+    let_rec_rule: RewriteRule = (['rising-gclk', '<bool1>', '<bool2>'], ['falling-gclk', ['let-rec', ['<bool1>', ['true']], '<bool1>'], '<bool2>']) # made-up rule for testing
+    input_document_str: str = """(document (declare-input a) (declare-input b) (declare p (rising-gclk a b)) (parse-sexpr p))"""
+    input_document: RawSExprList = parse_raw_sexpr(input_document_str)
+    container1: IrContainer = IrContainer()
+    parse_document(input_document, container1)
+    node_id_to_replace = container1.global_nodes['p']
+
+    with pytest.raises(ValueError, match='already in use'):
+        replace_single_node(container1, node_id_to_replace, let_rec_rule, add_identifiers_to_container)

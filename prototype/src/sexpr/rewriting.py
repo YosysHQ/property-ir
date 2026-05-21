@@ -55,7 +55,7 @@ op_to_cls: dict[str, type[PropertyIrNode]] = get_op_symbols()
 
 
 
-def replace_single_node(container: IrContainer, node_id: NodeId, rule: RewriteRule):
+def replace_single_node(container: IrContainer, node_id: NodeId, rule: RewriteRule, add_identifiers_to_container: bool = False):
     """Replace a single node in the container in-place by an expression. The LHS of the rewrite rule has the form
     ['new_primitive_name', 'argument_identifier1', ...] and the RHS is a RawSExprList that can use the
     argument identifiers of the LHS to refer to the children of the node to replace.
@@ -67,7 +67,7 @@ def replace_single_node(container: IrContainer, node_id: NodeId, rule: RewriteRu
 
     rhs: RawSExprList = rule[1]
 
-    new_primitive, arg_identifiers = get_lhs_primitive_and_identifiers(rule)
+    primitive, arg_identifiers = get_lhs_primitive_and_identifiers(rule)
 
     # get children of node to replace
     # and put them into dict associating with identifiers in rule
@@ -95,8 +95,8 @@ def replace_single_node(container: IrContainer, node_id: NodeId, rule: RewriteRu
     # (because they are not PropertyIr nodes, they cannot be bound to container identifiers)
     # and expand list of non-literal nodes in case of argument list
 
-    children_node_dict: dict[str, NodeId] = dict()
-    literals_to_replace: dict[str, RawSExpr] = dict()
+    children_node_dict: dict[str, NodeId] = dict() # map identifiers used in LHS to actual child nodes
+    literals_to_replace: dict[str, RawSExpr] = dict() # map literal identifiers used in LHS to actual literals
 
     for identifier, child_elem in children_dict.items():
         if isinstance(child_elem, NodeId):
@@ -110,23 +110,28 @@ def replace_single_node(container: IrContainer, node_id: NodeId, rule: RewriteRu
             identifier: str = children_list_identifier + str(index)
             children_node_dict[identifier] = elem
 
-    # uniquify names and put into new dict
+    uniquified_children_node_dict: dict[str, NodeId] = dict() # map uniquified name to node id - only used for debug information
+    local_nodes: dict[str, NodeId] = dict(container.global_nodes) # node identifier information handed to parse_expression
+    child_name_mapping: dict[str, str] = dict() # map name used in LHS to uniquified name
+    expanded_children_list: list[str] = [] # when the child of the LHS primitive is a list, it needs to be expanded to this list of identifiers
 
-    uniquified_children_node_dict: dict[str, NodeId] = dict() # only used for debug information
-    local_nodes: dict[str, NodeId] = dict(container.global_nodes)
-    child_name_mapping: dict[str, str] = dict()
+    # uniquify names used in LHS and add these node identifiers to the container as local node names
+    if add_identifiers_to_container:
+        for name in children_node_dict:
+            unique_name: str = container.uniquify(name)
+            container.node_names[unique_name] = children_node_dict[name]
+            uniquified_children_node_dict[unique_name] = children_node_dict[name]
+            child_name_mapping[name] = unique_name
+            local_nodes[unique_name] = children_node_dict[name]
+            if children_list_identifier is not None:
+                expanded_children_list.append(unique_name)
+        logger.debug('uniquified children: %s', uniquified_children_node_dict)
 
-    expanded_children_list: list[str] = []
-    for name in children_node_dict:
-        unique_name: str = container.uniquify(name)
-        container.node_names[unique_name] = children_node_dict[name]
-        uniquified_children_node_dict[unique_name] = children_node_dict[name]
-        child_name_mapping[name] = unique_name
-        local_nodes[unique_name] = children_node_dict[name]
-        if children_list_identifier is not None:
-            expanded_children_list.append(unique_name)
-    logger.debug('uniquified children: %s', uniquified_children_node_dict)
-
+    else: # do not add the names to the container, but overwrite the dict local_nodes that will get handed to parse_expression
+        for name in children_node_dict:
+            local_nodes[name] = children_node_dict[name]
+            if children_list_identifier is not None:
+                expanded_children_list.append(name)
 
     # replace literals and child list identifier in RHS
 
@@ -181,20 +186,20 @@ def get_lhs_primitive_and_identifiers(rule: RewriteRule) -> tuple[type[PropertyI
 
     lhs: RawSExprList = rule[0]
 
-    new_primitive_name: Optional[str] = None
+    primitive_name: Optional[str] = None
     children_identifiers: list[str] = list()
 
     for index, elem in enumerate(lhs):
         if type(elem) is not str:
             raise TypeError(f"LHS of rule {rule} must be list of strings of the form ['new_primitive_name', 'argument_identifier1', ...]")
         if index == 0:
-            new_primitive_name = elem
+            primitive_name = elem
         else:
             children_identifiers.append(elem)
 
-    if new_primitive_name is None:
+    if primitive_name is None:
         raise TypeError(f"LHS of rule {rule} must be list of strings of the form ['new_primitive_name', 'argument_identifier1', ...]")
-    new_primitive: type[PropertyIrNode] = op_to_cls[new_primitive_name]
+    new_primitive: type[PropertyIrNode] = op_to_cls[primitive_name]
 
     logger.debug('LHS: new primitive %s with children_identifiers %s', new_primitive, children_identifiers)
 
