@@ -3,8 +3,7 @@ import argparse
 from pathlib import Path
 import logging
 
-from sexpr import parse_expression, parse_raw_sexpr, IrContainer, Signal, RawSExprList, unparse_raw_sexpr, parse_document
-from sexpr.base import SignalDeclaration
+from sexpr import parse_raw_sexpr, IrContainer, RawSExprList, unparse_raw_sexpr, parse_document, nnf
 
 
 logger = logging.getLogger(__name__)
@@ -18,6 +17,7 @@ def main():
     parser.add_argument('-o', '--output', help='generate Property IR output document and write to file')
     parser.add_argument('-i', '--image', help='generate expression graph image and write to file')
     parser.add_argument('-b', '--bypass', help='bypass placeholder nodes', action='store_true')
+    parser.add_argument('-n', '--normalform', help='establish negation normalform', action='store_true')
     parser.add_argument('-v', '--verbose', help='show debug messages', action='store_true')
 
     args = parser.parse_args()
@@ -33,6 +33,11 @@ def main():
     raw_sexpr: RawSExprList = parse_raw_sexpr(input_document)
     ir_container = IrContainer()
     root_node_id = parse_document(raw_sexpr, ir_container)
+
+    if args.normalform:
+        nnf_ir_container: IrContainer = nnf(ir_container)
+        ir_container = nnf_ir_container
+
 
     if args.bypass:
         ir_container.bypass_placeholders()
