@@ -3,8 +3,8 @@ from typing import get_origin, get_args, Any, Optional
 import logging
 from typeguard import typechecked
 
-from sexpr.base import PropertyIrNode, PlaceholderNode, IrContainer, RawSExpr, NodeId, RawSExprList, Signal, LiteralType, Property, Sequence, Bool
-from sexpr.primitives import And, Constant, FutureGclk, Not, Or, Initial, PropAcceptOn, PropNexttime, PropAnd, PropNot, PropOr, PropStrong, PropWeak, PropSeq, PropBool, PropWeakBool, PropStrongBool
+from sexpr.base import ClockedProperty, PropertyIrNode, PlaceholderNode, IrContainer, RawSExpr, NodeId, RawSExprList, Signal, LiteralType, Property, Sequence, Bool, Range, BoundedRange
+from sexpr.primitives import And, ClkPropAlwaysRanged, ClkPropEventually, ClkPropStrongEventuallyRanged, Constant, FutureGclk, Not, Or, Initial, PropAcceptOn, PropNexttime, PropAnd, PropNot, PropOr, PropStrong, PropWeak, PropSeq, PropBool, PropWeakBool, PropStrongBool
 from sexpr.primitives import PropOverlappedFollowedBy, PropOverlappedImplication, PropRejectOn, PropStrongNexttime, PropUntil, PropStrongUntilWith, PropRefuted
 from sexpr.parsing import get_op_symbols, parse_expression
 
@@ -112,16 +112,16 @@ strong_always_rule: RewriteRule = (['clk-prop-strong-always', '<bounded_range>',
 
 # this is rewritten to a conjunction of the form (nexttime m p and ... and nexttime n p) [bounded range]
 # or to (nexttime m always p) [unbounded range]
-# must be handled separately TODO
+# must be handled separately (get_ranged_rewrite_rule)
 #always_ranged_rule: RewriteRule = (['clk-prop-always-ranged', '<range>', '<clk_prop>'], [])
 
 # this is rewritten to a disjunction of the form (nexttime m p or ... or nexttime n p) [bounded range]
-# must be handled separately TODO
+# must be handled separately (get_ranged_rewrite_rule)
 #eventually_rule: RewriteRule
 
-# this is rewritten to a disjunction of the form (nexttime m p or ... or nexttime n p) [bounded range]
+# this is rewritten to a disjunction of the form (s_nexttime m p or ... or s_nexttime n p) [bounded range]
 # or to (s_nexttime m s_eventually p) [unbounded range]
-# must be handled separately TODO
+# must be handled separately (get_ranged_rewrite_rule)
 #strong_eventually_ranged_rule: RewriteRule
 
 # -------------
@@ -131,6 +131,48 @@ strong_always_rule: RewriteRule = (['clk-prop-strong-always', '<bounded_range>',
 #sync_reject_on_rule: RewriteRule
 
 
+def get_ranged_rewrite_rule(container: IrContainer, node_id: NodeId, rule) -> RewriteRule:
+    """There are three ranged eventually/always primitives that cannot be rewritten with a simple primitive replacement
+    as defined by a RewriteRule, but the rewrite rule looks differently depending on the range.
+    Given a node with one of these primitives as node type, the applicable rewrite rule is returned.
+    """
+
+    rule = ([], [])
+
+    node: PropertyIrNode = container[node_id]
+    node_cls: type[PropertyIrNode] = type(node)
+
+    if not (isinstance(node, ClkPropAlwaysRanged) or isinstance(node, ClkPropStrongEventuallyRanged) or isinstance(node, ClkPropEventually)):
+        raise TypeError(f'Cannot generate ranged rewrite rule for node {node} with wrong node type')
+
+    clk_prop: NodeId[ClockedProperty] = getattr(node, 'child2')
+
+    # (nexttime m p and ... and nexttime n p) [bounded range] or (nexttime m always p) [unbounded range]
+    if isinstance(node, ClkPropAlwaysRanged):
+        range1: Range = getattr(node, 'child1')
+        lhs: RawSExprList = ['clk-prop-always-ranged', '<range>', '<clk_prop>']
+        if isinstance(range1.upper_bound.value, int):
+            rhs: RawSExprList = ['clk-prop-and'] + [['clk-prop-nexttime', str(x), '<clk_prop>'] for x in range(bounded_range.lower_bound, bounded_range.upper_bound + 1)] # type: ignore
+        else:
+            rhs = ['clk-prop-nexttime', str(range1.lower_bound), ['clk-prop-always', '<clk_prop>']]
+
+    # (s_nexttime m p or ... or s_nexttime n p) [bounded range]
+    # or to (s_nexttime m s_eventually p) [unbounded range]
+    elif isinstance(node, ClkPropStrongEventuallyRanged):
+        range2: Range = getattr(node, 'child1')
+        lhs: RawSExprList = ['clk-prop-strong-eventually-ranged', '<range>', '<clk_prop>']
+        if isinstance(range2.upper_bound.value, int):
+            rhs: RawSExprList = ['clk-prop-or'] + [['clk-prop-strong-nexttime', str(x), '<clk_prop>'] for x in range(bounded_range.lower_bound, bounded_range.upper_bound + 1)] # type: ignore
+        else:
+            rhs = ['clk-prop-strong-nexttime', str(range2.lower_bound), ['clk-prop-strong-eventually', '<clk_prop>']]
+
+    # (nexttime m p or ... or nexttime n p)
+    elif isinstance(node, ClkPropEventually):
+        bounded_range: BoundedRange = getattr(node, 'child1')
+        lhs: RawSExprList = ['clk-prop-eventually', '<bounded_range>', '<clk_prop>']
+        rhs: RawSExprList = ['clk-prop-or'] + [['clk-prop-nexttime', str(x), '<clk_prop>'] for x in range(bounded_range.lower_bound, bounded_range.upper_bound + 1)] # type: ignore
+
+    return (lhs, rhs)
 
 
 
