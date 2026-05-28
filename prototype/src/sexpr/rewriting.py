@@ -14,17 +14,125 @@ logger = logging.getLogger(__name__)
 
 
 
-# rewrite rule example
-#(seq-goto-repeat <range> <bool>)
-#
-#(seq-repeat <range> (seq-concat
-#   (seq-repeat (range 0 $) (not <bool>))
-#   <bool>))
-
 type RewriteRule = tuple[RawSExprList, RawSExprList]
+
+
+
+# Boolean primitives
+
+xor_rule: RewriteRule = (['xor', '<bool1>', '<bool2>'],
+    ['or', ['and', '<bool1>', ['not', '<bool2>']], ['and', ['not', '<bool1>'], '<bool2>']])
+
+eq_rule: RewriteRule = (['eq', '<bool1>', '<bool2>'],
+    ['or', ['and', '<bool1>', '<bool2>'], ['and', ['not', '<bool1>'], ['not', '<bool2>']]])
+
+
+rising_gclk_rule: RewriteRule = (['rising-gclk', 'clock_value', 'clock_defined'],
+    ['and', ['not', ['and', 'clock_value', 'clock_defined']],
+        ['future-gclk', ['and', 'clock_value', 'clock_defined']]])
+
+falling_gclk_rule: RewriteRule = (['falling-gclk', 'clock_value', 'clock_defined'],
+    ['and', ['not', ['and', ['not', 'clock_value'], 'clock_defined']],
+        ['future-gclk', ['and', ['not', 'clock_value'], 'clock_defined']]])
+
+changing_gclk: RewriteRule = (['changing-gclk', 'clock_value', 'clock_defined'],
+    ['or', ['xor', ['clock_value', ['future-gclk', 'clock_value']]],
+        ['xor', ['clock_defined', ['future-gclk', 'clock_defined']]]])
+
+
+# Sequence primitives
+
+delay_rule: RewriteRule = (['clk-seq-repeat', '<range>', '<clk_seq>'],
+    ['clk-seq-concat', ['clk-seq-repeat', '<range>', ['clk-seq-bool', ['true']]], '<clk_seq>'])
 
 goto_repeat_rule: RewriteRule = (['clk-seq-goto-repeat', '<range>', '<bool>'],
     ['clk-seq-repeat', '<range>', ['clk-seq-concat', ['clk-seq-repeat', ['range', '0', '$'], ['clk-seq-bool', ['not', '<bool>']]], ['clk-seq-bool', '<bool>']]])
+
+nonconsecutive_repeat_rule: RewriteRule = (['clk-seq-nonconsecutive-repeat', '<range>', '<bool>'],
+    ['clk-seq-concat', ['clk-seq-goto-repeat', '<range>', '<bool>'], ['clk-seq-repeat', ['range', '0', '$'], ['not', '<bool>']]])
+
+# clk-seq-and might be more efficient to implement directly instead of rewriting (would be rewritten as intersect + delay)
+# and the use of any number of arguments makes this rule more complex than a normal rewrite rule
+# seq_and_rule: RewriteRule
+
+throughout_rule: RewriteRule = (['clk-seq-throughout', '<bool>', '<clk_seq>'],
+    ['clk-seq-intersect', ['clk-seq-repeat', ['range', '0', '$'], '<bool>'], '<clk_seq>'])
+
+within_rule: RewriteRule = (['clk-seq-within', '<clk_seq1>', '<clk_seq2>'],
+    ['clk-seq-intersect',
+        ['clk-seq-concat',
+            ['clk-seq-repeat', ['range', '0', '$'], ['clk-seq-bool', ['true']]],
+            '<clk_seq2>',
+            ['clk-seq-repeat', ['range', '0', '$'], ['clk-seq-bool', ['true']]]],
+        '<clk_seq2>'])
+
+
+# Property primitives
+
+if_rule: RewriteRule = (['clk-prop-if', '<bool>', '<clk_prop>'],
+    ['clk-prop-overlapped-implication', ['clk-seq-bool', '<bool>'], '<clk_prop>'])
+
+if_else_rule: RewriteRule = (['clk-prop-if', '<bool>', '<clk_prop1>', '<clk_prop2>'],
+    ['clk-prop-and',
+        ['clk-prop-overlapped-implication', ['clk-seq-bool', '<bool>'], '<clk_prop1>'],
+        ['clk-prop-or', ['clk-prop-weak', ['seq-bool', '<bool>']], '<clk_prop2>']])
+
+# this rule is different for clocked and unclocked properties
+# the rewriting rules are mostly defined for unclocked properties
+# rewrite clock first?
+# the following is for unclocked properties
+non_overlapped_implication_rule: RewriteRule = (['clk-prop-non-overlapped-implication', '<seq>', '<prop>'],
+    ['clk-prop-overlapped-implication', ['seq-concat', '<seq>', ['clk-seq-bool', ['true']]], '<prop>'])
+
+implies_rule: RewriteRule = (['clk-prop-implies', '<clk_prop1>', '<clk_prop2>'], [])
+
+iff_rule: RewriteRule = (['clk-prop-iff', '<clk_prop1>', '<clk_prop2>'], [])
+
+# overlapped-followed-by is defined via negation of overlapped implication
+# but we cannot use that here
+non_overlapped_followed_by_rule: RewriteRule = (['clk-prop-non-overlapped-followed-by', '<clk_seq>', '<clk_prop>'],
+    ['clk-prop-overlapped-followed-by', ['seq-concat', '<clk_seq>', ['clk-seq-bool', ['true']]], '<clk_prop>'])
+
+
+strong_until_rule: RewriteRule = (['clk-prop-strong-until', '<clk_prop1>', '<clk_prop2>'], ['clk-prop-and', ['clk-prop-until', '<clk_prop1>', '<clk_prop2>'], ['clk-prop-strong-eventually', '<clk_prop2>']])
+
+until_with_rule: RewriteRule = (['clk-prop-until-with', '<clk_prop1>', '<clk_prop2>'], ['clk-prop-until', '<clk_prop1>', ['clk-prop-and', '<clk_prop1>', '<clk_prop2>']])
+
+# here already specific weak/strong of prop-bool? Does probably not matter which one is used? TODO
+always_rule: RewriteRule = (['clk-prop-always', '<clk_prop>'], ['clk-prop-until', '<clk_prop>', ['prop-bool', ['false']]])
+
+strong_eventually_rule: RewriteRule = (['clk-prop-strong-eventually', '<clk_prop>'], ['not', ['clk-prop-always', ['not', '<clk_prop>']]])
+
+# -------------
+
+# the following creates clk-prop-eventually, which can only be removed with a special rule below
+strong_always_rule: RewriteRule = (['clk-prop-strong-always', '<bounded_range>', '<clk_prop>'], ['not', ['clk-prop-eventually', '<bounded_range>', ['not', '<clk_prop>']]])
+
+# -------------
+
+# this is rewritten to a conjunction of the form (nexttime m p and ... and nexttime n p) [bounded range]
+# or to (nexttime m always p) [unbounded range]
+# must be handled separately TODO
+#always_ranged_rule: RewriteRule = (['clk-prop-always-ranged', '<range>', '<clk_prop>'], [])
+
+# this is rewritten to a disjunction of the form (nexttime m p or ... or nexttime n p) [bounded range]
+# must be handled separately TODO
+#eventually_rule: RewriteRule
+
+# this is rewritten to a disjunction of the form (nexttime m p or ... or nexttime n p) [bounded range]
+# or to (s_nexttime m s_eventually p) [unbounded range]
+# must be handled separately TODO
+#strong_eventually_ranged_rule: RewriteRule
+
+# -------------
+
+# the following should probably be handled in clock rewriting TODO
+#sync_accept_on_rule: RewriteRule
+#sync_reject_on_rule: RewriteRule
+
+
+
+
 
 
 dual_primitives: dict[type[PropertyIrNode], type[PropertyIrNode]] = {
