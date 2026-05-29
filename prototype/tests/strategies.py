@@ -5,7 +5,7 @@ from hypothesis import settings
 import logging
 import string
 
-from sexpr.base import RawSExpr, RawSExprList, PropertyIrNode, IrContainer
+from sexpr.base import ClockedProperty, ClockedSequence, RawSExpr, RawSExprList, PropertyIrNode, IrContainer
 from sexpr.base import Property, Sequence, Bool, Range, BoundedRange, IntOrUnbounded, Signal
 from sexpr.parsing import parse_document, parse_raw_sexpr
 import sexpr.primitives
@@ -18,6 +18,30 @@ logger = logging.getLogger(__name__)
 # (primitive_name, primitive_type, signature, random_numbers_to_choose_argument)
 type IrGeneratingType = tuple[str, type[PropertyIrNode], list[type], list[int]]
 
+
+
+def random_ir_clocked(
+    final_node_type: type[PropertyIrNode],
+    primitive_filter: Callable[[type[PropertyIrNode]], bool] = lambda node_type: True,
+    **lists_params) -> st.SearchStrategy[str]:
+    only_clocked_filter : Callable[[type[PropertyIrNode]], bool] = lambda node_type: False if (issubclass(node_type, Property) or issubclass(node_type, Sequence)) else True
+    adjusted_filter: Callable[[type[PropertyIrNode]], bool] = lambda node_type: only_clocked_filter(node_type) and primitive_filter(node_type)
+    return random_ir(final_node_type=final_node_type, primitive_filter=adjusted_filter, **lists_params)
+
+
+
+
+def random_ir_simple(
+    final_node_type: type[PropertyIrNode],
+    primitive_filter: Callable[[type[PropertyIrNode]], bool] = lambda node_type: True,
+    **lists_params) -> st.SearchStrategy[str]:
+    only_simple_filter : Callable[[type[PropertyIrNode]], bool] = lambda node_type: False if (issubclass(node_type, ClockedProperty) or issubclass(node_type, ClockedSequence)) else True
+    adjusted_filter: Callable[[type[PropertyIrNode]], bool] = lambda node_type: only_simple_filter(node_type) and primitive_filter(node_type)
+    return random_ir(final_node_type=final_node_type, primitive_filter=adjusted_filter, **lists_params)
+
+
+
+
 def random_ir(
     final_node_type: type[PropertyIrNode],
     primitive_filter: Callable[[type[PropertyIrNode]], bool] = lambda node_type: True,
@@ -29,7 +53,7 @@ def random_ir(
 
     primitive_generators = []
     final_primitive_generators = []
-    allowed_types = [Property, Sequence, Bool]
+    allowed_types = [Property, Sequence, Bool, ClockedProperty, ClockedSequence]
 
     for node_type in allowed_types:
         for cls in node_type.__subclasses__():
@@ -136,9 +160,16 @@ def build_ir_from_random_data(strategy_drawn_data: tuple[list[IrGeneratingType],
                 elif issubclass(arg_type, Sequence):
                     candidates_default += [f'(seq-bool {signal})' for signal in signal_list]
 
+                elif issubclass(arg_type, ClockedSequence):
+                    candidates_default += [f'(clk-seq-bool {signal})' for signal in signal_list]
+
                 elif issubclass(arg_type, Property):
                     candidates_default += [f'(prop-weak-bool {signal})' for signal in signal_list]
                     candidates_default += [f'(prop-strong-bool {signal})' for signal in signal_list]
+
+                elif issubclass(arg_type, ClockedProperty):
+                    candidates_default += [f'(clk-prop-weak-bool {signal})' for signal in signal_list]
+                    candidates_default += [f'(clk-prop-strong-bool {signal})' for signal in signal_list]
 
                 # choose candidates to select an argument from (prefer unused nodes over used ones and default values)
                 if random_num % 10 in range(0, 9) and len(candidates_unused_preceding_nodes) > 0:

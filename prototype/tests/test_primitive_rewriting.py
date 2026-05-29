@@ -1,13 +1,19 @@
 import pytest
+from hypothesis import given, settings, Verbosity, example
+
 from pathlib import Path
-from sexpr.base import IrContainer, PropertyIrNode
+import logging
+from typing import Callable
+from sexpr.base import Bool, ClockedSequence, IrContainer, PropertyIrNode, NodeId
 from sexpr.parsing import parse_document
-from sexpr.base import RawSExprList
+from sexpr.base import RawSExprList, ClockedProperty
 from sexpr.parsing import parse_raw_sexpr
-from sexpr.primitives import FallingGclk, RisingGclk, And
-from sexpr.rewriting import replace_single_node, RewriteRule, apply_rules
+from sexpr.primitives import ClkPropEventually, FallingGclk, RisingGclk, And, ClkPropAlwaysRanged, ClkPropStrongEventuallyRanged
+from sexpr.rewriting import RewriteRuleGenerator, replace_single_node, RewriteRule, apply_rules, get_ranged_rewrite_rule, reduce_primitives
+from tests.strategies import random_ir_clocked, random_ir
 
 
+logger = logging.getLogger(__name__)
 
 
 def check_replace_single_node(input_document_str: str, expected_output_document_str: str, rule: RewriteRule, add_identifiers_to_container: bool = False):
@@ -39,7 +45,7 @@ def check_replace_single_node(input_document_str: str, expected_output_document_
 
 
 
-def check_apply_rules(input_document_str: str, expected_output_document_str: str, rules: dict[type[PropertyIrNode], RewriteRule]):
+def check_apply_rules(input_document_str: str, expected_output_document_str: str, rules: dict[type[PropertyIrNode], RewriteRule | Callable[[IrContainer, NodeId], RewriteRule]]):
 
     input_document: RawSExprList = parse_raw_sexpr(input_document_str)
     expected_output_document: RawSExprList = parse_raw_sexpr(expected_output_document_str)
@@ -54,6 +60,10 @@ def check_apply_rules(input_document_str: str, expected_output_document_str: str
 
     container1.canonical_id_renaming()
     container2.canonical_id_renaming()
+
+    #output_directory: Path = Path('./output')
+    #container2.show_graph(output_directory / 'apply_rules_expected_output.png')
+    #container1.show_graph(output_directory / 'apply_rules_output_after_renaming.png')
 
     assert container1 == container2
 
@@ -191,7 +201,7 @@ def test_replace_single_node_let_rec_error(add_identifiers_to_container):
 def test_apply_rules_one_pass():
 
     gclk_rule1: RewriteRule = (['rising-gclk', '<bool1>', '<bool2>'], ['falling-gclk', '<bool1>', '<bool2>']) # made-up rule for testing
-    rule_dict: dict[type[PropertyIrNode], RewriteRule] = { RisingGclk: gclk_rule1 }
+    rule_dict: dict[type[PropertyIrNode], RewriteRule | RewriteRuleGenerator] = { RisingGclk: gclk_rule1 }
     input_document_str: str = """(document (declare-input a) (declare-input b) (declare p (rising-gclk (and a (true)) (rising-gclk (or a b) (false)))) (parse-sexpr p))"""
     output_document_str: str = """(document (declare-input a) (declare-input b) (declare p (falling-gclk (and a (true)) (falling-gclk (or a b) (false)))) (parse-sexpr p))"""
     check_apply_rules(input_document_str, output_document_str, rule_dict)
@@ -200,7 +210,7 @@ def test_apply_rules_two_passes():
 
     gclk_rule1: RewriteRule = (['rising-gclk', '<bool1>', '<bool2>'], ['falling-gclk', '<bool1>', '<bool2>']) # made-up rule for testing
     gclk_rule2: RewriteRule = (['falling-gclk', '<bool1>', '<bool2>'], ['changing-gclk', '<bool1>', '<bool2>']) # made-up rule for testing
-    rule_dict: dict[type, RewriteRule] = { RisingGclk: gclk_rule1, FallingGclk: gclk_rule2 }
+    rule_dict: dict[type, RewriteRule | RewriteRuleGenerator] = { RisingGclk: gclk_rule1, FallingGclk: gclk_rule2 }
     input_document_str: str = """(document (declare-input a) (declare-input b) (declare p (rising-gclk (and a (true)) (rising-gclk (or a b) (false)))) (parse-sexpr p))"""
     output_document_str: str = """(document (declare-input a) (declare-input b) (declare p (changing-gclk (and a (true)) (changing-gclk (or a b) (false)))) (parse-sexpr p))"""
     check_apply_rules(input_document_str, output_document_str, rule_dict)
@@ -209,7 +219,7 @@ def test_apply_rules_two_passes_cycle():
 
     gclk_rule1: RewriteRule = (['rising-gclk', '<bool1>', '<bool2>'], ['falling-gclk', '<bool1>', '<bool2>']) # made-up rule for testing
     gclk_rule2: RewriteRule = (['falling-gclk', '<bool1>', '<bool2>'], ['changing-gclk', '<bool1>', '<bool2>']) # made-up rule for testing
-    rule_dict: dict[type, RewriteRule] = { RisingGclk: gclk_rule1, FallingGclk: gclk_rule2 }
+    rule_dict: dict[type, RewriteRule | RewriteRuleGenerator] = { RisingGclk: gclk_rule1, FallingGclk: gclk_rule2 }
     input_document_str: str = """(document (declare-input a) (declare-input b) (declare-rec (declare p (rising-gclk (and a (true)) (rising-gclk (or a p) (false))))) (parse-sexpr p))"""
     output_document_str: str = """(document (declare-input a) (declare-input b) (declare-rec (declare p (changing-gclk (and a (true)) (changing-gclk (or a p) (false))))) (parse-sexpr p))"""
     check_apply_rules(input_document_str, output_document_str, rule_dict)
@@ -217,7 +227,68 @@ def test_apply_rules_two_passes_cycle():
 def test_apply_rules_child_list():
 
     and_rule1: RewriteRule = (['and', '<child_list>'], ['or', '<child_list>']) # made-up rule for testing
-    rule_dict: dict[type, RewriteRule] = { And: and_rule1 }
+    rule_dict: dict[type, RewriteRule | RewriteRuleGenerator] = { And: and_rule1 }
     input_document_str: str = """(document (declare-input a) (declare-input b) (declare-rec (declare p (rising-gclk (and a (true)) (rising-gclk (and a p) (false))))) (parse-sexpr p))"""
     output_document_str: str = """(document (declare-input a) (declare-input b) (declare-rec (declare p (rising-gclk (or a (true)) (rising-gclk (or a p) (false))))) (parse-sexpr p))"""
     check_apply_rules(input_document_str, output_document_str, rule_dict)
+
+
+def test_apply_ranged_rules():
+    rule_dict: dict[type, RewriteRule | RewriteRuleGenerator] = { ClkPropAlwaysRanged: get_ranged_rewrite_rule,
+        ClkPropStrongEventuallyRanged: get_ranged_rewrite_rule,
+        ClkPropEventually: get_ranged_rewrite_rule}
+
+    input_document_str: str = """(document (declare-input a) (declare-input b)
+        (declare q (clk-prop-bool a))
+        (declare r (clk-prop-bool b))
+        (declare p (clk-prop-and
+            (clk-prop-always-ranged (range 4 6) q )
+            (clk-prop-eventually (bounded-range 2 3) r )
+            (clk-prop-strong-eventually-ranged (range 5 $) (clk-prop-bool (true)) ) ))
+        (parse-sexpr p))"""
+
+    output_document_str: str = """(document (declare-input a) (declare-input b)
+        (declare q (clk-prop-bool a))
+        (declare r (clk-prop-bool b))
+        (declare p (clk-prop-and
+            (clk-prop-and (clk-prop-nexttime 4 q) (clk-prop-nexttime 5 q) (clk-prop-nexttime 6 q) )
+            (clk-prop-or (clk-prop-nexttime 2 r) (clk-prop-nexttime 3 r))
+            (clk-prop-strong-nexttime 5 (clk-prop-strong-eventually (clk-prop-bool (true)) ) ) ))
+        (parse-sexpr p))"""
+
+    check_apply_rules(input_document_str, output_document_str, rule_dict)
+
+
+
+@settings(verbosity=Verbosity.verbose, max_examples=50, deadline=500)
+@given((random_ir(final_node_type=Bool, primitive_filter=lambda node_type: False if not issubclass(node_type, Bool) else True)))
+def test_reduce_primitives_bool(doc):
+    doc_raw_sexpr: RawSExprList = parse_raw_sexpr(doc)
+    container1: IrContainer = IrContainer()
+    parse_document(doc_raw_sexpr, container1)
+    reduce_primitives(container1)
+
+@settings(verbosity=Verbosity.verbose, max_examples=50, deadline=500)
+@given((random_ir_clocked(final_node_type=ClockedSequence, primitive_filter=lambda node_type: False if issubclass(node_type, ClockedProperty) else True)))
+@example("""(document (declare-input 0) (parse-sexpr (let-rec (step0 (clk-seq-throughout (true) (clk-seq-bool 0))) step0)))""")
+def test_reduce_primitives_seq(doc):
+    doc_raw_sexpr: RawSExprList = parse_raw_sexpr(doc)
+    container1: IrContainer = IrContainer()
+    parse_document(doc_raw_sexpr, container1)
+    logger.info('============================== START REDUCE PRIMITIVE TEST ========================================')
+    logger.info('Container before reducing primitives: %s', container1.output_container())
+    reduce_primitives(container1)
+    logger.info('Container after reducing primitives: %s', container1.output_container())
+
+@settings(verbosity=Verbosity.verbose, max_examples=50, deadline=500)
+@given((random_ir_clocked(final_node_type=ClockedProperty)))
+def test_reduce_primitives_prop(doc):
+    doc_raw_sexpr: RawSExprList = parse_raw_sexpr(doc)
+    container1: IrContainer = IrContainer()
+    parse_document(doc_raw_sexpr, container1)
+    logger.info('============================== START REDUCE PRIMITIVE TEST ========================================')
+    logger.info('Container before reducing primitives: %s', container1.output_container())
+    reduce_primitives(container1)
+    logger.info('Container after reducing primitives: %s', container1.output_container())
+
+forbidden_primitives = []

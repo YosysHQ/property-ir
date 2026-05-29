@@ -90,8 +90,8 @@ def test_nnf_boolean_initial_negative():
     check_nnf_equivalence(input_document, expected_output_document)
 
 def test_nnf_boolean_future_gclk():
-    input_statement: RawSExprList = ['declare', 'p', ['not', ['and', ['or', ['future-gclk', 'a', 'c'], 'b']]]]
-    expected_output_statement: RawSExprList = ['declare', 'p', ['or', ['and', ['future-gclk', ['not', 'a'], 'c'], ['not', 'b']]]]
+    input_statement: RawSExprList = ['declare', 'p', ['not', ['and', ['or', ['future-gclk', 'a'], 'b']]]]
+    expected_output_statement: RawSExprList = ['declare', 'p', ['or', ['and', ['future-gclk', ['not', 'a']], ['not', 'b']]]]
     root_node_statement: RawSExprList = ['parse-sexpr', 'p']
 
     input_document = wrap_multiple_statements_in_document([input_statement, root_node_statement])

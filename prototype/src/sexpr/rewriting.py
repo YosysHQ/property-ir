@@ -1,5 +1,5 @@
 from collections import deque
-from typing import get_origin, get_args, Any, Optional
+from typing import Callable, Container, get_origin, get_args, Any, Optional
 import logging
 from typeguard import typechecked
 
@@ -15,6 +15,8 @@ logger = logging.getLogger(__name__)
 
 
 type RewriteRule = tuple[RawSExprList, RawSExprList]
+
+type RewriteRuleGenerator = Callable[[IrContainer, NodeId], RewriteRule]
 
 
 
@@ -36,27 +38,27 @@ falling_gclk_rule: RewriteRule = (['falling-gclk', 'clock_value', 'clock_defined
         ['future-gclk', ['and', ['not', 'clock_value'], 'clock_defined']]])
 
 changing_gclk: RewriteRule = (['changing-gclk', 'clock_value', 'clock_defined'],
-    ['or', ['xor', ['clock_value', ['future-gclk', 'clock_value']]],
-        ['xor', ['clock_defined', ['future-gclk', 'clock_defined']]]])
+    ['or', ['xor', 'clock_value', ['future-gclk', 'clock_value']],
+        ['xor', 'clock_defined', ['future-gclk', 'clock_defined']]])
 
 
 # Sequence primitives
 
-delay_rule: RewriteRule = (['clk-seq-repeat', '<range>', '<clk_seq>'],
+delay_rule: RewriteRule = (['clk-seq-delay', '<range>', '<clk_seq>'],
     ['clk-seq-concat', ['clk-seq-repeat', '<range>', ['clk-seq-bool', ['true']]], '<clk_seq>'])
 
 goto_repeat_rule: RewriteRule = (['clk-seq-goto-repeat', '<range>', '<bool>'],
     ['clk-seq-repeat', '<range>', ['clk-seq-concat', ['clk-seq-repeat', ['range', '0', '$'], ['clk-seq-bool', ['not', '<bool>']]], ['clk-seq-bool', '<bool>']]])
 
 nonconsecutive_repeat_rule: RewriteRule = (['clk-seq-nonconsecutive-repeat', '<range>', '<bool>'],
-    ['clk-seq-concat', ['clk-seq-goto-repeat', '<range>', '<bool>'], ['clk-seq-repeat', ['range', '0', '$'], ['not', '<bool>']]])
+    ['clk-seq-concat', ['clk-seq-goto-repeat', '<range>', '<bool>'], ['clk-seq-repeat', ['range', '0', '$'], ['clk-seq-bool', ['not', '<bool>']]]])
 
 # clk-seq-and might be more efficient to implement directly instead of rewriting (would be rewritten as intersect + delay)
 # and the use of any number of arguments makes this rule more complex than a normal rewrite rule
 # seq_and_rule: RewriteRule
 
 throughout_rule: RewriteRule = (['clk-seq-throughout', '<bool>', '<clk_seq>'],
-    ['clk-seq-intersect', ['clk-seq-repeat', ['range', '0', '$'], '<bool>'], '<clk_seq>'])
+    ['clk-seq-intersect', ['clk-seq-repeat', ['range', '0', '$'], ['clk-seq-bool', '<bool>']], '<clk_seq>'])
 
 within_rule: RewriteRule = (['clk-seq-within', '<clk_seq1>', '<clk_seq2>'],
     ['clk-seq-intersect',
@@ -72,26 +74,26 @@ within_rule: RewriteRule = (['clk-seq-within', '<clk_seq1>', '<clk_seq2>'],
 if_rule: RewriteRule = (['clk-prop-if', '<bool>', '<clk_prop>'],
     ['clk-prop-overlapped-implication', ['clk-seq-bool', '<bool>'], '<clk_prop>'])
 
-if_else_rule: RewriteRule = (['clk-prop-if', '<bool>', '<clk_prop1>', '<clk_prop2>'],
+if_else_rule: RewriteRule = (['clk-prop-if-else', '<bool>', '<clk_prop1>', '<clk_prop2>'],
     ['clk-prop-and',
         ['clk-prop-overlapped-implication', ['clk-seq-bool', '<bool>'], '<clk_prop1>'],
-        ['clk-prop-or', ['clk-prop-weak', ['seq-bool', '<bool>']], '<clk_prop2>']])
+        ['clk-prop-or', ['clk-prop-weak', ['clk-seq-bool', '<bool>']], '<clk_prop2>']])
 
 # this rule is different for clocked and unclocked properties
 # the rewriting rules are mostly defined for unclocked properties
 # rewrite clock first?
 # the following is for unclocked properties
-non_overlapped_implication_rule: RewriteRule = (['clk-prop-non-overlapped-implication', '<seq>', '<prop>'],
-    ['clk-prop-overlapped-implication', ['seq-concat', '<seq>', ['clk-seq-bool', ['true']]], '<prop>'])
+non_overlapped_implication_rule: RewriteRule = (['clk-prop-non-overlapped-implication', '<clk_seq>', '<clk_prop>'],
+    ['clk-prop-overlapped-implication', ['clk-seq-concat', '<clk_seq>', ['clk-seq-bool', ['true']]], '<clk_prop>'])
 
-implies_rule: RewriteRule = (['clk-prop-implies', '<clk_prop1>', '<clk_prop2>'], [])
+implies_rule: RewriteRule = (['clk-prop-implies', '<clk_prop1>', '<clk_prop2>'], ['clk-prop-or', ['clk-prop-not', '<clk_prop1>'], '<clk_prop2>'])
 
-iff_rule: RewriteRule = (['clk-prop-iff', '<clk_prop1>', '<clk_prop2>'], [])
+iff_rule: RewriteRule = (['clk-prop-iff', '<clk_prop1>', '<clk_prop2>'], ['clk-prop-and', ['clk-prop-implies', '<clk_prop1>', '<clk_prop2>'], ['clk-prop-implies', '<clk_prop1>', '<clk_prop2>']])
 
 # overlapped-followed-by is defined via negation of overlapped implication
 # but we cannot use that here
 non_overlapped_followed_by_rule: RewriteRule = (['clk-prop-non-overlapped-followed-by', '<clk_seq>', '<clk_prop>'],
-    ['clk-prop-overlapped-followed-by', ['seq-concat', '<clk_seq>', ['clk-seq-bool', ['true']]], '<clk_prop>'])
+    ['clk-prop-overlapped-followed-by', ['clk-seq-concat', '<clk_seq>', ['clk-seq-bool', ['true']]], '<clk_prop>'])
 
 
 strong_until_rule: RewriteRule = (['clk-prop-strong-until', '<clk_prop1>', '<clk_prop2>'], ['clk-prop-and', ['clk-prop-until', '<clk_prop1>', '<clk_prop2>'], ['clk-prop-strong-eventually', '<clk_prop2>']])
@@ -99,14 +101,14 @@ strong_until_rule: RewriteRule = (['clk-prop-strong-until', '<clk_prop1>', '<clk
 until_with_rule: RewriteRule = (['clk-prop-until-with', '<clk_prop1>', '<clk_prop2>'], ['clk-prop-until', '<clk_prop1>', ['clk-prop-and', '<clk_prop1>', '<clk_prop2>']])
 
 # here already specific weak/strong of prop-bool? Does probably not matter which one is used? TODO
-always_rule: RewriteRule = (['clk-prop-always', '<clk_prop>'], ['clk-prop-until', '<clk_prop>', ['prop-bool', ['false']]])
+always_rule: RewriteRule = (['clk-prop-always', '<clk_prop>'], ['clk-prop-until', '<clk_prop>', ['clk-prop-bool', ['false']]])
 
-strong_eventually_rule: RewriteRule = (['clk-prop-strong-eventually', '<clk_prop>'], ['not', ['clk-prop-always', ['not', '<clk_prop>']]])
+strong_eventually_rule: RewriteRule = (['clk-prop-strong-eventually', '<clk_prop>'], ['clk-prop-not', ['clk-prop-always', ['clk-prop-not', '<clk_prop>']]])
 
 # -------------
 
 # the following creates clk-prop-eventually, which can only be removed with a special rule below
-strong_always_rule: RewriteRule = (['clk-prop-strong-always', '<bounded_range>', '<clk_prop>'], ['not', ['clk-prop-eventually', '<bounded_range>', ['not', '<clk_prop>']]])
+strong_always_rule: RewriteRule = (['clk-prop-strong-always', '<bounded_range>', '<clk_prop>'], ['clk-prop-not', ['clk-prop-eventually', '<bounded_range>', ['clk-prop-not', '<clk_prop>']]])
 
 # -------------
 
@@ -131,7 +133,7 @@ strong_always_rule: RewriteRule = (['clk-prop-strong-always', '<bounded_range>',
 #sync_reject_on_rule: RewriteRule
 
 
-def get_ranged_rewrite_rule(container: IrContainer, node_id: NodeId, rule) -> RewriteRule:
+def get_ranged_rewrite_rule(container: IrContainer, node_id: NodeId) -> RewriteRule:
     """There are three ranged eventually/always primitives that cannot be rewritten with a simple primitive replacement
     as defined by a RewriteRule, but the rewrite rule looks differently depending on the range.
     Given a node with one of these primitives as node type, the applicable rewrite rule is returned.
@@ -152,7 +154,8 @@ def get_ranged_rewrite_rule(container: IrContainer, node_id: NodeId, rule) -> Re
         range1: Range = getattr(node, 'child1')
         lhs: RawSExprList = ['clk-prop-always-ranged', '<range>', '<clk_prop>']
         if isinstance(range1.upper_bound.value, int):
-            rhs: RawSExprList = ['clk-prop-and'] + [['clk-prop-nexttime', str(x), '<clk_prop>'] for x in range(bounded_range.lower_bound, bounded_range.upper_bound + 1)] # type: ignore
+            upper_bound: int = range1.upper_bound.value
+            rhs: RawSExprList = ['clk-prop-and'] + [['clk-prop-nexttime', str(x), '<clk_prop>'] for x in range(range1.lower_bound, upper_bound + 1)] # type: ignore
         else:
             rhs = ['clk-prop-nexttime', str(range1.lower_bound), ['clk-prop-always', '<clk_prop>']]
 
@@ -162,7 +165,8 @@ def get_ranged_rewrite_rule(container: IrContainer, node_id: NodeId, rule) -> Re
         range2: Range = getattr(node, 'child1')
         lhs: RawSExprList = ['clk-prop-strong-eventually-ranged', '<range>', '<clk_prop>']
         if isinstance(range2.upper_bound.value, int):
-            rhs: RawSExprList = ['clk-prop-or'] + [['clk-prop-strong-nexttime', str(x), '<clk_prop>'] for x in range(bounded_range.lower_bound, bounded_range.upper_bound + 1)] # type: ignore
+            upper_bound: int = range2.upper_bound.value
+            rhs: RawSExprList = ['clk-prop-or'] + [['clk-prop-strong-nexttime', str(x), '<clk_prop>'] for x in range(range2.lower_bound, upper_bound + 1)] # type: ignore
         else:
             rhs = ['clk-prop-strong-nexttime', str(range2.lower_bound), ['clk-prop-strong-eventually', '<clk_prop>']]
 
@@ -173,6 +177,34 @@ def get_ranged_rewrite_rule(container: IrContainer, node_id: NodeId, rule) -> Re
         rhs: RawSExprList = ['clk-prop-or'] + [['clk-prop-nexttime', str(x), '<clk_prop>'] for x in range(bounded_range.lower_bound, bounded_range.upper_bound + 1)] # type: ignore
 
     return (lhs, rhs)
+
+
+
+
+def prepare_primitive_rewrite_rule_dict() -> dict[type[PropertyIrNode], RewriteRule | RewriteRuleGenerator]:
+    """Returns the dict associating primitives with rewrite rules to apply in order to remove derived primitives.
+    If the rewrite rule depends on the specific children of the primitive, the dict references the function that can be used
+    to generate the rewrite rule when given the container and node id."""
+
+    rule_dict: dict[type[PropertyIrNode], RewriteRule | RewriteRuleGenerator] = dict()
+
+    rewrite_rules: list[RewriteRule] = [xor_rule, eq_rule, rising_gclk_rule, falling_gclk_rule, changing_gclk, delay_rule, goto_repeat_rule,
+        nonconsecutive_repeat_rule, throughout_rule, within_rule, if_rule, if_else_rule, non_overlapped_implication_rule,
+        implies_rule, iff_rule, non_overlapped_followed_by_rule, strong_until_rule, until_with_rule, always_rule, strong_eventually_rule,
+        strong_always_rule]
+
+    for rule in rewrite_rules:
+        pass
+        primitive_name: str = rule[0][0] # type: ignore
+        primitive_type: type[PropertyIrNode] = op_to_cls[primitive_name]
+        rule_dict[primitive_type] = rule
+
+    rule_dict[ClkPropAlwaysRanged] = get_ranged_rewrite_rule
+    rule_dict[ClkPropStrongEventuallyRanged] = get_ranged_rewrite_rule
+    rule_dict[ClkPropEventually] = get_ranged_rewrite_rule
+
+    return rule_dict
+
 
 
 
@@ -343,25 +375,25 @@ def get_lhs_primitive_and_identifiers(rule: RewriteRule) -> tuple[type[PropertyI
 
     for index, elem in enumerate(lhs):
         if type(elem) is not str:
-            raise TypeError(f"LHS of rule {rule} must be list of strings of the form ['new_primitive_name', 'argument_identifier1', ...]")
+            raise TypeError(f"LHS of rule {rule} must be list of strings of the form ['primitive_name', 'argument_identifier1', ...]")
         if index == 0:
             primitive_name = elem
         else:
             children_identifiers.append(elem)
 
     if primitive_name is None:
-        raise TypeError(f"LHS of rule {rule} must be list of strings of the form ['new_primitive_name', 'argument_identifier1', ...]")
-    new_primitive: type[PropertyIrNode] = op_to_cls[primitive_name]
+        raise TypeError(f"LHS of rule {rule} must be list of strings of the form ['primitive_name', 'argument_identifier1', ...]")
+    primitive_type: type[PropertyIrNode] = op_to_cls[primitive_name]
 
-    logger.debug('LHS: new primitive %s with children_identifiers %s', new_primitive, children_identifiers)
+    logger.debug('LHS: primitive type %s with children_identifiers %s', primitive_type, children_identifiers)
 
-    return new_primitive, children_identifiers
-
-
+    return primitive_type, children_identifiers
 
 
 
-def apply_rules(container: IrContainer, rules: dict[type, RewriteRule]):
+
+
+def apply_rules(container: IrContainer, rules: dict[type[PropertyIrNode], RewriteRule | RewriteRuleGenerator]):
     """Apply the provided rules to the expression graph in the container in a greedy way
     in-place until none of the rules can be applied anymore. Use a seminaive approach,
     where only nodes are considered for rewriting that changed in the previous pass
@@ -371,7 +403,7 @@ def apply_rules(container: IrContainer, rules: dict[type, RewriteRule]):
     nodes_to_visit: deque[NodeId] = deque(container.sink_nodes)
     encountered_nodes: set[NodeId] = set()
 
-    logger.debug('Apply rules %s to container %s', rules, container)
+    #logger.debug('Apply rules %s to container %s', rules, container)
     logger.debug('nodes_to_visit: %s', nodes_to_visit)
 
     nodes_to_rewrite: dict[NodeId, RewriteRule] = dict()
@@ -386,7 +418,13 @@ def apply_rules(container: IrContainer, rules: dict[type, RewriteRule]):
             current_id_repr: NodeId = current_node.node_id
             current_cls = type(current_node)
             if current_cls in rules:
-                nodes_to_rewrite[current_id_repr] = rules[current_cls]
+                if isinstance(rules[current_cls], Callable):
+                    fct: RewriteRuleGenerator = rules[current_cls] # type: ignore
+                    rule: RewriteRule = fct(container, current_id_repr)
+                    nodes_to_rewrite[current_id_repr] = rule
+                elif isinstance(rules[current_cls], tuple):
+                    rule: RewriteRule = rules[current_cls] # type: ignore
+                    nodes_to_rewrite[current_id_repr] = rule
             child_ids: list[NodeId] = current_node.get_child_ids()
             for child_id in child_ids:
                 child_node: PropertyIrNode = container[child_id]
@@ -396,7 +434,7 @@ def apply_rules(container: IrContainer, rules: dict[type, RewriteRule]):
                     nodes_to_visit.append(child_id)
                     encountered_nodes.add(child_id)
 
-        logger.debug('encountered_nodes: %s', encountered_nodes)
+        #logger.debug('encountered_nodes: %s', encountered_nodes)
         logger.debug('nodes_to_rewrite: %s', nodes_to_rewrite)
 
         # apply rewriting to all collected nodes
@@ -416,13 +454,29 @@ def apply_rules(container: IrContainer, rules: dict[type, RewriteRule]):
 def reduce_primitives(container: IrContainer):
     """Replace all primitives that do not exist in simple sequences and simple
     properties."""
-    pass
+
+    rule_dict: dict[type[PropertyIrNode], RewriteRule | RewriteRuleGenerator] = prepare_primitive_rewrite_rule_dict()
+    apply_rules(container, rule_dict)
 
 
 
 def rewrite_clocks(container: IrContainer):
     """Rewrite the expression graph such that the global clock is used."""
     pass
+
+
+
+def remove_empty_sequences(container: IrContainer):
+    """Rewrite the expression graph such that no subsequences have empty matches."""
+    pass
+
+
+
+def add_weak_strong_qualifiers(container: IrContainer, strong: Bool):
+    """Add weak or strong qualifiers to all sequence properties where it is missing."""
+    pass
+
+
 
 
 

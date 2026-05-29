@@ -43,8 +43,7 @@ class Eq(Bool):
 @typechecked
 @dataclass
 class FutureGclk(Bool):
-    child1: NodeId[Bool]
-    child2: NodeId[Bool]
+    child: NodeId[Bool]
 
 @typechecked
 @dataclass
@@ -342,6 +341,16 @@ class ClkPropBool(ClockedProperty):
 
 @typechecked
 @dataclass
+class ClkPropWeakBool(ClockedProperty):
+    child: NodeId[Bool]
+
+@typechecked
+@dataclass
+class ClkPropStrongBool(ClockedProperty):
+    child: NodeId[Bool]
+
+@typechecked
+@dataclass
 class ClkPropClocked(ClockedProperty):
     child: NodeId[ClockedProperty]
 
@@ -493,7 +502,7 @@ class ClkPropEventually(ClockedProperty):
 
 @typechecked
 @dataclass
-class ClkStrongEventually(ClockedProperty):
+class ClkPropStrongEventually(ClockedProperty):
     child: NodeId[ClockedProperty]
 
 @typechecked
