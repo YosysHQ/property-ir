@@ -2,6 +2,7 @@ import logging
 
 from sexpr import RawSExprList
 from sexpr import parse_document, IrContainer
+from sexpr.base import PropertyIrNode
 
 
 logger = logging.getLogger(__name__)
@@ -41,3 +42,10 @@ def apply_roundtrip(document: RawSExprList):
     container1.canonical_id_renaming()
     container2.canonical_id_renaming()
     assert container1 == container2
+
+
+def check_primitive_absence(container: IrContainer, forbidden_primitives: set[type[PropertyIrNode]]):
+    all_nodes: list[PropertyIrNode] = list(container.nodes.values())
+    all_node_types: set[type[PropertyIrNode]] = { node.node_type() for node in all_nodes }
+    logger.debug('all_node_types: %s', all_node_types)
+    assert len(all_node_types.intersection(forbidden_primitives)) == 0

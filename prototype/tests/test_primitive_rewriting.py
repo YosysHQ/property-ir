@@ -9,8 +9,9 @@ from sexpr.parsing import parse_document
 from sexpr.base import RawSExprList, ClockedProperty
 from sexpr.parsing import parse_raw_sexpr
 from sexpr.primitives import ClkPropEventually, FallingGclk, RisingGclk, And, ClkPropAlwaysRanged, ClkPropStrongEventuallyRanged
-from sexpr.rewriting import RewriteRuleGenerator, replace_single_node, RewriteRule, apply_rules, get_ranged_rewrite_rule, reduce_primitives
+from sexpr.rewriting import RewriteRuleGenerator, replace_single_node, RewriteRule, apply_rules, get_ranged_rewrite_rule, reduce_primitives, prepare_primitive_rewrite_rule_dict
 from tests.strategies import random_ir_clocked, random_ir
+from tests.helpers import check_primitive_absence
 
 
 logger = logging.getLogger(__name__)
@@ -260,35 +261,31 @@ def test_apply_ranged_rules():
 
 
 
-@settings(verbosity=Verbosity.verbose, max_examples=50, deadline=500)
-@given((random_ir(final_node_type=Bool, primitive_filter=lambda node_type: False if not issubclass(node_type, Bool) else True)))
-def test_reduce_primitives_bool(doc):
+
+forbidden_primitives: set[type[PropertyIrNode]] = set(prepare_primitive_rewrite_rule_dict().keys())
+
+def check_reduce_primitives(doc):
     doc_raw_sexpr: RawSExprList = parse_raw_sexpr(doc)
     container1: IrContainer = IrContainer()
     parse_document(doc_raw_sexpr, container1)
     reduce_primitives(container1)
+    container1.canonical_id_renaming(remove_unreachable_declared_nodes=True)
+    check_primitive_absence(container1, forbidden_primitives)
+
+@settings(verbosity=Verbosity.verbose, max_examples=50, deadline=500)
+@given((random_ir(final_node_type=Bool, primitive_filter=lambda node_type: False if not issubclass(node_type, Bool) else True)))
+def test_reduce_primitives_bool(doc):
+    check_reduce_primitives(doc)
 
 @settings(verbosity=Verbosity.verbose, max_examples=50, deadline=500)
 @given((random_ir_clocked(final_node_type=ClockedSequence, primitive_filter=lambda node_type: False if issubclass(node_type, ClockedProperty) else True)))
 @example("""(document (declare-input 0) (parse-sexpr (let-rec (step0 (clk-seq-throughout (true) (clk-seq-bool 0))) step0)))""")
 def test_reduce_primitives_seq(doc):
-    doc_raw_sexpr: RawSExprList = parse_raw_sexpr(doc)
-    container1: IrContainer = IrContainer()
-    parse_document(doc_raw_sexpr, container1)
-    logger.info('============================== START REDUCE PRIMITIVE TEST ========================================')
-    logger.info('Container before reducing primitives: %s', container1.output_container())
-    reduce_primitives(container1)
-    logger.info('Container after reducing primitives: %s', container1.output_container())
+    check_reduce_primitives(doc)
 
 @settings(verbosity=Verbosity.verbose, max_examples=50, deadline=500)
 @given((random_ir_clocked(final_node_type=ClockedProperty)))
 def test_reduce_primitives_prop(doc):
-    doc_raw_sexpr: RawSExprList = parse_raw_sexpr(doc)
-    container1: IrContainer = IrContainer()
-    parse_document(doc_raw_sexpr, container1)
-    logger.info('============================== START REDUCE PRIMITIVE TEST ========================================')
-    logger.info('Container before reducing primitives: %s', container1.output_container())
-    reduce_primitives(container1)
-    logger.info('Container after reducing primitives: %s', container1.output_container())
+    check_reduce_primitives(doc)
 
-forbidden_primitives = []
+
