@@ -1,11 +1,12 @@
 from collections import deque
-from typing import Callable, Container, get_origin, get_args, Any, Optional
+from typing import Callable, Container, get_origin, get_args, Any, Optional, Literal
 import logging
 from typeguard import typechecked
 
 from sexpr.base import ClockedProperty, PropertyIrNode, PlaceholderNode, IrContainer, RawSExpr, NodeId, RawSExprList, Signal, LiteralType, Property, Sequence, Bool, Range, BoundedRange
 from sexpr.primitives import And, ClkPropAlwaysRanged, ClkPropEventually, ClkPropStrongEventuallyRanged, Constant, FutureGclk, Not, Or, Initial, PropAcceptOn, PropNexttime, PropAnd, PropNot, PropOr, PropStrong, PropWeak, PropSeq, PropBool, PropWeakBool, PropStrongBool
 from sexpr.primitives import PropOverlappedFollowedBy, PropOverlappedImplication, PropRejectOn, PropStrongNexttime, PropUntil, PropStrongUntilWith, PropRefuted
+from sexpr.primitives import ClkPropNexttime, ClkPropStrongNexttime
 from sexpr.parsing import get_op_symbols, parse_expression
 
 
@@ -13,11 +14,17 @@ from sexpr.parsing import get_op_symbols, parse_expression
 logger = logging.getLogger(__name__)
 
 
+op_to_cls: dict[str, type[PropertyIrNode]] = get_op_symbols()
+
+
+
+
+# DERIVED PRIMITIVES REWRITING
+
 
 type RewriteRule = tuple[RawSExprList, RawSExprList]
 
 type RewriteRuleGenerator = Callable[[IrContainer, NodeId], RewriteRule]
-
 
 
 # Boolean primitives
@@ -112,25 +119,6 @@ strong_always_rule: RewriteRule = (['clk-prop-strong-always', '<bounded_range>',
 
 # -------------
 
-# this is rewritten to a conjunction of the form (nexttime m p and ... and nexttime n p) [bounded range]
-# or to (nexttime m always p) [unbounded range]
-# must be handled separately (get_ranged_rewrite_rule)
-#always_ranged_rule: RewriteRule = (['clk-prop-always-ranged', '<range>', '<clk_prop>'], [])
-
-# this is rewritten to a disjunction of the form (nexttime m p or ... or nexttime n p) [bounded range]
-# must be handled separately (get_ranged_rewrite_rule)
-#eventually_rule: RewriteRule
-
-# this is rewritten to a disjunction of the form (s_nexttime m p or ... or s_nexttime n p) [bounded range]
-# or to (s_nexttime m s_eventually p) [unbounded range]
-# must be handled separately (get_ranged_rewrite_rule)
-#strong_eventually_ranged_rule: RewriteRule
-
-# -------------
-
-# the following should probably be handled in clock rewriting TODO
-#sync_accept_on_rule: RewriteRule
-#sync_reject_on_rule: RewriteRule
 
 
 def get_ranged_rewrite_rule(container: IrContainer, node_id: NodeId) -> RewriteRule:
@@ -139,15 +127,10 @@ def get_ranged_rewrite_rule(container: IrContainer, node_id: NodeId) -> RewriteR
     Given a node with one of these primitives as node type, the applicable rewrite rule is returned.
     """
 
-    rule = ([], [])
-
     node: PropertyIrNode = container[node_id]
-    node_cls: type[PropertyIrNode] = type(node)
 
     if not (isinstance(node, ClkPropAlwaysRanged) or isinstance(node, ClkPropStrongEventuallyRanged) or isinstance(node, ClkPropEventually)):
         raise TypeError(f'Cannot generate ranged rewrite rule for node {node} with wrong node type')
-
-    clk_prop: NodeId[ClockedProperty] = getattr(node, 'child2')
 
     # (nexttime m p and ... and nexttime n p) [bounded range] or (nexttime m always p) [unbounded range]
     if isinstance(node, ClkPropAlwaysRanged):
@@ -157,7 +140,7 @@ def get_ranged_rewrite_rule(container: IrContainer, node_id: NodeId) -> RewriteR
             upper_bound: int = range1.upper_bound.value
             rhs: RawSExprList = ['clk-prop-and'] + [['clk-prop-nexttime', str(x), '<clk_prop>'] for x in range(range1.lower_bound, upper_bound + 1)] # type: ignore
         else:
-            rhs = ['clk-prop-nexttime', str(range1.lower_bound), ['clk-prop-always', '<clk_prop>']]
+            rhs: RawSExprList = ['clk-prop-nexttime', str(range1.lower_bound), ['clk-prop-always', '<clk_prop>']]
 
     # (s_nexttime m p or ... or s_nexttime n p) [bounded range]
     # or to (s_nexttime m s_eventually p) [unbounded range]
@@ -168,7 +151,7 @@ def get_ranged_rewrite_rule(container: IrContainer, node_id: NodeId) -> RewriteR
             upper_bound: int = range2.upper_bound.value
             rhs: RawSExprList = ['clk-prop-or'] + [['clk-prop-strong-nexttime', str(x), '<clk_prop>'] for x in range(range2.lower_bound, upper_bound + 1)] # type: ignore
         else:
-            rhs = ['clk-prop-strong-nexttime', str(range2.lower_bound), ['clk-prop-strong-eventually', '<clk_prop>']]
+            rhs: RawSExprList = ['clk-prop-strong-nexttime', str(range2.lower_bound), ['clk-prop-strong-eventually', '<clk_prop>']]
 
     # (nexttime m p or ... or nexttime n p)
     elif isinstance(node, ClkPropEventually):
@@ -204,36 +187,6 @@ def prepare_primitive_rewrite_rule_dict() -> dict[type[PropertyIrNode], RewriteR
     rule_dict[ClkPropEventually] = get_ranged_rewrite_rule
 
     return rule_dict
-
-
-
-
-
-dual_primitives: dict[type[PropertyIrNode], type[PropertyIrNode]] = {
-
-    And: Or,
-    Or: And,
-    FutureGclk: FutureGclk, # child1 (bool) negated, child2 (bool) not negated
-
-    PropOverlappedImplication: PropOverlappedFollowedBy, # child1 (seq) not negated
-    PropOverlappedFollowedBy: PropOverlappedImplication, # child1 (seq) not negated
-    PropRejectOn: PropAcceptOn, # child1 (bool) not negated
-    PropAcceptOn: PropRejectOn, # child1 (bool) not negated
-    PropNexttime: PropStrongNexttime,
-    PropStrongNexttime: PropNexttime,
-    PropUntil: PropStrongUntilWith, # swap child1 and child2
-    PropStrongUntilWith: PropUntil, # swap child1 and child2
-    PropOr: PropAnd,
-    PropAnd: PropOr,
-
-    PropStrongBool: PropWeakBool, # move negation into Bool
-    PropWeakBool: PropStrongBool,  # move negation into Bool
-
-    PropWeak: PropRefuted # child (seq) not negated
-}
-
-
-op_to_cls: dict[str, type[PropertyIrNode]] = get_op_symbols()
 
 
 
@@ -336,7 +289,6 @@ def replace_single_node(container: IrContainer, node_id: NodeId, rule: RewriteRu
 
 
 
-
 def prepare_rhs(rhs: RawSExprList, literals_to_replace: dict[str, RawSExpr], child_name_mapping: dict[str, str], children_list_to_expand: tuple[Optional[str], list[str]]) -> RawSExprList:
 
     children_list_identifier: Optional[str] = children_list_to_expand[0]
@@ -388,8 +340,6 @@ def get_lhs_primitive_and_identifiers(rule: RewriteRule) -> tuple[type[PropertyI
     logger.debug('LHS: primitive type %s with children_identifiers %s', primitive_type, children_identifiers)
 
     return primitive_type, children_identifiers
-
-
 
 
 
@@ -449,8 +399,6 @@ def apply_rules(container: IrContainer, rules: dict[type[PropertyIrNode], Rewrit
 
 
 
-
-
 def reduce_primitives(container: IrContainer):
     """Replace all primitives that do not exist in simple sequences and simple
     properties."""
@@ -460,23 +408,150 @@ def reduce_primitives(container: IrContainer):
 
 
 
-def rewrite_clocks(container: IrContainer):
-    """Rewrite the expression graph such that the global clock is used."""
+
+# CLOCK REWRITING
+
+
+def get_nexttime_rewrite_rule(container: IrContainer, node_id: NodeId) -> RewriteRule:
+    """Before clock rewriting nexttime and s_nexttime need to be rewritten, but the rewrite rule depends on the int.
+    Given a node with a nexttime or s_nexttime primitives as node type, the applicable rewrite rule is returned.
+    Special cases are replacing nexttime [0] p by 1 |-> p and s_nexttime [0] p by 1 #-# p.
+    """
+
+    node: PropertyIrNode = container[node_id]
+    node_cls: type[PropertyIrNode] = type(node)
+
+    if not (isinstance(node, ClkPropNexttime) or isinstance(node, ClkPropStrongNexttime)):
+        raise TypeError(f'Cannot generate ranged rewrite rule for node {node} with wrong node type')
+
+    clk_prop: NodeId[ClockedProperty] = getattr(node, 'child2')
+    delay: int = getattr(node, 'child1')
+
+    if isinstance(node, ClkPropNexttime):
+        lhs: RawSExprList = ['clk-prop-nexttime', '<int>', '<clk_prop>']
+        if delay == 0:
+            rhs: RawSExprList = ['clk-prop-overlapped-implication', ['clk-seq-bool', ['true']], '<clk_prop>']
+        else:
+            rhs: RawSExprList = unrolled_nexttime_raw_sexpr('clk-prop-nexttime', '<clk_prop>', delay)
+
+    elif isinstance(node, ClkPropStrongNexttime):
+        lhs: RawSExprList = ['clk-prop-strong-nexttime', '<int>', '<clk_prop>']
+        if delay == 0:
+            rhs: RawSExprList = ['clk-prop-overlapped-followed-by', ['clk-seq-bool', ['true']], '<clk_prop>']
+        else:
+            rhs: RawSExprList = unrolled_nexttime_raw_sexpr('clk-prop-strong-nexttime', '<clk_prop>', delay)
+
+    return (lhs, rhs)
+
+
+def unrolled_nexttime_raw_sexpr(primitive_name: Literal['clk-prop-nexttime'] | Literal['clk-prop-strong-nexttime'], property_name: str, delay: int) -> RawSExprList:
+    if delay == 1:
+        return [primitive_name, '1', property_name]
+    elif delay > 1:
+        return [primitive_name, '1', [unrolled_nexttime_raw_sexpr(primitive_name, property_name, delay-1)]]
+    else:
+        raise ValueError('Cannot unroll primitive %s with delay %s', primitive_name, delay)
+
+
+clock_sync_accept_on_rule = (['clk-prop-sync-accept-on', '<bool>', '<clk_prop>'], ['clk-prop-accept-on', ['and', '<bool>', '<clock>'], '<clk_prop>'])
+
+clock_sync_reject_on_rule = (['clk-prop-sync-reject-on', '<bool>', '<clk_prop>'], ['clk-prop-reject-on', ['and', '<bool>', '<clock>'], '<clk_prop>'])
+
+# for nexttime and s_nexttime clock rewriting, the int parameter must already be 1
+# (this condition is not checked by the rule, but must be established beforehand)
+clock_nexttime = (['clk-prop-nexttime', '<int=1>', '<clk_prop>'],
+    ['clk-prop-until',
+        ['prop-bool', ['not', '<clock>']],
+        ['clk-prop-and', ['prop-bool', '<clock>'], ['clk-prop-nexttime', '1',
+            ['clk-prop-until', ['prop-bool', ['not', '<clock>']], ['clk-prop-and', ['clk-prop-bool', '<clock>'], '<clk_prop>']]]]])
+
+clock_strong_nexttime = (['clk-prop-strong-nexttime', '<int=1>', '<clk_prop>'],
+    ['clk-prop-until',
+        ['prop-bool', ['not', '<clock>']],
+        ['clk-prop-and', ['prop-bool', '<clock>'], ['clk-prop-strong-nexttime', '1',
+            ['clk-prop-until', ['prop-bool', ['not', '<clock>']], ['clk-prop-and', ['clk-prop-bool', '<clock>'], '<clk_prop>']]]]])
+
+clock_until = (['clk-prop-until', '<clk_prop1>', '<clk_prop2>'],
+    ['clk-prop-until', ['clk-prop-not', ['clk-prop-and', ['clk-prop-bool', '<clock>'], ['clk-prop-not', '<clk_prop1>']]],
+        ['clk-prop-and', ['clk-prop-bool', '<clock>'], '<clk_prop2>']])
+
+clock_strong_until_with = (['clk-prop-until', '<clk_prop1>', '<clk_prop2>'], [])
+
+clock_prop_clocked = ([], [])
+
+clock_seq_clocked = ([], [])
+
+clock_seq_bool = ([], [])
+
+clock_seq_strong_bool = ([], [])
+
+clock_seq_weak_bool = ([], [])
+
+
+
+def rewrite_clocks(container: IrContainer, allow_unspecified_clock = False):
+    """Rewrite the expression graph such that the global clock is used.
+    Either each root node needs to start with a clk-prop-clocked primitive to specify the clock (allow_unspecified_clock = False),
+    or the clock is assumed to be (true) in those cases (allow_unspecified_clock = True).
+    Parts of the graph that are used with different clocks are copied to account for that.
+    Nexttime and s_nexttime get unrolled before the clocks are rewritten."""
+
+    # unroll nexttime and s_nexttime
+
+    # a single pass through the graph starting from the root nodes
+
+    # keep track of already rewritten nodes of the graph in a dict, for each node + clock pair
+    # apply something like replace_single_node (but the output should be put in a new container)
+    # therefore placeholders for the child identifiers are necessary if the nodes do not already exist in the output
+
+    # a new node should not be considered again, but only those that are present in the input graph
+
+    # output is in new container
+
     pass
 
 
+# REMOVE EMPTY SEQUENCES
 
 def remove_empty_sequences(container: IrContainer):
     """Rewrite the expression graph such that no subsequences have empty matches."""
     pass
 
 
+# ADD WEAK/STRONG
 
 def add_weak_strong_qualifiers(container: IrContainer, strong: Bool):
     """Add weak or strong qualifiers to all sequence properties where it is missing."""
     pass
 
 
+
+
+# NNF
+
+
+dual_primitives: dict[type[PropertyIrNode], type[PropertyIrNode]] = {
+
+    And: Or,
+    Or: And,
+    FutureGclk: FutureGclk, # child1 (bool) negated, child2 (bool) not negated
+
+    PropOverlappedImplication: PropOverlappedFollowedBy, # child1 (seq) not negated
+    PropOverlappedFollowedBy: PropOverlappedImplication, # child1 (seq) not negated
+    PropRejectOn: PropAcceptOn, # child1 (bool) not negated
+    PropAcceptOn: PropRejectOn, # child1 (bool) not negated
+    PropNexttime: PropStrongNexttime,
+    PropStrongNexttime: PropNexttime,
+    PropUntil: PropStrongUntilWith, # swap child1 and child2
+    PropStrongUntilWith: PropUntil, # swap child1 and child2
+    PropOr: PropAnd,
+    PropAnd: PropOr,
+
+    PropStrongBool: PropWeakBool, # move negation into Bool
+    PropWeakBool: PropStrongBool,  # move negation into Bool
+
+    PropWeak: PropRefuted # child (seq) not negated
+}
 
 
 
