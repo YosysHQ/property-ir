@@ -4,7 +4,7 @@ import logging
 from typeguard import typechecked
 
 from sexpr.base import ClockedProperty, PropertyIrNode, PlaceholderNode, IrContainer, RawSExpr, NodeId, RawSExprList, Signal, LiteralType, Property, Sequence, Bool, Range, BoundedRange
-from sexpr.primitives import And, ClkPropAlwaysRanged, ClkPropEventually, ClkPropStrongEventuallyRanged, Constant, FutureGclk, Not, Or, Initial, PropAcceptOn, PropNexttime, PropAnd, PropNot, PropOr, PropStrong, PropWeak, PropSeq, PropBool, PropWeakBool, PropStrongBool
+from sexpr.primitives import And, ClkPropAlwaysRanged, ClkPropClocked, ClkPropEventually, ClkPropStrongEventuallyRanged, ClkSeqClocked, Constant, FutureGclk, Not, Or, Initial, PropAcceptOn, PropNexttime, PropAnd, PropNot, PropOr, PropStrong, PropWeak, PropSeq, PropBool, PropWeakBool, PropStrongBool
 from sexpr.primitives import PropOverlappedFollowedBy, PropOverlappedImplication, PropRejectOn, PropStrongNexttime, PropUntil, PropStrongUntilWith, PropRefuted
 from sexpr.primitives import ClkPropNexttime, ClkPropStrongNexttime
 from sexpr.parsing import get_op_symbols, parse_expression
@@ -177,7 +177,6 @@ def prepare_primitive_rewrite_rule_dict() -> dict[type[PropertyIrNode], RewriteR
         strong_always_rule]
 
     for rule in rewrite_rules:
-        pass
         primitive_name: str = rule[0][0] # type: ignore
         primitive_type: type[PropertyIrNode] = op_to_cls[primitive_name]
         rule_dict[primitive_type] = rule
@@ -453,62 +452,272 @@ def unrolled_nexttime_raw_sexpr(primitive_name: Literal['clk-prop-nexttime'] | L
         raise ValueError('Cannot unroll primitive %s with delay %s', primitive_name, delay)
 
 
-clock_sync_accept_on_rule = (['clk-prop-sync-accept-on', '<bool>', '<clk_prop>'], ['clk-prop-accept-on', ['and', '<bool>', '<clock>'], '<clk_prop>'])
+clock_sync_accept_on_rule: RewriteRule = (['clk-prop-sync-accept-on', '<bool>', '<clk_prop>'], ['clk-prop-accept-on', ['and', '<bool>', '<clock>'], '<clk_prop>'])
 
-clock_sync_reject_on_rule = (['clk-prop-sync-reject-on', '<bool>', '<clk_prop>'], ['clk-prop-reject-on', ['and', '<bool>', '<clock>'], '<clk_prop>'])
+clock_sync_reject_on_rule: RewriteRule = (['clk-prop-sync-reject-on', '<bool>', '<clk_prop>'], ['clk-prop-reject-on', ['and', '<bool>', '<clock>'], '<clk_prop>'])
 
 # for nexttime and s_nexttime clock rewriting, the int parameter must already be 1
 # (this condition is not checked by the rule, but must be established beforehand)
-clock_nexttime = (['clk-prop-nexttime', '<int=1>', '<clk_prop>'],
+clock_nexttime: RewriteRule = (['clk-prop-nexttime', '<int=1>', '<clk_prop>'],
     ['clk-prop-until',
         ['prop-bool', ['not', '<clock>']],
         ['clk-prop-and', ['prop-bool', '<clock>'], ['clk-prop-nexttime', '1',
             ['clk-prop-until', ['prop-bool', ['not', '<clock>']], ['clk-prop-and', ['clk-prop-bool', '<clock>'], '<clk_prop>']]]]])
 
-clock_strong_nexttime = (['clk-prop-strong-nexttime', '<int=1>', '<clk_prop>'],
+clock_strong_nexttime: RewriteRule = (['clk-prop-strong-nexttime', '<int=1>', '<clk_prop>'],
     ['clk-prop-until',
         ['prop-bool', ['not', '<clock>']],
         ['clk-prop-and', ['prop-bool', '<clock>'], ['clk-prop-strong-nexttime', '1',
             ['clk-prop-until', ['prop-bool', ['not', '<clock>']], ['clk-prop-and', ['clk-prop-bool', '<clock>'], '<clk_prop>']]]]])
 
-clock_until = (['clk-prop-until', '<clk_prop1>', '<clk_prop2>'],
+clock_until: RewriteRule = (['clk-prop-until', '<clk_prop1>', '<clk_prop2>'],
     ['clk-prop-until', ['clk-prop-not', ['clk-prop-and', ['clk-prop-bool', '<clock>'], ['clk-prop-not', '<clk_prop1>']]],
         ['clk-prop-and', ['clk-prop-bool', '<clock>'], '<clk_prop2>']])
 
-clock_strong_until_with = (['clk-prop-until', '<clk_prop1>', '<clk_prop2>'], [])
+clock_strong_until_with: RewriteRule = (['clk-prop-strong-until-with', '<clk_prop1>', '<clk_prop2>'], ['clk-prop-and',
+    ['clk-prop-until',
+        ['clk-prop-not', ['clk-prop-and', ['clk-prop-bool', '<clock>'], ['clk-prop-not', '<clk_prop1>']]],
+        ['clk-prop-and', ['clk-prop-bool', '<clock>'], '<clk_prop2>']],
+    ['clk-prop-strong-eventually', ['clk-prop-and', ['clk-prop-bool', '<clock>'], '<clk_prop2>']]])
 
-clock_prop_clocked = ([], [])
+# the following are basically the same
+clock_seq_bool: RewriteRule = (['clk-seq-bool', '<bool>'], ['clk-seq-concat', ['clk-seq-repeat', ['range', '0', '$'], ['clk-seq-bool', ['not', '<clock>']]], ['clk-seq-bool', ['and', '<clock>', '<bool>']]])
 
-clock_seq_clocked = ([], [])
+clock_prop_bool: RewriteRule = (['clk-prop-bool', '<bool>'], ['clk-prop-seq', ['clk-seq-concat', ['clk-seq-repeat', ['range', '0', '$'], ['clk-seq-bool', ['not', '<clock>']]], ['clk-seq-bool', ['and', '<clock>', '<bool>']]]])
 
-clock_seq_bool = ([], [])
+clock_prop_strong_bool: RewriteRule = (['clk-prop-strong-bool', '<bool>'], ['clk-prop-strong', ['clk-seq-concat', ['clk-seq-repeat', ['range', '0', '$'], ['clk-seq-bool', ['not', '<clock>']]], ['clk-seq-bool', ['and', '<clock>', '<bool>']]]])
 
-clock_seq_strong_bool = ([], [])
+clock_prop_weak_bool: RewriteRule = (['clk-prop-weak-bool', '<bool>'], ['clk-prop-weak', ['clk-seq-concat', ['clk-seq-repeat', ['range', '0', '$'], ['clk-seq-bool', ['not', '<clock>']]], ['clk-seq-bool', ['and', '<clock>', '<bool>']]]])
 
-clock_seq_weak_bool = ([], [])
+# replace each clock by the global clock
+clock_prop_clocked: RewriteRule = (['clk-prop-clocked', '<bool>', '<clk_prop>'], ['clk-prop-clocked', ['true'], '<clk_prop>'])
+
+clock_seq_clocked: RewriteRule = (['clk-seq-clocked', '<bool>', '<clk_seq>'], ['clk-seq-clocked', ['true'], '<clk_seq>'])
 
 
 
+def prepare_clock_rewrite_rule_dict() -> dict[type[PropertyIrNode], RewriteRule]:
+    """Returns the dict associating primitives with rewrite rules to apply in order to rewrite clocks."""
+
+    rule_dict: dict[type[PropertyIrNode], RewriteRule] = dict()
+
+    rewrite_rules: list[RewriteRule] = [clock_sync_accept_on_rule, clock_sync_reject_on_rule, clock_nexttime, clock_strong_nexttime,
+    clock_until, clock_strong_until_with, clock_seq_bool, clock_prop_bool, clock_prop_strong_bool, clock_prop_weak_bool]
+
+    for rule in rewrite_rules:
+        primitive_name: str = rule[0][0] # type: ignore
+        primitive_type: type[PropertyIrNode] = op_to_cls[primitive_name]
+        rule_dict[primitive_type] = rule
+
+    return rule_dict
+
+
+clock_rewrite_rule_dict: dict[type[PropertyIrNode], RewriteRule] = prepare_clock_rewrite_rule_dict()
+
+
+
+@typechecked
+def rewrite_clocks_process_node(
+    node_id: NodeId,
+    container: IrContainer,
+    clock: NodeId,
+    global_clock_id: NodeId,
+    output_container: IrContainer,
+    corresponding_nodes: dict[tuple[NodeId, NodeId], NodeId]) -> NodeId:
+
+
+    current_node: PropertyIrNode = container[node_id]
+    repr_id: NodeId = container.merged_nodes.find(node_id)
+
+    # NodeId(0) is used for Bool nodes because those are the same for any clock
+    if current_node.type_class() is Bool:
+        clock = NodeId(0)
+
+    # check if node was already finished processing
+    if (repr_id, clock) in corresponding_nodes:
+        corresponding_node_id: NodeId = corresponding_nodes[(repr_id, clock)]
+        output_node: PropertyIrNode = output_container[corresponding_node_id]
+        if not isinstance(output_node, PlaceholderNode):
+            return corresponding_nodes[(repr_id, clock)]
+
+
+
+
+    # TODO handle special case: change clock
+
+
+    if isinstance(current_node, ClkPropClocked) or isinstance(current_node, ClkSeqClocked):
+        child_clk_repr = container.merged_nodes.find(current_node.child1)
+        child_elem_repr = container.merged_nodes.find(current_node.child2)
+
+        child_clk = container[child_clk_repr]
+        if (child_clk_repr, NodeId(0)) in corresponding_nodes:
+            output_clk_node_id: NodeId = corresponding_nodes[(child_clk_repr, NodeId(0))]
+        elif isinstance(child_clk, Constant):
+            if child_clk.value is True:
+                corresponding_nodes[child_clk_repr, NodeId(0)] = global_clock_id
+        else: # a new clock is encountered and must be added
+            output_clk_node_id: NodeId = rewrite_clocks_process_node(child_clk_repr, container, NodeId(0), global_clock_id, output_container, corresponding_nodes)
+            corresponding_nodes[child_clk_repr, NodeId(0)] = output_clk_node_id
+
+        # TODO create new nodes for output container and perform subcall
+
+
+
+
+
+    # find which rule to apply if any
+    rewrite_rule: Optional[RewriteRule] = clock_rewrite_rule_dict[type(current_node)] if type(current_node) in clock_rewrite_rule_dict else None
+
+    # create PlaceholderNodes for children if they do not already exist
+    # (literals cannot be placeholders)
+
+    # dict for clock and child nodes as local_nodes when parsing
+    # all child nodes will be named child0, child1 etc. for this purpose
+    local_nodes: dict[str, NodeId] = dict()
+    local_nodes['<clock>'] = clock
+
+    for index, child_id in enumerate(current_node.get_child_ids()):
+        child_repr_id: NodeId = container.merged_nodes.find(child_id)
+        child_node: PropertyIrNode = container[child_id]
+        if (child_repr_id, clock) in corresponding_nodes:
+            local_nodes['child' + str(index)] = corresponding_nodes[(child_repr_id, clock)]
+        else:
+            child_placeholder: PropertyIrNode = output_container.add_placeholder_node(expected_type=child_node.type_class())
+            local_nodes['child' + str(index)] = child_placeholder.node_id
+            if child_node.type_class() is Bool:
+                corresponding_nodes[(child_repr_id, NodeId(0))] = child_placeholder.node_id
+            else:
+                corresponding_nodes[(child_repr_id, clock)] = child_placeholder.node_id
+
+    # recreate expression of encountered node in input container that should just be copied
+    if rewrite_rule is None:
+
+        current_node_expr: RawSExprList = [current_node.op_symbol()]
+        signature = type(current_node).signature()
+
+        collected_children: list[NodeId | LiteralType] = list()
+
+        for index, field in enumerate(current_node.get_child_fields()):
+            field_type: type = signature[index]
+            if get_origin(field_type) is list:
+                collected_children += getattr(current_node, field.name)
+            else:
+                collected_children.append(getattr(current_node, field.name))
+
+        index: int = 0
+        for child_elem in collected_children:
+            if isinstance(child_elem, NodeId):
+                current_node_expr.append('child' + str(index))
+                index += 1
+            elif isinstance(child_elem, LiteralType.__value__):
+                current_node_expr.append(container._generate_literal_raw_sexpr(child_elem))
+            else:
+                raise TypeError(f'Unexpected child type of {child_elem} while preparing clock rewriting s-expression for node {current_node}')
+
+        expression_to_add: RawSExprList = current_node_expr
+
+    # if there is a rewriting rule to apply, prepare rhs expression for parsing by using identifiers child0, child1 etc. instead of the names used in the rule lhs
+    # there is a special case for the lhs identifier '<int=1>', which is the only case with a literal identifier on a lhs of the clock rewriting rules!
+    # it does not appear on the lhs and will be ignored when giving new names to lhs identifiers
+    else:
+        primitive_type, children_identifiers = get_lhs_primitive_and_identifiers(rewrite_rule)
+        child_name_mapping: dict[str, str] = dict()
+        rhs: RawSExprList = rewrite_rule[1]
+        index: int = 0
+        for rule_child_identifier in children_identifiers:
+            if rule_child_identifier != '<int=1>':
+                child_name_mapping[rule_child_identifier] = 'child' + str(index)
+                index += 1
+
+        expression_to_add = prepare_rhs(rhs=rhs, literals_to_replace=dict(), child_name_mapping=child_name_mapping, children_list_to_expand=(None, []))
+
+    # add rhs of rule to output container
+    added_node_id: NodeId = parse_expression(expression_to_add, current_node.type_class(), local_nodes, output_container)
+    added_node: PropertyIrNode = output_container[added_node_id]
+
+    # add to corresponding_nodes or instantiate if placeholder
+    if (repr_id, clock) in corresponding_nodes:
+        corresponding_node_id: NodeId = corresponding_nodes[(repr_id, clock)]
+        output_node: PropertyIrNode = output_container[corresponding_node_id]
+        if isinstance(output_node, PlaceholderNode):
+            output_node.instantiate_placeholder(added_node)
+    else:
+        corresponding_nodes[(repr_id, clock)] = added_node_id
+
+    # make subcalls for children
+    for index, child_id in enumerate(current_node.get_child_ids()):
+        rewrite_clocks_process_node(child_id, container, clock, global_clock_id, output_container, corresponding_nodes)
+
+    return added_node_id
+
+
+
+
+@typechecked
 def rewrite_clocks(container: IrContainer, allow_unspecified_clock = False):
     """Rewrite the expression graph such that the global clock is used.
     Either each root node needs to start with a clk-prop-clocked primitive to specify the clock (allow_unspecified_clock = False),
     or the clock is assumed to be (true) in those cases (allow_unspecified_clock = True).
     Parts of the graph that are used with different clocks are copied to account for that.
-    Nexttime and s_nexttime get unrolled before the clocks are rewritten."""
+    Nexttime and s_nexttime get unrolled before the clocks are rewritten (in-place in the input container).
+    The result of clock rewriting is output in a new container."""
+
+    output_container: IrContainer = IrContainer()
 
     # unroll nexttime and s_nexttime
+    nexttime_rule_dict: dict[type[PropertyIrNode], RewriteRule | RewriteRuleGenerator] = dict()
+    nexttime_rule_dict[ClkPropNexttime] = get_nexttime_rewrite_rule
+    nexttime_rule_dict[ClkPropStrongNexttime] = get_nexttime_rewrite_rule
+    apply_rules(container, nexttime_rule_dict)
+    # TODO only a single pass through the graph - else there will be an infinite loop
 
-    # a single pass through the graph starting from the root nodes
+    # keep track of already rewritten nodes of the graph in a dict, for each node + clock pair (NodeId with Bool type)
+    # NodeId(0) is used to represent the global clock (true) in the input container
+    # and NodeId(0) is used for Bool nodes because those are the same for any clock
+    corresponding_nodes: dict[tuple[NodeId, NodeId[Bool]], NodeId] = dict()
 
-    # keep track of already rewritten nodes of the graph in a dict, for each node + clock pair
-    # apply something like replace_single_node (but the output should be put in a new container)
-    # therefore placeholders for the child identifiers are necessary if the nodes do not already exist in the output
+    # add node for global clock
+    output_global_clock: NodeId[Bool] = parse_expression(['true'], Bool, output_container.global_nodes, output_container)
 
-    # a new node should not be considered again, but only those that are present in the input graph
+    # add signals to output container = set source nodes and their names
+    # all signals and bools occur in corresponding_nodes with the global clock only
+    for name, node_id in container.source_nodes.items():
+        signal_repr_id = container.merged_nodes.find(node_id)
+        signal_node = output_container.add_signal_node(name)
+        corresponding_nodes[(signal_repr_id, NodeId(0))] = signal_node.node_id
+        logger.debug('Added Signal node %s', signal_node)
+        output_container.global_nodes[name] = signal_node.node_id
+        output_container.node_names[name] = signal_node.node_id
+        output_container.source_nodes[name] = (signal_node.node_id)
 
-    # output is in new container
+    # depth-first search starts from root nodes and assuming that the global clock is used
+    nodes_to_process: deque[tuple[NodeId, NodeId]] = deque([(node_id, NodeId(0)) for node_id in container.sink_nodes])
 
-    pass
+    while len(nodes_to_process) > 0:
+
+        # for each node, call recursive helper function
+        # hand down the dicts to keep track of visited nodes and applied clocks, and the output container
+
+        current_id, current_clock = nodes_to_process.popleft()
+
+        # if the node is already finished with through another recursive function call with the same clock, skip it
+        # (but it is an unnamed root, so add it to sink nodes, or else it might get removed)
+        if (current_id, current_clock) in corresponding_nodes:
+            corresponding_id = corresponding_nodes[current_id, current_clock]
+            output_container.sink_nodes.append(corresponding_id)
+            continue
+
+        logger.debug('clock rewriting rewriting process node %s', container[current_id])
+
+        # start with empty set as recursion stack
+        output_node_id: NodeId = rewrite_clocks_process_node(current_id, container, current_clock, output_global_clock, output_container, corresponding_nodes)
+
+        # add to sink nodes of output container because it corresponds to an unnamed rooot
+        output_container.sink_nodes.append(output_node_id)
+
+    # TODO: set names in output container
+
 
 
 # REMOVE EMPTY SEQUENCES
@@ -736,7 +945,6 @@ def nnf(container: IrContainer) -> IrContainer:
     output_container: IrContainer = IrContainer()
 
     corresponding_nodes: dict[tuple[NodeId, bool], NodeId] = dict() # input nodes and corresponding output nodes
-    polarity_changed: dict[NodeId, bool] = dict() # keeps track if the polarity of an input node has been changed for odd loop detection
 
     # add signals to output container = set source nodes and their names
     for name, node_id in container.source_nodes.items():
@@ -749,7 +957,7 @@ def nnf(container: IrContainer) -> IrContainer:
         output_container.source_nodes[name] = (signal_node.node_id)
 
     # depth-first search through expression graph
-    # start recursion at unnamed roots (sink nodes), which will later be those used directly in assertion statements
+    # start recursion at unnamed roots (sink nodes), which are those used directly in assertion statements
     nodes_to_process: deque[NodeId] = deque(container.sink_nodes)
 
     while len(nodes_to_process) > 0:

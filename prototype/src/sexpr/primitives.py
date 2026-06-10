@@ -352,7 +352,8 @@ class ClkPropStrongBool(ClockedProperty):
 @typechecked
 @dataclass
 class ClkPropClocked(ClockedProperty):
-    child: NodeId[ClockedProperty]
+    child1: NodeId[Bool]
+    child2: NodeId[ClockedProperty]
 
 @typechecked
 @dataclass
