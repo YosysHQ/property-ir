@@ -15,7 +15,7 @@ def main():
 
     parser.add_argument('input', help='Property IR text document')
     parser.add_argument('-o', '--output', help='generate Property IR output document and write to file')
-    parser.add_argument('-i', '--image', help='generate expression graph image and write to file')
+    parser.add_argument('-g', '--graph', help='generate expression graph image and write to file')
     parser.add_argument('-b', '--bypass', help='bypass placeholder nodes', action='store_true')
     parser.add_argument('-n', '--normalform', help='establish negation normalform', action='store_true')
     parser.add_argument('-v', '--verbose', help='show debug messages', action='store_true')
@@ -52,8 +52,8 @@ def main():
         with open(args.output, 'w') as file:
             file.write(output_unparsed)
 
-    if args.image:
-        ir_container.show_graph(Path(args.image))
+    if args.graph:
+        ir_container.show_graph(Path(args.graph))
 
 
 if __name__ == "__main__":
