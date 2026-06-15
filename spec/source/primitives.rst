@@ -160,8 +160,8 @@ are all derived from :sexpr:`future-gclk`.
          (future-gclk (and (not clock_value) clock_defined)))
 
     ; (changing-gclk clock_value clock_defined) is equivalent to:
-    (or (xor (clock_value (future-gclk clock_value)))
-        (xor (clock_defined (future-gclk clock_defined))))
+    (or (xor clock_value (future-gclk clock_value))
+        (xor clock_defined (future-gclk clock_defined)))
 
 
 
@@ -437,6 +437,14 @@ When not specified, the default semantics depend on the
 assertion type: In the context of ``assert`` and ``assume``, weak semantics
 are used, else strong semantics are used.
 
+.. code-block:: sexpr
+
+    (clk-prop-strong-bool <clk_seq>)
+
+    (clk-prop-weak-bool <clk_seq>)
+
+These primitives are equivalent to :sexpr:`(clk-prop-strong (clk-seq-bool <bool>))` and
+:sexpr:`(clk-prop-weak (clk-seq-bool <bool>))`, respectively.
 
 .. code-block:: sexpr
 
@@ -791,16 +799,17 @@ Simple property base primitives
 
 .. code-block:: sexpr
 
-    (prop-seq <seq>)
-
-    (prop-bool <bool>)
-
     (prop-strong <seq>)
 
     (prop-weak <seq>)
 
+    (prop-strong-bool <bool>)
+
+    (prop-weak-bool <bool>)
+
+
 These primitives convert Boolean expressions and simple sequences to
-simple properties. Strong or weak semantics can be specified, see
+simple properties. Strong or weak semantics must be specified. See
 :ref:`clocked property base primitives <clocked property base primitives>`
 for details.
 
@@ -847,6 +856,10 @@ negation normal form.
 
 
 
+
+..    (prop-seq <seq>)
+..
+..    (prop-bool <bool>)
 
 
 ..    (prop-strong-until <prop1> <prop2>)

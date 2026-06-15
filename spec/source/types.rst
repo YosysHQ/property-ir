@@ -108,7 +108,7 @@ and more complex operations.
 All clock controls are of type ``bool`` and expected to be *level-sensitive*
 (or rather a time-discrete global-clock sampled clock control), i.e., they are high
 in the global clock tick immediately before they have their
-rising (resp. falling) edge (because that is when values are sampled) and low else.
+rising (resp. falling) edge and low else.
 It is possible to convert an edge-sensitive clock to a level-sensitive clock
 inside Property IR using the :ref:`global clocking future sampled value functions <global clocking future sampled value functions>`.
 For example, the clock control of the sequence ``seq_1`` can be set to ``@(posedge clk)``
