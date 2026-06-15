@@ -13,11 +13,11 @@ expr2 = """(seq-concat
 
 expr3 = """(prop-always-ranged
                         (range 4 $)
-                        (prop-seq (seq-bool (not b))))"""
+                        (prop-weak (seq-bool (not b))))"""
 
 expr4 = """(prop-always (prop-and
-                        (prop-seq (seq-bool (not b)))
-                        (prop-seq (seq-bool a))
+                        (prop-weak (seq-bool (not b)))
+                        (prop-weak (seq-bool a))
                     ))"""
 
 expr5 = """(let-rec
@@ -28,10 +28,10 @@ expr5 = """(let-rec
 
 expr6 = """(let-rec
                 (prop1 (prop-and
-                    (prop-seq (seq-bool a))
+                    (prop-weak (seq-bool a))
                     (prop-non-overlapped-implication (seq-bool (constant true)) prop2)))
                 (prop2 (prop-and
-                    (prop-seq (seq-bool a))
+                    (prop-weak (seq-bool a))
                     (prop-non-overlapped-implication (seq-bool (constant true)) prop1)))
                 prop1)"""
 
@@ -74,11 +74,11 @@ raw_sexpr2 = ['seq-concat',
 
 raw_sexpr3 = ['prop-always-ranged',
                         ['range', '4', '$'],
-                        ['prop-seq', ['seq-bool', ['not', 'b']]]]
+                        ['prop-weak', ['seq-bool', ['not', 'b']]]]
 
 raw_sexpr4 = ['prop-always', ['prop-and',
-                        ['prop-seq', ['seq-bool', ['not', 'b']]],
-                        ['prop-seq', ['seq-bool', 'a']]
+                        ['prop-weak', ['seq-bool', ['not', 'b']]],
+                        ['prop-weak', ['seq-bool', 'a']]
                     ]]
 
 raw_sexpr5 = ['let-rec',
@@ -89,10 +89,10 @@ raw_sexpr5 = ['let-rec',
 
 raw_sexpr6 = ['let-rec',
                 ['prop1', ['prop-and',
-                    ['prop-seq', ['seq-bool', 'a']],
+                    ['prop-weak', ['seq-bool', 'a']],
                     ['prop-non-overlapped-implication', ['seq-bool', ['constant', 'true']], 'prop2']]],
                 ['prop2', ['prop-and',
-                    ['prop-seq', ['seq-bool', 'a']],
+                    ['prop-weak', ['seq-bool', 'a']],
                     ['prop-non-overlapped-implication', ['seq-bool', ['constant', 'true']], 'prop1']]],
                 'prop1']
 
@@ -121,10 +121,10 @@ raw_sexpr6_declare = ['declare', 'global-node-name1', raw_sexpr6]
 
 raw_sexpr6_declare_rec = ['declare-rec',
                 ['declare', 'prop1', ['prop-and',
-                    ['prop-seq', ['seq-bool', 'a']],
+                    ['prop-weak', ['seq-bool', 'a']],
                     ['prop-non-overlapped-implication', ['seq-bool', ['constant', 'true']], 'prop2']]],
                 ['declare', 'prop2', ['prop-and',
-                    ['prop-seq', ['seq-bool', 'a']],
+                    ['prop-weak', ['seq-bool', 'a']],
                     ['prop-non-overlapped-implication', ['seq-bool', ['constant', 'true']], 'prop1']]],
                 ]
 

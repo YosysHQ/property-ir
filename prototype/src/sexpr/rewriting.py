@@ -1,10 +1,10 @@
 from collections import deque
-from typing import Callable, Container, get_origin, get_args, Any, Optional, Literal
+from typing import Callable, get_origin, Any, Optional, Literal
 import logging
 from typeguard import typechecked
 
 from sexpr.base import ClockedProperty, PropertyIrNode, PlaceholderNode, IrContainer, RawSExpr, NodeId, RawSExprList, Signal, LiteralType, Property, Sequence, Bool, Range, BoundedRange
-from sexpr.primitives import And, ClkPropAlwaysRanged, ClkPropClocked, ClkPropEventually, ClkPropStrongEventuallyRanged, ClkSeqClocked, Constant, FutureGclk, Not, Or, Initial, PropAcceptOn, PropNexttime, PropAnd, PropNot, PropOr, PropStrong, PropWeak, PropSeq, PropBool, PropWeakBool, PropStrongBool
+from sexpr.primitives import And, ClkPropAlwaysRanged, ClkPropClocked, ClkPropEventually, ClkPropStrongEventuallyRanged, ClkSeqClocked, Constant, FutureGclk, Not, Or, Initial, PropAcceptOn, PropNexttime, PropAnd, PropNot, PropOr, PropStrong, PropWeak, PropWeakBool, PropStrongBool
 from sexpr.primitives import PropOverlappedFollowedBy, PropOverlappedImplication, PropRejectOn, PropStrongNexttime, PropUntil, PropStrongUntilWith, PropRefuted
 from sexpr.primitives import ClkPropNexttime, ClkPropStrongNexttime
 from sexpr.parsing import get_op_symbols, parse_expression
@@ -849,8 +849,9 @@ def nnf_process_node(
 
         return added_node_impl.node_id
 
-    elif isinstance(current_node, PropSeq) or isinstance(current_node, PropBool):
-            raise ValueError(f'Encountered sequence property without weak or strong qualifier at node {current_node}')
+# TODO this should be checked in the clocked to simple rewriting pass instead for the clocked versions
+#    elif isinstance(current_node, PropSeq) or isinstance(current_node, PropBool):
+#            raise ValueError(f'Encountered sequence property without weak or strong qualifier at node {current_node}')
 
 
     # add current node to recursion stack

@@ -116,11 +116,6 @@ class SeqFirstMatch(Sequence):
 
 @typechecked
 @dataclass
-class PropBool(Property):
-    child: NodeId[Bool]
-
-@typechecked
-@dataclass
 class PropWeakBool(Property):
     child: NodeId[Bool]
 
@@ -128,11 +123,6 @@ class PropWeakBool(Property):
 @dataclass
 class PropStrongBool(Property):
     child: NodeId[Bool]
-
-@typechecked
-@dataclass
-class PropSeq(Property):
-    child: NodeId[Sequence]
 
 @typechecked
 @dataclass

@@ -251,7 +251,7 @@ def parsable_sequence(declared_signals: list[str]) -> st.SearchStrategy:
     )
 
 def parsable_property(declared_signals: list[str]) -> st.SearchStrategy:
-    base = parsable_sequence(declared_signals).map(lambda elem: ['prop-seq', elem])
+    base = parsable_sequence(declared_signals).map(lambda elem: ['prop-weak', elem])
 
     return st.recursive(base=base, extend=lambda children:
             children.map(lambda elem: ['prop-always', elem]) |

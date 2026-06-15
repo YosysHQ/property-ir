@@ -2,13 +2,13 @@ import pytest
 from pathlib import Path
 import logging
 
-from sexpr import parse_expression, parse_literal, parse_raw_sexpr, RawSExprList, IrContainer, Signal, parse_document
+from sexpr import parse_expression, parse_literal, RawSExprList, IrContainer, Signal, parse_document
 from tests.input_data import raw_sexpr1, raw_sexpr2, raw_sexpr3, raw_sexpr4, raw_sexpr5, raw_sexpr6, raw_sexpr7, raw_sexpr8
 from tests.input_data import raw_sexpr6_declare, raw_sexpr6_declare_rec, raw_sexpr5_declare_rec, raw_sexpr7_declare_rec
 from tests.input_data import raw_sexpr_signal_redeclaration_local, raw_sexpr_signal_redeclaration_global1, raw_sexpr_signal_redeclaration_global2
 from tests.input_data import uninst_node_exprs, merge_with_type_conflict, merge_without_type_conflict
 from sexpr.base import Bool, BoundedRange, IntOrUnbounded, NodeId, Property, PropertyIrNode, Range, Sequence, SignalDeclaration, UnnamedExpressionDeclaration
-from sexpr.primitives import And, Not, Or, PropAlwaysRanged, PropSeq, SeqBool, SeqConcat, SeqRepeat, Constant
+from sexpr.primitives import And, Not, Or, PropAlwaysRanged, SeqBool, SeqConcat, SeqRepeat, PropWeak
 from tests.helpers import wrap_in_document, wrap_multiple_expr_in_document, wrap_statement_in_document, wrap_multiple_statements_in_document
 from tests.helpers import apply_roundtrip
 
@@ -133,7 +133,7 @@ def test_parse_expr3(container):
     assert isinstance(root_node, PropAlwaysRanged)
     assert root_node.child1 == Range(4, IntOrUnbounded('$'))
     child2 = container[root_node.child2]
-    assert isinstance(child2, PropSeq)
+    assert isinstance(child2, PropWeak)
     child2_child = container[child2.child]
     assert isinstance(child2_child, SeqBool)
     child2_child_child = container[child2_child.child]

@@ -391,14 +391,15 @@ def test_nnf_property_shared_subgraph():
 
 
 
-def test_nnf_error_on_prop_bool():
-    with pytest.raises(ValueError, match='weak or strong qualifier'):
-        input_statement_str1: str = """(declare p (prop-not (prop-bool b)))"""
-        output_statement_str1: str = """(declare p (prop-bool a))""" # arbitrary because an error is expected anyway
-        check_single_declaration_nnf_helper(input_statement_str1, output_statement_str1)
-
-def test_nnf_error_on_prop_seq():
-    with pytest.raises(ValueError, match='weak or strong qualifier'):
-        input_statement_str1: str = """(declare p (prop-not (prop-seq (seq-bool b))))"""
-        output_statement_str1: str = """(declare p (prop-bool a))""" # arbitrary because an error is expected anyway
-        check_single_declaration_nnf_helper(input_statement_str1, output_statement_str1)
+# TODO these should be checked in the clocked to simple rewriting pass, move them there when that part exists
+#def test_nnf_error_on_prop_bool():
+#    with pytest.raises(ValueError, match='weak or strong qualifier'):
+#        input_statement_str1: str = """(declare p (prop-not (prop-bool b)))"""
+#        output_statement_str1: str = """(declare p (prop-bool a))""" # arbitrary because an error is expected anyway
+#        check_single_declaration_nnf_helper(input_statement_str1, output_statement_str1)
+#
+#def test_nnf_error_on_prop_seq():
+#    with pytest.raises(ValueError, match='weak or strong qualifier'):
+#        input_statement_str1: str = """(declare p (prop-not (prop-seq (seq-bool b))))"""
+#        output_statement_str1: str = """(declare p (prop-bool a))""" # arbitrary because an error is expected anyway
+#        check_single_declaration_nnf_helper(input_statement_str1, output_statement_str1)
