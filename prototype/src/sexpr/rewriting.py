@@ -528,7 +528,13 @@ def rewrite_clocks_process_node(
     current_node: PropertyIrNode = container[node_id]
     repr_id: NodeId = container.merged_nodes.find(node_id)
 
-    logger.debug('Start rewriting clocks for node %s with repr_id %s', current_node, repr_id)
+    if clock != NodeId(0):
+        current_clock_node: PropertyIrNode = container[clock]
+        if isinstance(current_clock_node, Constant):
+            if current_clock_node.value is True:
+                clock = NodeId(0)
+
+    logger.debug('Start rewriting clocks for node %s with repr_id %s with clock %s', current_node, repr_id, clock)
 
     # NodeId(0) is used for Bool nodes because the clock does not matter for bools
     if current_node.type_class() is Bool or isinstance(current_node, ClkPropClocked) or isinstance(current_node, ClkSeqClocked):
@@ -537,9 +543,10 @@ def rewrite_clocks_process_node(
 
     # check if node was already finished processing
     if (repr_id, clock) in corresponding_nodes:
-        corresponding_node_id: NodeId = corresponding_nodes[(repr_id, clock)]
+        corresponding_node_id: NodeId = corresponding_nodes[repr_id, clock]
         output_node: PropertyIrNode = output_container[corresponding_node_id]
         logger.debug('Node %s found in corresponding_nodes with clock %s', output_node, clock)
+        #if not isinstance(output_node, PlaceholderNode) or isinstance(current_node, ClkPropClocked) or isinstance(current_node, ClkSeqClocked):
         if not isinstance(output_node, PlaceholderNode):
             logger.debug('Return already existing output corresponding node %s', corresponding_nodes[repr_id, clock])
             return corresponding_nodes[repr_id, clock]
@@ -551,8 +558,8 @@ def rewrite_clocks_process_node(
 
 
     if isinstance(current_node, ClkPropClocked) or isinstance(current_node, ClkSeqClocked):
-        child_clk_repr = container.merged_nodes.find(current_node.child1)
-        child_elem_repr = container.merged_nodes.find(current_node.child2)
+        child_clk_repr: NodeId = container.merged_nodes.find(current_node.child1)
+        child_elem_repr: NodeId = container.merged_nodes.find(current_node.child2)
 
         # with what clock is the current node stored in corresponding_nodes? NodeId(0) because it needs to be a placeholder?
         # what about the previous surrounding expression?
@@ -562,7 +569,8 @@ def rewrite_clocks_process_node(
             pass # will set output clock below
         elif isinstance(child_clk, Constant):
             if child_clk.value is True:
-                corresponding_nodes[child_clk_repr, NodeId(0)] = corresponding_nodes[NodeId(0), NodeId(0)]
+                #corresponding_nodes[child_clk_repr, NodeId(0)] = corresponding_nodes[NodeId(0), NodeId(0)]
+                child_clk_repr = NodeId(0)
             else:
                 add_new_clock = True
         else:
@@ -570,11 +578,13 @@ def rewrite_clocks_process_node(
         if add_new_clock: # a new clock is encountered and must be added
             output_clk_node_id: NodeId = rewrite_clocks_process_node(child_clk_repr, container, NodeId(0), output_container, corresponding_nodes)
             corresponding_nodes[child_clk_repr, NodeId(0)] = output_clk_node_id
+            logger.debug('Add new clock %s corresponding to %s', output_clk_node_id, child_clk)
 
         output_clk_node_id: NodeId = corresponding_nodes[child_clk_repr, NodeId(0)]
+
         # add placeholder for other child and use it to create the corresponding node for the clock-changing node
         child_placeholder_node: PropertyIrNode = output_container.add_placeholder_node(expected_type=current_node.type_class())
-        corresponding_nodes[child_elem_repr, output_clk_node_id] = child_placeholder_node.node_id
+        corresponding_nodes[child_elem_repr, child_clk_repr] = child_placeholder_node.node_id
         global_clock_id: NodeId = corresponding_nodes[NodeId(0), NodeId(0)]
         if isinstance(current_node, ClkPropClocked):
             added_node_id: NodeId = parse_expression(['clk-prop-clocked', '<clock>', '<clk_prop>'], current_node.type_class(), {'<clk_prop>': child_placeholder_node.node_id, '<clock>': global_clock_id}, output_container)
@@ -582,13 +592,23 @@ def rewrite_clocks_process_node(
             added_node_id: NodeId = parse_expression(['clk-seq-clocked', '<clock>', '<clk_seq>'], current_node.type_class(), {'<clk_seq>': child_placeholder_node.node_id, '<clock>': global_clock_id}, output_container)
 
         # make subcall for child with new clock
+        logger.debug('Perform subcall under changing clock for %s with clock %s', child_elem_repr, child_clk_repr)
         output_child_elem_id: NodeId = rewrite_clocks_process_node(child_elem_repr, container, child_clk_repr, output_container, corresponding_nodes)
         output_child_elem = output_container[output_child_elem_id]
+        logger.debug('Subcall result is %s', output_child_elem)
 
         if isinstance(output_child_elem, PlaceholderNode):
             raise RuntimeError(f'Clock rewriting encountered Clocked primitive {current_node} with placeholder child in output container. Is there a Clocked primitive pointing to itself?')
 
-        child_placeholder_node.instantiate_placeholder(output_child_elem)
+        #if type(output_container[child_placeholder_node.node_id]) is PlaceholderNode:
+        #    child_placeholder_node.instantiate_placeholder(output_child_elem)
+
+        if (repr_id, clock) in corresponding_nodes:
+            corresponding_node: PropertyIrNode = output_container[corresponding_nodes[repr_id, clock]]
+            if isinstance(corresponding_node, PlaceholderNode):
+                corresponding_node.instantiate_placeholder(output_container[added_node_id])
+        else:
+            corresponding_nodes[repr_id, clock] = added_node_id
 
         return added_node_id
 
@@ -597,13 +617,19 @@ def rewrite_clocks_process_node(
 
     # default case
 
-    # find which rule to apply if any
-    rewrite_rule: Optional[RewriteRule] = clock_rewrite_rule_dict[type(current_node)] if type(current_node) in clock_rewrite_rule_dict else None
+    # find which rule to apply if any - if the clock is already (true), no rewriting takes place
+    rewrite_rule: Optional[RewriteRule] = clock_rewrite_rule_dict[type(current_node)] if (type(current_node) in clock_rewrite_rule_dict) else None
+    if clock == NodeId(0):
+        rewrite_rule = None
+
+    logger.debug('Apply rewriting rule %s', rewrite_rule)
 
     # use dict local_nodes for clock and child nodes as when parsing
     # all child nodes will be named child0, child1 etc. for this purpose
     local_nodes: dict[str, NodeId] = dict()
     local_nodes['<clock>'] = corresponding_nodes[clock, NodeId(0)]
+
+    subcall_children: list[NodeId] = list()
 
     # create PlaceholderNodes for children if they do not already exist
     for index, child_id in enumerate(current_node.get_child_ids()):
@@ -622,6 +648,7 @@ def rewrite_clocks_process_node(
             child_placeholder: PropertyIrNode = output_container.add_placeholder_node(expected_type=child_node.type_class())
             local_nodes['child' + str(index)] = child_placeholder.node_id
             corresponding_nodes[child_repr_id, child_clock] = child_placeholder.node_id
+            subcall_children.append(child_id)
 
     # recreate expression of encountered node in input container that should just be copied
     if rewrite_rule is None:
@@ -668,9 +695,9 @@ def rewrite_clocks_process_node(
     logger.debug('expression_to_add: %s', expression_to_add)
     logger.debug('local_nodes: %s', local_nodes)
 
-    if expression_to_add[0] == 'signal':
-        logger.debug(corresponding_nodes)
-    logger.debug('Current node type class: %s', current_node.type_class())
+    #if expression_to_add[0] == 'signal':
+    #    logger.debug(corresponding_nodes)
+    #logger.debug('Current node type class: %s', current_node.type_class())
 
     # add rhs of rule to output container
     added_node_id: NodeId = parse_expression(expression_to_add, current_node.type_class(), local_nodes, output_container)
@@ -685,8 +712,9 @@ def rewrite_clocks_process_node(
     else:
         corresponding_nodes[repr_id, clock] = added_node_id
 
-    # make subcalls for children - if it was aleready processed, the child node will be immediately returned
-    for index, child_id in enumerate(current_node.get_child_ids()):
+    # make subcalls for children - if it was already processed, the child node will be immediately returned
+    for index, child_id in enumerate(subcall_children):
+        logger.debug('Make subcall for child_id %s', child_id)
         rewrite_clocks_process_node(child_id, container, clock, output_container, corresponding_nodes)
 
     return added_node_id
@@ -750,7 +778,7 @@ def rewrite_clocks(container: IrContainer, allow_unspecified_clock = False) -> I
             output_container.sink_nodes.append(corresponding_id)
             continue
 
-        logger.debug('clock rewriting rewriting process node %s', container[current_id])
+        logger.debug('clock rewriting process node %s', container[current_id])
 
         output_node_id: NodeId = rewrite_clocks_process_node(current_id, container, current_clock, output_container, corresponding_nodes)
 
@@ -758,6 +786,24 @@ def rewrite_clocks(container: IrContainer, allow_unspecified_clock = False) -> I
         output_container.sink_nodes.append(output_node_id)
 
     # TODO: set names in output container
+
+    for (name, node_id) in container.global_nodes.items():
+
+        logger.debug('Process global name %s of node %s', name, node_id)
+
+        if name not in container.inner_nodes: # ignore Signal nodes without other global names
+            continue
+
+        # if already global clock, add to output container
+        if (node_id, NodeId(0)) in corresponding_nodes:
+            new_name = output_container.uniquify(name)
+            output_container.global_nodes[new_name] = corresponding_nodes[(node_id, NodeId(0))]
+            output_container.node_names[new_name] = corresponding_nodes[(node_id, NodeId(0))]
+            output_container.inner_nodes[new_name] = corresponding_nodes[(node_id, NodeId(0))]
+
+        # TODO if other clock used, add indicator of clock to node label
+
+
 
     return output_container
 

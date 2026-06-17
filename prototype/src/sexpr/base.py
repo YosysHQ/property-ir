@@ -275,6 +275,23 @@ class IrContainer:
                 self.inner_nodes == other.inner_nodes and
                 self.sink_nodes == other.sink_nodes)
 
+
+    def weakly_equivalent(self, other):
+        """Two containers are only considered weakly equivalent if they have the same types of nodes with the same node ids
+        connected in the same way, and the same signals and unnamed root nodes in the same order,
+        respectively. It is less strict than __eq__ because it ignores node names and inner nodes.
+        No merged nodes are allowed, else the equality check is not possible.
+        Use canonical_id_renaming first in order to remove all unreachable or redundant nodes and rename node ids in
+        depth-first order (this also resets merged_nodes)."""
+
+        if not isinstance(other, IrContainer):
+            return NotImplemented
+        if not (len(self.merged_nodes.parents) == 0 and len(other.merged_nodes.parents) == 0):
+            return NotImplemented
+        return (self.nodes == other.nodes and
+                self.source_nodes == other.source_nodes and
+                self.sink_nodes == other.sink_nodes)
+
     def _get_next_node_id(self) -> NodeId:
         node_id = NodeId(self.next_raw_node_id)
         self.next_raw_node_id += 1
