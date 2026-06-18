@@ -1,7 +1,7 @@
 [project]
 name = "property-ir"
 version = "0.1.0"
-description = "Add your description here"
+description = "intermediate representation for temporal properties"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
@@ -23,3 +23,9 @@ pythonpath = ["prototype/src"]
 
 [tool.uv.sources]
 furo-ys = { git = "https://github.com/YosysHQ/furo-ys.git" }
+
+[dependency-groups]
+dev = [
+    "pytest-cov>=7.0.0",
+    "pytest-xdist>=3.8.0",
+]
