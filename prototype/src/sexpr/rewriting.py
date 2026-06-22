@@ -370,7 +370,8 @@ def apply_rules(container: IrContainer, rules: dict[type[PropertyIrNode], Rewrit
                 if isinstance(rules[current_cls], Callable):
                     fct: RewriteRuleGenerator = rules[current_cls] # type: ignore
                     rule: RewriteRule = fct(container, current_id_repr)
-                    nodes_to_rewrite[current_id_repr] = rule
+                    if rule != ([], []):
+                        nodes_to_rewrite[current_id_repr] = rule
                 elif isinstance(rules[current_cls], tuple):
                     rule: RewriteRule = rules[current_cls] # type: ignore
                     nodes_to_rewrite[current_id_repr] = rule
@@ -430,6 +431,8 @@ def get_nexttime_rewrite_rule(container: IrContainer, node_id: NodeId) -> Rewrit
         lhs: RawSExprList = ['clk-prop-nexttime', '<int>', '<clk_prop>']
         if delay == 0:
             rhs: RawSExprList = ['clk-prop-overlapped-implication', ['clk-seq-bool', ['true']], '<clk_prop>']
+        elif delay == 1:
+            return ([], [])
         else:
             rhs: RawSExprList = unrolled_nexttime_raw_sexpr('clk-prop-nexttime', '<clk_prop>', delay)
 
@@ -437,6 +440,8 @@ def get_nexttime_rewrite_rule(container: IrContainer, node_id: NodeId) -> Rewrit
         lhs: RawSExprList = ['clk-prop-strong-nexttime', '<int>', '<clk_prop>']
         if delay == 0:
             rhs: RawSExprList = ['clk-prop-overlapped-followed-by', ['clk-seq-bool', ['true']], '<clk_prop>']
+        elif delay == 1:
+            return ([], [])
         else:
             rhs: RawSExprList = unrolled_nexttime_raw_sexpr('clk-prop-strong-nexttime', '<clk_prop>', delay)
 
@@ -460,15 +465,15 @@ clock_sync_reject_on_rule: RewriteRule = (['clk-prop-sync-reject-on', '<bool>', 
 # (this condition is not checked by the rule, but must be established beforehand)
 clock_nexttime: RewriteRule = (['clk-prop-nexttime', '<int=1>', '<clk_prop>'],
     ['clk-prop-until',
-        ['prop-bool', ['not', '<clock>']],
-        ['clk-prop-and', ['prop-bool', '<clock>'], ['clk-prop-nexttime', '1',
-            ['clk-prop-until', ['prop-bool', ['not', '<clock>']], ['clk-prop-and', ['clk-prop-bool', '<clock>'], '<clk_prop>']]]]])
+        ['clk-prop-bool', ['not', '<clock>']],
+        ['clk-prop-and', ['clk-prop-bool', '<clock>'], ['clk-prop-nexttime', '1',
+            ['clk-prop-until', ['clk-prop-bool', ['not', '<clock>']], ['clk-prop-and', ['clk-prop-bool', '<clock>'], '<clk_prop>']]]]])
 
 clock_strong_nexttime: RewriteRule = (['clk-prop-strong-nexttime', '<int=1>', '<clk_prop>'],
     ['clk-prop-until',
-        ['prop-bool', ['not', '<clock>']],
-        ['clk-prop-and', ['prop-bool', '<clock>'], ['clk-prop-strong-nexttime', '1',
-            ['clk-prop-until', ['prop-bool', ['not', '<clock>']], ['clk-prop-and', ['clk-prop-bool', '<clock>'], '<clk_prop>']]]]])
+        ['clk-prop-bool', ['not', '<clock>']],
+        ['clk-prop-and', ['clk-prop-bool', '<clock>'], ['clk-prop-strong-nexttime', '1',
+            ['clk-prop-until', ['clk-prop-bool', ['not', '<clock>']], ['clk-prop-and', ['clk-prop-bool', '<clock>'], '<clk_prop>']]]]])
 
 clock_until: RewriteRule = (['clk-prop-until', '<clk_prop1>', '<clk_prop2>'],
     ['clk-prop-until', ['clk-prop-not', ['clk-prop-and', ['clk-prop-bool', '<clock>'], ['clk-prop-not', '<clk_prop1>']]],
@@ -477,7 +482,7 @@ clock_until: RewriteRule = (['clk-prop-until', '<clk_prop1>', '<clk_prop2>'],
 clock_strong_until_with: RewriteRule = (['clk-prop-strong-until-with', '<clk_prop1>', '<clk_prop2>'], ['clk-prop-and',
     ['clk-prop-until',
         ['clk-prop-not', ['clk-prop-and', ['clk-prop-bool', '<clock>'], ['clk-prop-not', '<clk_prop1>']]],
-        ['clk-prop-and', ['clk-prop-bool', '<clock>'], '<clk_prop2>']],
+        ['clk-prop-and', ['clk-prop-bool', '<clock>'], '<clk_prop1>', '<clk_prop2>']],
     ['clk-prop-strong-eventually', ['clk-prop-and', ['clk-prop-bool', '<clock>'], '<clk_prop2>']]])
 
 # the following are basically the same
@@ -591,6 +596,13 @@ def rewrite_clocks_process_node(
         else: # isinstance(current_node, ClkSeqClocked)
             added_node_id: NodeId = parse_expression(['clk-seq-clocked', '<clock>', '<clk_seq>'], current_node.type_class(), {'<clk_seq>': child_placeholder_node.node_id, '<clock>': global_clock_id}, output_container)
 
+        if (repr_id, clock) in corresponding_nodes:
+            corresponding_node: PropertyIrNode = output_container[corresponding_nodes[repr_id, clock]]
+            if isinstance(corresponding_node, PlaceholderNode):
+                corresponding_node.instantiate_placeholder(output_container[added_node_id])
+        else:
+            corresponding_nodes[repr_id, clock] = added_node_id
+
         # make subcall for child with new clock
         logger.debug('Perform subcall under changing clock for %s with clock %s', child_elem_repr, child_clk_repr)
         output_child_elem_id: NodeId = rewrite_clocks_process_node(child_elem_repr, container, child_clk_repr, output_container, corresponding_nodes)
@@ -603,12 +615,6 @@ def rewrite_clocks_process_node(
         #if type(output_container[child_placeholder_node.node_id]) is PlaceholderNode:
         #    child_placeholder_node.instantiate_placeholder(output_child_elem)
 
-        if (repr_id, clock) in corresponding_nodes:
-            corresponding_node: PropertyIrNode = output_container[corresponding_nodes[repr_id, clock]]
-            if isinstance(corresponding_node, PlaceholderNode):
-                corresponding_node.instantiate_placeholder(output_container[added_node_id])
-        else:
-            corresponding_nodes[repr_id, clock] = added_node_id
 
         return added_node_id
 
@@ -723,13 +729,21 @@ def rewrite_clocks_process_node(
 
 
 @typechecked
-def rewrite_clocks(container: IrContainer, allow_unspecified_clock = False) -> IrContainer:
+def rewrite_clocks(container: IrContainer) -> IrContainer:
     """Rewrite the expression graph such that the global clock is used.
-    Either each root node needs to start with a clk-prop-clocked primitive to specify the clock (allow_unspecified_clock = False),
-    or the clock is assumed to be (true) in those cases (allow_unspecified_clock = True).
-    Parts of the graph that are used with different clocks are copied to account for that.
+    Each clock-specifying primitive remains, but all pointing to the same "(constant true)".
+    Each root node needs to start with a clk-prop-clocked/clk-prop-seq primitive to specify the clock.
+    (This is required because assuming a clock could lead to unexpected results otherwise, especially when cycles are involved.)
+    Parts of the graph that are used with different clocks are copied.
     Nexttime and s_nexttime get unrolled before the clocks are rewritten (in-place in the input container).
     The result of clock rewriting is output in a new container."""
+
+
+    for sink_node_id in container.sink_nodes:
+        sink_node: PropertyIrNode = container[sink_node_id]
+        if not isinstance(sink_node, ClkPropClocked) and not isinstance(sink_node, ClkSeqClocked):
+            raise ValueError(f'Attempting to rewrite clocks and encountered unspecified clock at root node {sink_node}')
+
 
     output_container: IrContainer = IrContainer()
 
