@@ -1,9 +1,11 @@
 import pytest
 from pathlib import Path
+from hypothesis import given, settings, Verbosity
 
-from sexpr.base import RawSExprList, IrContainer
+from sexpr.base import RawSExprList, IrContainer, ClockedProperty, ClockedSequence
 from sexpr.parsing import parse_raw_sexpr, parse_document
 from sexpr.rewriting import rewrite_clocks
+from tests.strategies import random_ir_clocked
 
 
 def check_clock_rewriting(input_document_str: str, expected_output_document_str: str, visualize: bool = False):
@@ -235,41 +237,6 @@ def test_clock_rewriting_until():
     check_clock_rewriting(input_document, output_document)
 
 
-def test_clock_rewriting_strong_until_with():
-    input_document: str = """(document
-        (declare-input a)
-        (declare-input b)
-        (declare-input clk)
-        (parse-sexpr (clk-prop-clocked clk (clk-prop-strong-until-with (clk-prop-bool a) (clk-prop-bool b)))))"""
-
-    output_document: str = """(document
-        (declare-input a)
-        (declare-input b)
-        (declare-input clk)
-        (declare gclk (true))
-        (declare prop_a (clk-prop-seq (clk-seq-concat (clk-seq-repeat (range 0 $) (clk-seq-bool (not clk)) ) (clk-seq-bool (and clk a) ) )))
-        (declare prop_b (clk-prop-seq (clk-seq-concat (clk-seq-repeat (range 0 $) (clk-seq-bool (not clk)) ) (clk-seq-bool (and clk b) ) )))
-        (parse-sexpr (clk-prop-clocked gclk (clk-prop-and
-            (clk-prop-until
-               (clk-prop-not (clk-prop-and (clk-prop-bool clk)  (clk-prop-not prop_a)   ))
-               (clk-prop-and (clk-prop-bool clk) prop_a prop_b) )
-            (clk-prop-strong-eventually (clk-prop-and (clk-prop-bool clk) prop_b) )   ))))"""
-
-    check_clock_rewriting(input_document, output_document)
-
-
-clock_nexttime = (['clk-prop-nexttime', '<int=1>', '<clk_prop>'],
-    ['clk-prop-until',
-        ['prop-bool', ['not', '<clock>']],
-        ['clk-prop-and', ['prop-bool', '<clock>'], ['clk-prop-nexttime', '1',
-            ['clk-prop-until', ['prop-bool', ['not', '<clock>']], ['clk-prop-and', ['clk-prop-bool', '<clock>'], '<clk_prop>']]]]])
-
-clock_strong_nexttime = (['clk-prop-strong-nexttime', '<int=1>', '<clk_prop>'],
-    ['clk-prop-until',
-        ['prop-bool', ['not', '<clock>']],
-        ['clk-prop-and', ['prop-bool', '<clock>'], ['clk-prop-strong-nexttime', '1',
-            ['clk-prop-until', ['prop-bool', ['not', '<clock>']], ['clk-prop-and', ['clk-prop-bool', '<clock>'], '<clk_prop>']]]]])
-
 
 def test_clock_rewriting_nexttime_1():
     input_document: str = """(document
@@ -293,24 +260,164 @@ def test_clock_rewriting_nexttime_1():
 
 
 def test_clock_rewriting_nexttime_0():
-    pass
+    input_document: str = """(document
+        (declare-input a)
+        (declare-input clk)
+        (parse-sexpr (clk-prop-clocked clk (clk-prop-nexttime 0 (clk-prop-bool a)))))"""
+
+    output_document: str = """(document
+        (declare-input a)
+        (declare-input clk)
+        (declare gclk (true))
+        (declare seq_true (clk-seq-concat (clk-seq-repeat (range 0 $) (clk-seq-bool (not clk)) ) (clk-seq-bool (and clk (true)) ) ))
+        (declare prop_a (clk-prop-seq (clk-seq-concat (clk-seq-repeat (range 0 $) (clk-seq-bool (not clk)) ) (clk-seq-bool (and clk a) ) )))
+        (parse-sexpr (clk-prop-clocked gclk (clk-prop-overlapped-implication seq_true prop_a) ) ))"""
+
+    check_clock_rewriting(input_document, output_document)
 
 
 def test_clock_rewriting_nexttime_2():
-    pass
+    input_document: str = """(document
+        (declare-input a)
+        (declare-input clk)
+        (parse-sexpr (clk-prop-clocked clk (clk-prop-nexttime 2 (clk-prop-bool a)))))"""
+
+    output_document: str = """(document
+        (declare-input a)
+        (declare-input clk)
+        (declare gclk (true))
+        (declare prop_a (clk-prop-seq (clk-seq-concat (clk-seq-repeat (range 0 $) (clk-seq-bool (not clk)) ) (clk-seq-bool (and clk a) ) )))
+        (parse-sexpr (clk-prop-clocked gclk
+
+            (clk-prop-until (clk-prop-bool (not clk))
+                (clk-prop-and (clk-prop-bool clk)
+                (clk-prop-nexttime 1
+                    (clk-prop-until  (clk-prop-bool (not clk))  (clk-prop-and (clk-prop-bool clk)
+
+                        (clk-prop-until (clk-prop-bool (not clk))
+                            (clk-prop-and (clk-prop-bool clk)
+                            (clk-prop-nexttime 1
+                                (clk-prop-until  (clk-prop-bool (not clk))  (clk-prop-and (clk-prop-bool clk) prop_a
+
+                        )))))
+
+            )))))
+
+        )))"""
+
+    check_clock_rewriting(input_document, output_document)
+
 
 def test_clock_rewriting_strong_nexttime_0():
-    pass
+    input_document: str = """(document
+        (declare-input a)
+        (declare-input clk)
+        (parse-sexpr (clk-prop-clocked clk (clk-prop-strong-nexttime 0 (clk-prop-bool a)))))"""
+
+    output_document: str = """(document
+        (declare-input a)
+        (declare-input clk)
+        (declare gclk (true))
+        (declare seq_true (clk-seq-concat (clk-seq-repeat (range 0 $) (clk-seq-bool (not clk)) ) (clk-seq-bool (and clk (true)) ) ))
+        (declare prop_a (clk-prop-seq (clk-seq-concat (clk-seq-repeat (range 0 $) (clk-seq-bool (not clk)) ) (clk-seq-bool (and clk a) ) )))
+        (parse-sexpr (clk-prop-clocked gclk (clk-prop-overlapped-followed-by seq_true prop_a) ) ))"""
+
+    check_clock_rewriting(input_document, output_document)
+
 
 def test_clock_rewriting_strong_nexttime_1():
-    pass
+    input_document: str = """(document
+        (declare-input a)
+        (declare-input clk)
+        (parse-sexpr (clk-prop-clocked clk (clk-prop-strong-nexttime 1 (clk-prop-bool a)))))"""
+
+    output_document: str = """(document
+        (declare-input a)
+        (declare-input clk)
+        (declare gclk (true))
+        (declare prop_a (clk-prop-seq (clk-seq-concat (clk-seq-repeat (range 0 $) (clk-seq-bool (not clk)) ) (clk-seq-bool (and clk a) ) )))
+        (parse-sexpr (clk-prop-clocked gclk
+            (clk-prop-strong-until (clk-prop-bool (not clk))
+                (clk-prop-and (clk-prop-bool clk)
+                (clk-prop-strong-nexttime 1
+                    (clk-prop-strong-until  (clk-prop-bool (not clk))  (clk-prop-and (clk-prop-bool clk) prop_a)    ))))
+        )))"""
+
+    check_clock_rewriting(input_document, output_document)
+
 
 def test_clock_rewriting_strong_nexttime_2():
-    pass
+    input_document: str = """(document
+        (declare-input a)
+        (declare-input clk)
+        (parse-sexpr (clk-prop-clocked clk (clk-prop-strong-nexttime 2 (clk-prop-bool a)))))"""
 
-def test_clocK_rewriting_same_child_twice():
-    pass
+    output_document: str = """(document
+        (declare-input a)
+        (declare-input clk)
+        (declare gclk (true))
+        (declare prop_a (clk-prop-seq (clk-seq-concat (clk-seq-repeat (range 0 $) (clk-seq-bool (not clk)) ) (clk-seq-bool (and clk a) ) )))
+        (parse-sexpr (clk-prop-clocked gclk
+
+            (clk-prop-strong-until (clk-prop-bool (not clk))
+                (clk-prop-and (clk-prop-bool clk)
+                (clk-prop-strong-nexttime 1
+                    (clk-prop-strong-until  (clk-prop-bool (not clk))  (clk-prop-and (clk-prop-bool clk)
+
+                        (clk-prop-strong-until (clk-prop-bool (not clk))
+                            (clk-prop-and (clk-prop-bool clk)
+                            (clk-prop-strong-nexttime 1
+                                (clk-prop-strong-until  (clk-prop-bool (not clk))  (clk-prop-and (clk-prop-bool clk) prop_a
+
+                        )))))
+
+            )))))
+
+        )))"""
+
+    check_clock_rewriting(input_document, output_document)
+
+
+def test_clock_rewriting_same_child_twice():
+    input_document: str = """(document
+        (declare-input a)
+        (declare-input b)
+        (declare-input clk)
+        (declare a_and_b (clk-seq-bool (and a b)))
+        (parse-sexpr (clk-seq-clocked clk (clk-seq-concat a_and_b a_and_b) )))"""
+
+    output_document: str = """(document
+        (declare-input a)
+        (declare-input b)
+        (declare-input clk)
+        (declare gclk (true))
+        (declare seq_a_and_b (clk-seq-concat (clk-seq-repeat (range 0 $) (clk-seq-bool (not clk)) ) (clk-seq-bool (and clk (and a b)) ) ))
+        (parse-sexpr (clk-seq-clocked gclk (clk-seq-concat seq_a_and_b seq_a_and_b)))
+    ) """
+
+    check_clock_rewriting(input_document, output_document)
 
 
 def test_clock_rewriting_random():
     pass
+
+
+
+# TODO test random expressions, for this they need to be wrapped in a clock-specifying primitive
+
+#def check_clock_rewriting_no_error(doc):
+#    doc_raw_sexpr: RawSExprList = parse_raw_sexpr(doc)
+#    container1: IrContainer = IrContainer()
+#    parse_document(doc_raw_sexpr, container1)
+#    container2: IrContainer = rewrite_clocks(container1)
+#    #container1.canonical_id_renaming(remove_unreachable_declared_nodes=True)
+#
+#@settings(verbosity=Verbosity.verbose, max_examples=50, deadline=500)
+#@given((random_ir_clocked(final_node_type=ClockedSequence, primitive_filter=lambda node_type: False if issubclass(node_type, ClockedProperty) else True)))
+#def test_clock_rewriting_random_seq_no_error(doc):
+#    check_clock_rewriting_no_error(doc)
+#
+#@settings(verbosity=Verbosity.verbose, max_examples=50, deadline=500)
+#@given((random_ir_clocked(final_node_type=ClockedProperty)))
+#def rest_clock_rewriting_no_error_no_error(doc):
+#    check_clock_rewriting_no_error(doc)

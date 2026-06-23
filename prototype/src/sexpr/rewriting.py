@@ -452,7 +452,7 @@ def unrolled_nexttime_raw_sexpr(primitive_name: Literal['clk-prop-nexttime'] | L
     if delay == 1:
         return [primitive_name, '1', property_name]
     elif delay > 1:
-        return [primitive_name, '1', [unrolled_nexttime_raw_sexpr(primitive_name, property_name, delay-1)]]
+        return [primitive_name, '1', unrolled_nexttime_raw_sexpr(primitive_name, property_name, delay-1)]
     else:
         raise ValueError('Cannot unroll primitive %s with delay %s', primitive_name, delay)
 
@@ -470,20 +470,30 @@ clock_nexttime: RewriteRule = (['clk-prop-nexttime', '<int=1>', '<clk_prop>'],
             ['clk-prop-until', ['clk-prop-bool', ['not', '<clock>']], ['clk-prop-and', ['clk-prop-bool', '<clock>'], '<clk_prop>']]]]])
 
 clock_strong_nexttime: RewriteRule = (['clk-prop-strong-nexttime', '<int=1>', '<clk_prop>'],
-    ['clk-prop-until',
+    ['clk-prop-strong-until',
         ['clk-prop-bool', ['not', '<clock>']],
         ['clk-prop-and', ['clk-prop-bool', '<clock>'], ['clk-prop-strong-nexttime', '1',
-            ['clk-prop-until', ['clk-prop-bool', ['not', '<clock>']], ['clk-prop-and', ['clk-prop-bool', '<clock>'], '<clk_prop>']]]]])
+            ['clk-prop-strong-until', ['clk-prop-bool', ['not', '<clock>']], ['clk-prop-and', ['clk-prop-bool', '<clock>'], '<clk_prop>']]]]])
 
 clock_until: RewriteRule = (['clk-prop-until', '<clk_prop1>', '<clk_prop2>'],
     ['clk-prop-until', ['clk-prop-not', ['clk-prop-and', ['clk-prop-bool', '<clock>'], ['clk-prop-not', '<clk_prop1>']]],
         ['clk-prop-and', ['clk-prop-bool', '<clock>'], '<clk_prop2>']])
 
 clock_strong_until_with: RewriteRule = (['clk-prop-strong-until-with', '<clk_prop1>', '<clk_prop2>'], ['clk-prop-and',
-    ['clk-prop-until',
+    ['clk-prop-strong-until',
         ['clk-prop-not', ['clk-prop-and', ['clk-prop-bool', '<clock>'], ['clk-prop-not', '<clk_prop1>']]],
-        ['clk-prop-and', ['clk-prop-bool', '<clock>'], '<clk_prop1>', '<clk_prop2>']],
-    ['clk-prop-strong-eventually', ['clk-prop-and', ['clk-prop-bool', '<clock>'], '<clk_prop2>']]])
+        ['clk-prop-and', ['clk-prop-bool', '<clock>'], '<clk_prop1>', '<clk_prop2>']]])
+
+clock_until_with: RewriteRule = (['clk-prop-until-with', '<clk_prop1>', '<clk_prop2>'],
+    ['clk-prop-until', ['clk-prop-not', ['clk-prop-and', ['clk-prop-bool', '<clock>'], ['clk-prop-not', '<clk_prop1>']]],
+        ['clk-prop-and', ['clk-prop-bool', '<clock>'], '<clk_prop1>', '<clk_prop2>']])
+
+clock_strong_until: RewriteRule = (['clk-prop-strong-until', '<clk_prop1>', '<clk_prop2>'],
+    ['clk-prop-strong-until', ['clk-prop-not', ['clk-prop-and', ['clk-prop-bool', '<clock>'], ['clk-prop-not', '<clk_prop1>']]],
+        ['clk-prop-and', ['clk-prop-bool', '<clock>'], '<clk_prop2>']])
+
+
+
 
 # the following are basically the same
 clock_seq_bool: RewriteRule = (['clk-seq-bool', '<bool>'], ['clk-seq-concat', ['clk-seq-repeat', ['range', '0', '$'], ['clk-seq-bool', ['not', '<clock>']]], ['clk-seq-bool', ['and', '<clock>', '<bool>']]])
@@ -612,13 +622,8 @@ def rewrite_clocks_process_node(
         if isinstance(output_child_elem, PlaceholderNode):
             raise RuntimeError(f'Clock rewriting encountered Clocked primitive {current_node} with placeholder child in output container. Is there a Clocked primitive pointing to itself?')
 
-        #if type(output_container[child_placeholder_node.node_id]) is PlaceholderNode:
-        #    child_placeholder_node.instantiate_placeholder(output_child_elem)
-
 
         return added_node_id
-
-
 
 
     # default case
@@ -700,10 +705,6 @@ def rewrite_clocks_process_node(
 
     logger.debug('expression_to_add: %s', expression_to_add)
     logger.debug('local_nodes: %s', local_nodes)
-
-    #if expression_to_add[0] == 'signal':
-    #    logger.debug(corresponding_nodes)
-    #logger.debug('Current node type class: %s', current_node.type_class())
 
     # add rhs of rule to output container
     added_node_id: NodeId = parse_expression(expression_to_add, current_node.type_class(), local_nodes, output_container)
