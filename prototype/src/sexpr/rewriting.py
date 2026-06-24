@@ -621,7 +621,8 @@ def rewrite_clocks_process_node(
 
         if isinstance(output_child_elem, PlaceholderNode):
             raise RuntimeError(f'Clock rewriting encountered Clocked primitive {current_node} with placeholder child in output container. Is there a Clocked primitive pointing to itself?')
-
+        elif isinstance(output_container[child_placeholder_node.node_id], PlaceholderNode):
+            child_placeholder_node.instantiate_placeholder(output_child_elem)
 
         return added_node_id
 

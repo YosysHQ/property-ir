@@ -1,9 +1,10 @@
 import pytest
 from pathlib import Path
-from hypothesis import given, settings, Verbosity
+from hypothesis import given, settings, Verbosity, example
 
 from sexpr.base import RawSExprList, IrContainer, ClockedProperty, ClockedSequence
 from sexpr.parsing import parse_raw_sexpr, parse_document
+from sexpr.primitives import ClkSeqClocked, ClkPropClocked
 from sexpr.rewriting import rewrite_clocks
 from tests.strategies import random_ir_clocked
 
@@ -398,26 +399,43 @@ def test_clock_rewriting_same_child_twice():
     check_clock_rewriting(input_document, output_document)
 
 
-def test_clock_rewriting_random():
-    pass
+def test_clock_changes_behind_one_another():
+    input_document: str = """(document
+      (declare-input 0)
+      (parse-sexpr
+        (let-rec
+          (step0 (constant false))
+          (step1 (clk-seq-clocked step0 (clk-seq-bool 0)))
+          (step2 (clk-seq-clocked step0 step1))
+          step2)))"""
+
+    output_document: str = """(document
+        (declare-input 0)
+        (declare gclk (true))
+        (declare clk (constant false))
+        (declare seq_0 (clk-seq-concat (clk-seq-repeat (range 0 $) (clk-seq-bool (not clk)) ) (clk-seq-bool (and clk 0) ) ))
+        (parse-sexpr (clk-seq-clocked gclk (clk-seq-clocked gclk seq_0))))"""
+
+    check_clock_rewriting(input_document, output_document)
 
 
 
-# TODO test random expressions, for this they need to be wrapped in a clock-specifying primitive
+def check_clock_rewriting_no_error(doc):
+    doc_raw_sexpr: RawSExprList = parse_raw_sexpr(doc)
+    container1: IrContainer = IrContainer()
+    parse_document(doc_raw_sexpr, container1)
+    container2: IrContainer = rewrite_clocks(container1)
+    #output_directory: Path = Path('./output')
+    #container1.show_graph(output_directory / 'check_clock_rewriting_input.png')
+    #container2.show_graph(output_directory / 'check_clock_rewriting_output.png')
+    container2.canonical_id_renaming(remove_unreachable_declared_nodes=False)
 
-#def check_clock_rewriting_no_error(doc):
-#    doc_raw_sexpr: RawSExprList = parse_raw_sexpr(doc)
-#    container1: IrContainer = IrContainer()
-#    parse_document(doc_raw_sexpr, container1)
-#    container2: IrContainer = rewrite_clocks(container1)
-#    #container1.canonical_id_renaming(remove_unreachable_declared_nodes=True)
-#
-#@settings(verbosity=Verbosity.verbose, max_examples=50, deadline=500)
-#@given((random_ir_clocked(final_node_type=ClockedSequence, primitive_filter=lambda node_type: False if issubclass(node_type, ClockedProperty) else True)))
-#def test_clock_rewriting_random_seq_no_error(doc):
-#    check_clock_rewriting_no_error(doc)
-#
-#@settings(verbosity=Verbosity.verbose, max_examples=50, deadline=500)
-#@given((random_ir_clocked(final_node_type=ClockedProperty)))
-#def rest_clock_rewriting_no_error_no_error(doc):
-#    check_clock_rewriting_no_error(doc)
+@settings(verbosity=Verbosity.verbose, max_examples=50, deadline=500)
+@given((random_ir_clocked(final_node_type=ClkSeqClocked, primitive_filter=lambda node_type: False if issubclass(node_type, ClockedProperty) else True)))
+def test_clock_rewriting_random_seq_no_error(doc):
+    check_clock_rewriting_no_error(doc)
+
+@settings(verbosity=Verbosity.verbose, max_examples=50, deadline=500)
+@given((random_ir_clocked(final_node_type=ClkPropClocked)))
+def test_clock_rewriting_prop_no_error(doc):
+    check_clock_rewriting_no_error(doc)
