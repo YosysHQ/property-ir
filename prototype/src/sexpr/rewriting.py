@@ -409,7 +409,7 @@ def reduce_primitives(container: IrContainer):
 
 
 
-# CLOCK REWRITING
+# UNROLL NEXTTIME
 
 
 def get_nexttime_rewrite_rule(container: IrContainer, node_id: NodeId) -> RewriteRule:
@@ -455,6 +455,23 @@ def unrolled_nexttime_raw_sexpr(primitive_name: Literal['clk-prop-nexttime'] | L
         return [primitive_name, '1', unrolled_nexttime_raw_sexpr(primitive_name, property_name, delay-1)]
     else:
         raise ValueError('Cannot unroll primitive %s with delay %s', primitive_name, delay)
+
+
+def rewrite_nexttime_primitives(container: IrContainer):
+    """Unrolls all clk-prop-nexttime and clk-prop-strong-nexttime primitives in
+    the input container in-place such that they only use int parameter 1.
+    This is a prerequisite for clock rewriting.
+    It is not performed as part of clock rewriting to separate the part that
+    happens in-place (unrolling) and the one creating a new container (clock rewriting)."""
+
+    nexttime_rule_dict: dict[type[PropertyIrNode], RewriteRule | RewriteRuleGenerator] = dict()
+    nexttime_rule_dict[ClkPropNexttime] = get_nexttime_rewrite_rule
+    nexttime_rule_dict[ClkPropStrongNexttime] = get_nexttime_rewrite_rule
+    apply_rules(container, nexttime_rule_dict)
+
+
+
+# CLOCK REWRITING
 
 
 clock_sync_accept_on_rule: RewriteRule = (['clk-prop-sync-accept-on', '<bool>', '<clk_prop>'], ['clk-prop-accept-on', ['and', '<bool>', '<clock>'], '<clk_prop>'])
@@ -738,6 +755,7 @@ def rewrite_clocks_process_node(
 @typechecked
 def rewrite_clocks(container: IrContainer) -> IrContainer:
     """Rewrite the expression graph such that the global clock is used.
+    All clk-prop-nexttime and clk-prop-strong-nexttime must already be unrolled (can be done with rewrite_nexttime_primitives).
     Each clock-specifying primitive remains, but all pointing to the same "(constant true)".
     Each root node needs to start with a clk-prop-clocked/clk-prop-seq primitive to specify the clock.
     (This is required because assuming a clock could lead to unexpected results otherwise, especially when cycles are involved.)
@@ -753,14 +771,7 @@ def rewrite_clocks(container: IrContainer) -> IrContainer:
         if not isinstance(sink_node, ClkPropClocked) and not isinstance(sink_node, ClkSeqClocked):
             raise ValueError(f'Attempting to rewrite clocks and encountered unspecified clock at root node {sink_node}')
 
-
     output_container: IrContainer = IrContainer()
-
-    # unroll nexttime and s_nexttime
-    nexttime_rule_dict: dict[type[PropertyIrNode], RewriteRule | RewriteRuleGenerator] = dict()
-    nexttime_rule_dict[ClkPropNexttime] = get_nexttime_rewrite_rule
-    nexttime_rule_dict[ClkPropStrongNexttime] = get_nexttime_rewrite_rule
-    apply_rules(container, nexttime_rule_dict)
 
     # keep track of already rewritten nodes of the graph in a dict, for each node + clock pair (NodeId with Bool type)
     # NodeId(0) is used to represent the global clock (true) in the input container

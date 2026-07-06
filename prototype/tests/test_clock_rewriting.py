@@ -5,7 +5,7 @@ from hypothesis import given, settings, Verbosity, example
 from sexpr.base import RawSExprList, IrContainer, ClockedProperty, ClockedSequence
 from sexpr.parsing import parse_raw_sexpr, parse_document
 from sexpr.primitives import ClkPropSeq, ClkSeqClocked, ClkPropClocked
-from sexpr.rewriting import rewrite_clocks
+from sexpr.rewriting import rewrite_clocks, rewrite_nexttime_primitives
 from tests.strategies import random_ir_clocked
 
 
@@ -23,6 +23,7 @@ def check_clock_rewriting(input_document_str: str, expected_output_document_str:
     if visualize:
         container1.show_graph(output_directory / 'check_clock_rewriting_input.png')
 
+    rewrite_nexttime_primitives(container1)
     container3: IrContainer = rewrite_clocks(container1) # for output
 
     parse_document(expected_output_document, container2)
