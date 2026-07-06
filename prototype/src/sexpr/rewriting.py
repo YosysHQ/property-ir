@@ -536,9 +536,14 @@ def rewrite_clocks_process_node(
     node_id: NodeId,
     container: IrContainer,
     clock: NodeId,
+    clock_set: set[NodeId],
     output_container: IrContainer,
-    corresponding_nodes: dict[tuple[NodeId, NodeId], NodeId]) -> NodeId:
+    corresponding_nodes: dict[tuple[NodeId, NodeId], NodeId]) -> tuple[NodeId, set[NodeId]]:
+    """Perform clock rewriting of a node and its children recursively using clock.
+    Returns the node id in the output_container that corresponds to node_id in the input container.
+    clock_set is used to keep track of a set of all clocks used in the container (used for naming nodes after rewriting)."""
 
+    clock_set.add(clock)
 
     current_node: PropertyIrNode = container[node_id]
     repr_id: NodeId = container.merged_nodes.find(node_id)
@@ -564,13 +569,11 @@ def rewrite_clocks_process_node(
         #if not isinstance(output_node, PlaceholderNode) or isinstance(current_node, ClkPropClocked) or isinstance(current_node, ClkSeqClocked):
         if not isinstance(output_node, PlaceholderNode):
             logger.debug('Return already existing output corresponding node %s', corresponding_nodes[repr_id, clock])
-            return corresponding_nodes[repr_id, clock]
-
+            return corresponding_nodes[repr_id, clock], clock_set
 
 
 
     # handle special case: change clock
-
 
     if isinstance(current_node, ClkPropClocked) or isinstance(current_node, ClkSeqClocked):
         child_clk_repr: NodeId = container.merged_nodes.find(current_node.child1)
@@ -584,14 +587,14 @@ def rewrite_clocks_process_node(
             pass # will set output clock below
         elif isinstance(child_clk, Constant):
             if child_clk.value is True:
-                #corresponding_nodes[child_clk_repr, NodeId(0)] = corresponding_nodes[NodeId(0), NodeId(0)]
                 child_clk_repr = NodeId(0)
             else:
                 add_new_clock = True
         else:
             add_new_clock = True
         if add_new_clock: # a new clock is encountered and must be added
-            output_clk_node_id: NodeId = rewrite_clocks_process_node(child_clk_repr, container, NodeId(0), output_container, corresponding_nodes)
+            output_clk_node_id, child_clock_set = rewrite_clocks_process_node(child_clk_repr, container, NodeId(0), clock_set, output_container, corresponding_nodes)
+            clock_set = clock_set.union(child_clock_set)
             corresponding_nodes[child_clk_repr, NodeId(0)] = output_clk_node_id
             logger.debug('Add new clock %s corresponding to %s', output_clk_node_id, child_clk)
 
@@ -615,7 +618,8 @@ def rewrite_clocks_process_node(
 
         # make subcall for child with new clock
         logger.debug('Perform subcall under changing clock for %s with clock %s', child_elem_repr, child_clk_repr)
-        output_child_elem_id: NodeId = rewrite_clocks_process_node(child_elem_repr, container, child_clk_repr, output_container, corresponding_nodes)
+        output_child_elem_id, child_clock_set = rewrite_clocks_process_node(child_elem_repr, container, child_clk_repr, clock_set, output_container, corresponding_nodes)
+        clock_set = clock_set.union(child_clock_set)
         output_child_elem = output_container[output_child_elem_id]
         logger.debug('Subcall result is %s', output_child_elem)
 
@@ -624,7 +628,7 @@ def rewrite_clocks_process_node(
         elif isinstance(output_container[child_placeholder_node.node_id], PlaceholderNode):
             child_placeholder_node.instantiate_placeholder(output_child_elem)
 
-        return added_node_id
+        return added_node_id, clock_set
 
 
     # default case
@@ -723,9 +727,10 @@ def rewrite_clocks_process_node(
     # make subcalls for children - if it was already processed, the child node will be immediately returned
     for index, child_id in enumerate(subcall_children):
         logger.debug('Make subcall for child_id %s', child_id)
-        rewrite_clocks_process_node(child_id, container, clock, output_container, corresponding_nodes)
+        rewritten_child, child_clock_set = rewrite_clocks_process_node(child_id, container, clock, clock_set, output_container, corresponding_nodes)
+        clock_set = clock_set.union(child_clock_set)
 
-    return added_node_id
+    return added_node_id, clock_set
 
 
 
@@ -738,7 +743,9 @@ def rewrite_clocks(container: IrContainer) -> IrContainer:
     (This is required because assuming a clock could lead to unexpected results otherwise, especially when cycles are involved.)
     Parts of the graph that are used with different clocks are copied.
     Nexttime and s_nexttime get unrolled before the clocks are rewritten (in-place in the input container).
-    The result of clock rewriting is output in a new container."""
+    The result of clock rewriting is output in a new container.
+    Global node names of globally-clocked nodes are kept, global names of nodes with other clocks are modified (because they might get duplicated),
+    and local node names are removed."""
 
 
     for sink_node_id in container.sink_nodes:
@@ -754,13 +761,14 @@ def rewrite_clocks(container: IrContainer) -> IrContainer:
     nexttime_rule_dict[ClkPropNexttime] = get_nexttime_rewrite_rule
     nexttime_rule_dict[ClkPropStrongNexttime] = get_nexttime_rewrite_rule
     apply_rules(container, nexttime_rule_dict)
-    # TODO only a single pass through the graph - else there will be an infinite loop
-    # or adjust the rewriting so that the RewriteRuleGenerator can decide to leave everything as it is
 
     # keep track of already rewritten nodes of the graph in a dict, for each node + clock pair (NodeId with Bool type)
     # NodeId(0) is used to represent the global clock (true) in the input container
     # and NodeId(0) is used for Bool nodes because those are the same for any clock
     corresponding_nodes: dict[tuple[NodeId, NodeId[Bool]], NodeId] = dict()
+
+    # keep a set of all clocks in the input (needed for keeping node names)
+    clock_set: set[NodeId] = set()
 
     # add node for global clock
     output_global_clock: NodeId[Bool] = parse_expression(['true'], Bool, output_container.global_nodes, output_container)
@@ -796,12 +804,13 @@ def rewrite_clocks(container: IrContainer) -> IrContainer:
 
         logger.debug('clock rewriting process node %s', container[current_id])
 
-        output_node_id: NodeId = rewrite_clocks_process_node(current_id, container, current_clock, output_container, corresponding_nodes)
+        output_node_id, output_clock_set = rewrite_clocks_process_node(current_id, container, current_clock, clock_set, output_container, corresponding_nodes)
+        clock_set = clock_set.union(output_clock_set)
 
         # add to sink nodes of output container because it corresponds to an unnamed rooot
         output_container.sink_nodes.append(output_node_id)
 
-    # TODO: set names in output container
+    # set names in output container
 
     for (name, node_id) in container.global_nodes.items():
 
@@ -810,15 +819,18 @@ def rewrite_clocks(container: IrContainer) -> IrContainer:
         if name not in container.inner_nodes: # ignore Signal nodes without other global names
             continue
 
-        # if already global clock, add to output container
-        if (node_id, NodeId(0)) in corresponding_nodes:
-            new_name = output_container.uniquify(name)
-            output_container.global_nodes[new_name] = corresponding_nodes[(node_id, NodeId(0))]
-            output_container.node_names[new_name] = corresponding_nodes[(node_id, NodeId(0))]
-            output_container.inner_nodes[new_name] = corresponding_nodes[(node_id, NodeId(0))]
+        for clk in clock_set:
+            if clk == NodeId(0):
+                # if already global clock, add to output container as is
+                new_name = output_container.uniquify(name)
+            else:
+                # if other clock is used, add indicator of clock to node label
+                new_name = output_container.uniquify(name + '_clk_' + str(clk))
 
-        # TODO if other clock used, add indicator of clock to node label
-
+            if (node_id, clk) in corresponding_nodes:
+                output_container.global_nodes[new_name] = corresponding_nodes[(node_id, clk)]
+                output_container.node_names[new_name] = corresponding_nodes[(node_id, clk)]
+                output_container.inner_nodes[new_name] = corresponding_nodes[(node_id, clk)]
 
 
     return output_container

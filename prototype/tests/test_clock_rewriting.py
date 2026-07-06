@@ -4,7 +4,7 @@ from hypothesis import given, settings, Verbosity, example
 
 from sexpr.base import RawSExprList, IrContainer, ClockedProperty, ClockedSequence
 from sexpr.parsing import parse_raw_sexpr, parse_document
-from sexpr.primitives import ClkSeqClocked, ClkPropClocked
+from sexpr.primitives import ClkPropSeq, ClkSeqClocked, ClkPropClocked
 from sexpr.rewriting import rewrite_clocks
 from tests.strategies import random_ir_clocked
 
@@ -14,7 +14,7 @@ def check_clock_rewriting(input_document_str: str, expected_output_document_str:
     input_document: RawSExprList = parse_raw_sexpr(input_document_str)
     expected_output_document: RawSExprList = parse_raw_sexpr(expected_output_document_str)
 
-    container1: IrContainer = IrContainer() # for input and output (rewrite in-place)
+    container1: IrContainer = IrContainer() # for input
     container2: IrContainer = IrContainer() # for expected output
     parse_document(input_document, container1)
 
@@ -23,7 +23,7 @@ def check_clock_rewriting(input_document_str: str, expected_output_document_str:
     if visualize:
         container1.show_graph(output_directory / 'check_clock_rewriting_input.png')
 
-    container3: IrContainer = rewrite_clocks(container1)
+    container3: IrContainer = rewrite_clocks(container1) # for output
 
     parse_document(expected_output_document, container2)
 
@@ -415,6 +415,74 @@ def test_clock_changes_behind_one_another():
         (declare clk (constant false))
         (declare seq_0 (clk-seq-concat (clk-seq-repeat (range 0 $) (clk-seq-bool (not clk)) ) (clk-seq-bool (and clk 0) ) ))
         (parse-sexpr (clk-seq-clocked gclk (clk-seq-clocked gclk seq_0))))"""
+
+    check_clock_rewriting(input_document, output_document)
+
+
+def test_clock_rewriting_node_labels():
+    input_document: str = """(document
+        (declare-input a)
+        (declare-input c1)
+        (declare-input c2)
+        (declare p  (clk-prop-bool a))
+        (declare clocked_1 (clk-prop-clocked c1 p))
+        (declare clocked_2 (clk-prop-clocked c2 p))
+        (parse-sexpr clocked_1)
+        (parse-sexpr clocked_2)
+        )"""
+
+    output_document: str = """(document
+        (declare-input a)
+        (declare-input c1)
+        (declare-input c2)
+        (declare gclk (true))
+        (parse-sexpr (clk-prop-clocked gclk (clk-prop-seq (clk-seq-concat (clk-seq-repeat (range 0 $) (clk-seq-bool (not c1))) (clk-seq-bool (and c1 a)) ) )))
+        (parse-sexpr (clk-prop-clocked gclk (clk-prop-seq (clk-seq-concat (clk-seq-repeat (range 0 $) (clk-seq-bool (not c2))) (clk-seq-bool (and c2 a)) ) )))
+        )"""
+
+    check_clock_rewriting(input_document, output_document, visualize=False)
+
+    container1: IrContainer = IrContainer()
+    parse_document(parse_raw_sexpr(input_document), container1)
+    container2: IrContainer = rewrite_clocks(container1)
+
+    clocked_1_id = container2.global_nodes['clocked_1']
+    clocked_2_id = container2.global_nodes['clocked_2']
+    assert isinstance(container2[clocked_1_id], ClkPropClocked)
+    assert isinstance(container2[clocked_2_id], ClkPropClocked)
+    found_p_clk_labels: int = 0
+    for name, node_id in container2.global_nodes.items():
+        if name.startswith('p_clk_'):
+            found_p_clk_labels += 1
+            assert isinstance(container2[node_id], ClkPropSeq)
+    assert found_p_clk_labels == 2
+
+
+
+def test_clock_rewriting_root_node_already_finished():
+
+    input_document: str = """(document
+        (declare-input a)
+        (declare-input b)
+        (declare-input clk)
+        (declare a_and_b (clk-seq-bool (and a b)))
+        (declare inner (clk-seq-clocked clk (clk-seq-concat a_and_b a_and_b) ))
+        (declare outer (clk-seq-clocked clk inner))
+        (parse-sexpr outer)
+        (parse-sexpr inner)
+        )"""
+
+    output_document: str = """(document
+        (declare-input a)
+        (declare-input b)
+        (declare-input clk)
+        (declare gclk (true))
+        (declare seq_a_and_b (clk-seq-concat (clk-seq-repeat (range 0 $) (clk-seq-bool (not clk)) ) (clk-seq-bool (and clk (and a b)) ) ))
+        (declare inner (clk-seq-clocked gclk (clk-seq-concat seq_a_and_b seq_a_and_b)))
+        (declare outer (clk-seq-clocked gclk inner))
+        (parse-sexpr outer)
+        (parse-sexpr inner)
+    ) """
 
     check_clock_rewriting(input_document, output_document)
 
