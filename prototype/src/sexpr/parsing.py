@@ -194,7 +194,7 @@ def process_named_subexpressions(local_nodes: dict[str, NodeId], named_subexpres
         subexpr_id: NodeId = inner_local_nodes[name]
         subexpr_node = ir_container[subexpr_id]
         if isinstance(subexpr_node, PlaceholderNode):
-            raise ValueError(f'Subexpression ({name} {subexpr}) in let-rec expression corresponds to uninstantiated node')
+            raise ValueError(f'Subexpression ({name} {subexpr}) in let-rec or declare-rec corresponds to uninstantiated node')
     return inner_local_nodes
 
 
@@ -310,7 +310,7 @@ def parse_declare_rec(expression_list: list[RawSExprList], ir_container: IrConta
                 named_subexpressions.append((name, subexpr))
                 new_global_names.append(name)
             case _:
-                raise ValueError(f"Expected (name expression) or (declare name expression) in let-rec instead of {expr}")
+                raise ValueError(f"Expected (name expression) or (declare name expression) in declare-rec instead of {expr}")
 
     inner_local_nodes: dict[str, NodeId] = process_named_subexpressions(local_nodes, named_subexpressions, ir_container)
 
