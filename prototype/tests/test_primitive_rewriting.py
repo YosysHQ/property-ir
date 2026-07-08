@@ -1,3 +1,4 @@
+from re import L
 import pytest
 from hypothesis import given, settings, Verbosity, example
 
@@ -8,8 +9,8 @@ from sexpr.base import Bool, ClockedSequence, IrContainer, PropertyIrNode, NodeI
 from sexpr.parsing import parse_document
 from sexpr.base import RawSExprList, ClockedProperty
 from sexpr.parsing import parse_raw_sexpr
-from sexpr.primitives import ClkPropEventually, FallingGclk, RisingGclk, And, ClkPropAlwaysRanged, ClkPropStrongEventuallyRanged
-from sexpr.rewriting import RewriteRuleGenerator, replace_single_node, RewriteRule, apply_rules, get_ranged_rewrite_rule, reduce_primitives, prepare_primitive_rewrite_rule_dict
+from sexpr.primitives import ClkPropEventually, FallingGclk, RisingGclk, And, ClkPropAlwaysRanged, ClkPropStrongEventuallyRanged, ClkSeqAnd
+from sexpr.rewriting import RewriteRuleGenerator, get_seq_and_rewrite_rule, replace_single_node, RewriteRule, apply_rules, get_ranged_rewrite_rule, reduce_primitives, prepare_primitive_rewrite_rule_dict
 from tests.strategies import random_ir_clocked, random_ir
 from tests.helpers import check_primitive_absence
 
@@ -46,7 +47,10 @@ def check_replace_single_node(input_document_str: str, expected_output_document_
 
 
 
-def check_apply_rules(input_document_str: str, expected_output_document_str: str, rules: dict[type[PropertyIrNode], RewriteRule | Callable[[IrContainer, NodeId], RewriteRule]]):
+def check_apply_rules(input_document_str: str,
+        expected_output_document_str: str,
+        rules: dict[type[PropertyIrNode], RewriteRule | Callable[[IrContainer, NodeId], RewriteRule]],
+        visualize = False):
 
     input_document: RawSExprList = parse_raw_sexpr(input_document_str)
     expected_output_document: RawSExprList = parse_raw_sexpr(expected_output_document_str)
@@ -62,9 +66,10 @@ def check_apply_rules(input_document_str: str, expected_output_document_str: str
     container1.canonical_id_renaming()
     container2.canonical_id_renaming()
 
-    #output_directory: Path = Path('./output')
-    #container2.show_graph(output_directory / 'apply_rules_expected_output.png')
-    #container1.show_graph(output_directory / 'apply_rules_output_after_renaming.png')
+    if visualize:
+        output_directory: Path = Path('./output')
+        container2.show_graph(output_directory / 'apply_rules_expected_output.png')
+        container1.show_graph(output_directory / 'apply_rules_output_after_renaming.png')
 
     assert container1 == container2
 
@@ -260,6 +265,49 @@ def test_apply_ranged_rules():
     check_apply_rules(input_document_str, output_document_str, rule_dict)
 
 
+def test_seq_and_rule():
+    rule_dict: dict[type, RewriteRule | RewriteRuleGenerator] = { ClkSeqAnd: get_seq_and_rewrite_rule }
+
+    input_document_str: str = """(document
+        (declare-input a) (declare-input b) (declare-input c)
+        (declare seq1 (clk-seq-bool a))
+        (declare seq2 (clk-seq-bool b))
+        (declare seq3 (clk-seq-bool c))
+        (declare p (
+            clk-seq-and seq1 seq2 seq3
+        ))
+        (parse-sexpr p)
+    )
+    """
+
+    output_document_str: str = """(document
+        (declare-input a) (declare-input b) (declare-input c)
+        (declare seq1 (clk-seq-bool a))
+        (declare seq2 (clk-seq-bool b))
+        (declare seq3 (clk-seq-bool c))
+        (declare p (
+            clk-seq-or
+                (clk-seq-intersect
+                    seq1
+                    (clk-seq-concat seq2 (clk-seq-repeat (range 0 $) (clk-seq-bool (true)) ))
+                    (clk-seq-concat seq3 (clk-seq-repeat (range 0 $) (clk-seq-bool (true)) ))
+                )
+                (clk-seq-intersect
+                    (clk-seq-concat seq1 (clk-seq-repeat (range 0 $) (clk-seq-bool (true)) ))
+                    seq2
+                    (clk-seq-concat seq3 (clk-seq-repeat (range 0 $) (clk-seq-bool (true)) ))
+                )
+                (clk-seq-intersect
+                    (clk-seq-concat seq1 (clk-seq-repeat (range 0 $) (clk-seq-bool (true)) ))
+                    (clk-seq-concat seq2 (clk-seq-repeat (range 0 $) (clk-seq-bool (true)) ))
+                    seq3
+                )
+        ))
+        (parse-sexpr p)
+    )
+    """
+
+    check_apply_rules(input_document_str, output_document_str, rule_dict)
 
 
 forbidden_primitives: set[type[PropertyIrNode]] = set(prepare_primitive_rewrite_rule_dict().keys())

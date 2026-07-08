@@ -6,7 +6,7 @@ from typeguard import typechecked
 from sexpr.base import ClockedProperty, PropertyIrNode, PlaceholderNode, IrContainer, RawSExpr, NodeId, RawSExprList, Signal, LiteralType, Property, Sequence, Bool, Range, BoundedRange
 from sexpr.primitives import And, ClkPropAlwaysRanged, ClkPropClocked, ClkPropEventually, ClkPropStrongEventuallyRanged, ClkSeqClocked, Constant, FutureGclk, Not, Or, Initial, PropAcceptOn, PropNexttime, PropAnd, PropNot, PropOr, PropStrong, PropWeak, PropWeakBool, PropStrongBool
 from sexpr.primitives import PropOverlappedFollowedBy, PropOverlappedImplication, PropRejectOn, PropStrongNexttime, PropUntil, PropStrongUntilWith, PropRefuted
-from sexpr.primitives import ClkPropNexttime, ClkPropStrongNexttime
+from sexpr.primitives import ClkPropNexttime, ClkPropStrongNexttime, ClkSeqAnd
 from sexpr.parsing import get_op_symbols, parse_expression
 
 
@@ -60,10 +60,6 @@ goto_repeat_rule: RewriteRule = (['clk-seq-goto-repeat', '<range>', '<bool>'],
 nonconsecutive_repeat_rule: RewriteRule = (['clk-seq-nonconsecutive-repeat', '<range>', '<bool>'],
     ['clk-seq-concat', ['clk-seq-goto-repeat', '<range>', '<bool>'], ['clk-seq-repeat', ['range', '0', '$'], ['clk-seq-bool', ['not', '<bool>']]]])
 
-# clk-seq-and might be more efficient to implement directly instead of rewriting (would be rewritten as intersect + delay)
-# and the use of any number of arguments makes this rule more complex than a normal rewrite rule
-# seq_and_rule: RewriteRule
-
 throughout_rule: RewriteRule = (['clk-seq-throughout', '<bool>', '<clk_seq>'],
     ['clk-seq-intersect', ['clk-seq-repeat', ['range', '0', '$'], ['clk-seq-bool', '<bool>']], '<clk_seq>'])
 
@@ -74,6 +70,9 @@ within_rule: RewriteRule = (['clk-seq-within', '<clk_seq1>', '<clk_seq2>'],
             '<clk_seq2>',
             ['clk-seq-repeat', ['range', '0', '$'], ['clk-seq-bool', ['true']]]],
         '<clk_seq2>'])
+
+# clk-seq-and can have any number of arguments which makes this rule more complex than a normal rewrite rule
+# get_seq_and_rewrite_rule implements this
 
 
 # Property primitives
@@ -88,8 +87,8 @@ if_else_rule: RewriteRule = (['clk-prop-if-else', '<bool>', '<clk_prop1>', '<clk
 
 # this rule is different for clocked and unclocked properties
 # the rewriting rules are mostly defined for unclocked properties
-# rewrite clock first?
 # the following is for unclocked properties
+# rewrite clocks before rewriting primitives (except for nexttime, which needs to be unrolled first)
 non_overlapped_implication_rule: RewriteRule = (['clk-prop-non-overlapped-implication', '<clk_seq>', '<clk_prop>'],
     ['clk-prop-overlapped-implication', ['clk-seq-concat', '<clk_seq>', ['clk-seq-bool', ['true']]], '<clk_prop>'])
 
@@ -163,6 +162,38 @@ def get_ranged_rewrite_rule(container: IrContainer, node_id: NodeId) -> RewriteR
 
 
 
+def get_seq_and_rewrite_rule(container: IrContainer, node_id: NodeId) -> RewriteRule:
+    """clk-seq-and gets rewritten to a disjunction of clk-seq-intersect with all except for one of
+    the sequences being extended by any number of symbols. This cannot be written
+    as a single rewriting rule because they can have a variable number of children."""
+
+    node: PropertyIrNode = container[node_id]
+
+    if not isinstance(node, ClkSeqAnd):
+        raise TypeError(f'Cannot generate clk-seq-and rewrite rule for node {node} with wrong node type')
+
+    children: list[NodeId] = getattr(node, 'children')
+    children_identifiers: list[str] = ['clk_seq' + str(i) for i in range(len(children))]
+
+    lhs: RawSExpr = ['clk-seq-and']
+    lhs += children_identifiers
+
+    rhs: RawSExpr = ['clk-seq-or']
+
+    for child_identifier_with_match in children_identifiers:
+        intersect_expr: RawSExpr = ['clk-seq-intersect']
+        for child_identifier in children_identifiers:
+            if child_identifier == child_identifier_with_match:
+                intersect_expr.append(child_identifier_with_match)
+            else:
+                intersect_expr.append(['clk-seq-concat', child_identifier, ['clk-seq-repeat', ['range', '0', '$'], ['clk-seq-bool', ['true']]]])
+        rhs.append(intersect_expr)
+
+    return (lhs, rhs)
+
+
+
+
 
 def prepare_primitive_rewrite_rule_dict() -> dict[type[PropertyIrNode], RewriteRule | RewriteRuleGenerator]:
     """Returns the dict associating primitives with rewrite rules to apply in order to remove derived primitives.
@@ -184,6 +215,8 @@ def prepare_primitive_rewrite_rule_dict() -> dict[type[PropertyIrNode], RewriteR
     rule_dict[ClkPropAlwaysRanged] = get_ranged_rewrite_rule
     rule_dict[ClkPropStrongEventuallyRanged] = get_ranged_rewrite_rule
     rule_dict[ClkPropEventually] = get_ranged_rewrite_rule
+
+    rule_dict[ClkSeqAnd] = get_seq_and_rewrite_rule
 
     return rule_dict
 
@@ -208,9 +241,21 @@ def replace_single_node(container: IrContainer, node_id: NodeId, rule: RewriteRu
     # get children of node to replace
     # and put them into dict associating with identifiers in rule
 
+    # check whether signature of primitive and LHS rule argument count matches
+    # if the rule applies to a primitive with a list type argument, the rule may have a varying number of LHS argument identifiers
+    list_needs_no_expansion: bool = False
+    argument_count_error: bool = False
     signature = type(node_to_replace).signature()
     if len(signature) != len(arg_identifiers):
-        raise ValueError(f'Number of argument identifiers in {rule} does not match with child count of node {node_id}')
+        if len(signature) == 1:
+            if get_origin(signature[0]) is list:
+                list_needs_no_expansion = True
+            else:
+                argument_count_error = True
+        else:
+            argument_count_error = True
+    if argument_count_error:
+            raise ValueError(f'Number of argument identifiers in {rule} does not match with child count of node {node_id}')
 
     children_dict: dict[str, NodeId | LiteralType] = dict() # individually named children
     children_list: list[NodeId] = list() # children list of arbitrary length (for primitives like 'and', 'or', etc.)
@@ -219,13 +264,18 @@ def replace_single_node(container: IrContainer, node_id: NodeId, rule: RewriteRu
     for index, field in enumerate(node_to_replace.get_child_fields()):
         field_type: type = signature[index]
         if get_origin(field_type) is list:
-            if len(arg_identifiers) != 1:
-                raise ValueError(f'Rewrite rule {rule} for node {node_to_replace} with list-type argument must have exactly 1 argument identifier')
-            children_list_identifier = arg_identifiers[0]
+            if not list_needs_no_expansion:
+                assert len(arg_identifiers) == 1
+                children_list_identifier = arg_identifiers[0]
             children_list += getattr(node_to_replace, field.name)
         else:
             assert arg_identifiers[index] not in children_dict, f'Duplicate identifier {arg_identifiers[index]} in LHS of rewrite rule {rule}'
             children_dict[arg_identifiers[index]] = getattr(node_to_replace, field.name)
+
+    # check whether LHS rule argument count and number of children of node matches (list type argument without expansion)
+    if list_needs_no_expansion and len(arg_identifiers) != len(children_list):
+        raise ValueError(f'Number of argument identifiers in {rule} does not match with child count of node {node_id}')
+
 
     # prepare dicts to replace literals in RHS of rewrite rule
     # (because they are not PropertyIr nodes, they cannot be bound to container identifiers)
@@ -234,17 +284,23 @@ def replace_single_node(container: IrContainer, node_id: NodeId, rule: RewriteRu
     children_node_dict: dict[str, NodeId] = dict() # map identifiers used in LHS to actual child nodes
     literals_to_replace: dict[str, RawSExpr] = dict() # map literal identifiers used in LHS to actual literals
 
-    for identifier, child_elem in children_dict.items():
+    for identifier, child_elem in children_dict.items(): # non-list type argument case
         if isinstance(child_elem, NodeId):
             children_node_dict[identifier] = child_elem
         elif isinstance(child_elem, LiteralType.__value__):
             literal_raw_sexpr: RawSExpr = container._generate_literal_raw_sexpr(child_elem)
             literals_to_replace[identifier] = literal_raw_sexpr
 
-    if children_list_identifier is not None:
+    if children_list_identifier is not None: # list type argument with expansion
         for index, elem in enumerate(children_list):
             identifier: str = children_list_identifier + str(index)
             children_node_dict[identifier] = elem
+
+    elif list_needs_no_expansion: # list type argument without expansion
+        for index, elem in enumerate(children_list):
+            identifier: str = arg_identifiers[index]
+            children_node_dict[identifier] = elem
+
 
     uniquified_children_node_dict: dict[str, NodeId] = dict() # map uniquified name to node id - only used for debug information
     local_nodes: dict[str, NodeId] = dict(container.global_nodes) # node identifier information handed to parse_expression
