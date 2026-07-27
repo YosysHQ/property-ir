@@ -3,10 +3,12 @@ from typing import Callable, get_origin, Any, Optional, Literal
 import logging
 from typeguard import typechecked
 
-from sexpr.base import ClockedProperty, PropertyIrNode, PlaceholderNode, IrContainer, RawSExpr, NodeId, RawSExprList, Signal, LiteralType, Property, Sequence, Bool, Range, BoundedRange
-from sexpr.primitives import And, ClkPropAlwaysRanged, ClkPropClocked, ClkPropEventually, ClkPropStrongEventuallyRanged, ClkSeqClocked, Constant, FutureGclk, Not, Or, Initial, PropAcceptOn, PropNexttime, PropAnd, PropNot, PropOr, PropStrong, PropWeak, PropWeakBool, PropStrongBool
+from sexpr.base import ClockedSequence, ClockedProperty, PropertyIrNode, PlaceholderNode, IrContainer, RawSExpr, NodeId, RawSExprList, Signal, LiteralType, Property, Sequence, Bool, Range, BoundedRange
+from sexpr.primitives import And, ClkPropAlwaysRanged, ClkPropClocked, ClkPropEventually, ClkPropStrongEventuallyRanged
+from sexpr.primitives import ClkSeqClocked, ClkSeqConcat, ClkSeqFirstMatch, ClkSeqIntersect, ClkSeqRepeat, Constant, FutureGclk
+from sexpr.primitives import Not, Or, Initial, PropAcceptOn, PropNexttime, PropAnd, PropNot, PropOr, PropStrong, PropWeak, PropWeakBool, PropStrongBool
 from sexpr.primitives import PropOverlappedFollowedBy, PropOverlappedImplication, PropRejectOn, PropStrongNexttime, PropUntil, PropStrongUntilWith, PropRefuted
-from sexpr.primitives import ClkPropNexttime, ClkPropStrongNexttime, ClkSeqAnd
+from sexpr.primitives import ClkPropNexttime, ClkPropStrongNexttime, ClkSeqAnd, ClkSeqOr, ClkSeqFusion, ClkSeqBool
 from sexpr.parsing import get_op_symbols, parse_expression
 
 
@@ -906,9 +908,219 @@ def rewrite_clocks(container: IrContainer) -> IrContainer:
 
 # REMOVE EMPTY SEQUENCES
 
-def remove_empty_sequences(container: IrContainer):
-    """Rewrite the expression graph such that no subsequences have empty matches."""
-    pass
+def remove_empty_matches_process_node(
+    node_id: NodeId,
+    container: IrContainer,
+    output_container: IrContainer,
+    corresponding_nodes: dict[NodeId, NodeId],
+    admits_empty: dict[NodeId, bool],
+    admits_only_empty: dict[NodeId, bool],
+    no_match: dict[NodeId, bool]) -> NodeId:
+
+
+    # for each node, depending on the primitive and child values of the precomputed dicts, create a corresponding node
+    # at that point, the corresponding child nodes might not exist yet, so create a placeholder for the parent
+    # and instantiate the placeholder once the children have been computed
+
+    return NodeId(0)
+
+
+
+def precompute_node_info_process_node(
+    node_id: NodeId,
+    container: IrContainer,
+    admits_empty: dict[NodeId, bool],
+    admits_only_empty: dict[NodeId, bool],
+    no_match: dict[NodeId, bool]):
+    """Used by precompute_node_info. Fill the dicts admits_empty, admits_only_empty,
+    and no_match for node_id and all ClkSeq nodes reachable from it.
+    All used node ids are representatives of merged nodes.
+    ClkProp and Bool nodes get assigned False when they are visited.
+    Calling on Bool nodes does not trigger subcalls for child nodes."""
+
+    current_node: PropertyIrNode = container[node_id]
+    current_id_repr: NodeId = container.merged_nodes.find(node_id)
+
+    if current_id_repr in admits_empty:
+        return
+
+    if isinstance(current_node, Bool):
+        admits_empty[current_id_repr] = False
+        admits_only_empty[current_id_repr] = False
+        no_match[current_id_repr] = False
+        return
+
+    elif isinstance(current_node, ClockedProperty):
+        admits_empty[current_id_repr] = False
+        admits_only_empty[current_id_repr] = False
+        no_match[current_id_repr] = False
+        for child_id in current_node.get_child_ids():
+            precompute_node_info_process_node(child_id, container, admits_empty, admits_only_empty, no_match)
+        return
+
+    elif isinstance(current_node, ClockedSequence):
+
+        if isinstance(current_node, ClkSeqConcat) or \
+            isinstance(current_node, ClkSeqFusion) or \
+            isinstance(current_node, ClkSeqOr) or \
+            isinstance(current_node, ClkSeqIntersect):
+
+            child_id_list: list[NodeId] = current_node.children
+            admits_empty_set: set[bool] = set()
+            admits_only_empty_set: set[bool] = set()
+            no_match_set: set[bool] = set()
+            for child_id in child_id_list:
+                child_id_repr: NodeId = container.merged_nodes.find(child_id)
+                precompute_node_info_process_node(child_id_repr, container, admits_empty, admits_only_empty, no_match)
+                admits_empty_set.add(admits_empty[child_id_repr])
+                admits_only_empty_set.add(admits_only_empty[child_id_repr])
+                no_match_set.add(no_match[child_id_repr])
+
+            if isinstance(current_node, ClkSeqConcat):
+                admits_empty[current_id_repr] = any(admits_empty_set)
+                admits_only_empty[current_id_repr] = all(admits_only_empty_set)
+                no_match[current_id_repr] = all(no_match_set)
+                return
+
+            elif isinstance(current_node, ClkSeqFusion):
+                admits_empty[current_id_repr] = False
+                admits_only_empty[current_id_repr] = False
+                # note: here we could check the lengths of argument sequences for further optimizations
+                no_match[current_id_repr] = any(no_match_set)
+                return
+
+            elif isinstance(current_node, ClkSeqOr):
+                admits_empty[current_id_repr] = any(admits_empty_set)
+                admits_only_empty[current_id_repr] = all(admits_only_empty_set)
+                no_match[current_id_repr] = all(no_match_set)
+                return
+
+            elif isinstance(current_node, ClkSeqIntersect):
+                admits_empty[current_id_repr] = all(admits_empty_set)
+                admits_only_empty[current_id_repr] = all(admits_only_empty_set)
+                no_match[current_id_repr] = any(no_match_set)
+                return
+
+        elif isinstance(current_node, ClkSeqBool):
+            admits_empty[current_id_repr] = False
+            admits_only_empty[current_id_repr] = False
+            # note: here we could check if the Bool is a contradiction for further optimizations
+            no_match[current_id_repr] = False
+            return
+
+        elif isinstance(current_node, ClkSeqClocked):
+            child_id = current_node.child2
+            child_id_repr: NodeId = container.merged_nodes.find(child_id)
+            precompute_node_info_process_node(child_id_repr, container, admits_empty, admits_only_empty, no_match)
+            admits_empty[current_id_repr] = admits_empty[child_id_repr]
+            admits_only_empty[current_id_repr] = admits_only_empty[child_id_repr]
+            no_match[current_id_repr] = no_match[child_id_repr]
+            return
+
+        elif isinstance(current_node, ClkSeqRepeat):
+            rng: Range = current_node.child1
+            child_id: NodeId = current_node.child2
+            child_id_repr: NodeId = container.merged_nodes.find(child_id)
+            precompute_node_info_process_node(child_id_repr, container, admits_empty, admits_only_empty, no_match)
+            admits_only_empty[current_id_repr] = admits_only_empty[child_id_repr]
+            if rng.lower_bound == 0:
+                no_match[current_id_repr] = False
+                admits_empty[current_id_repr] = True
+                if rng.upper_bound.value == 0:
+                    admits_only_empty[current_id_repr] = True
+            else:
+                no_match[current_id_repr] = no_match[child_id_repr]
+                admits_empty[current_id_repr] = admits_empty[child_id_repr]
+            return
+
+        elif isinstance(current_node, ClkSeqFirstMatch):
+            child_id = current_node.child
+            child_id_repr: NodeId = container.merged_nodes.find(child_id)
+            precompute_node_info_process_node(child_id_repr, container, admits_empty, admits_only_empty, no_match)
+            admits_empty[current_id_repr] = admits_empty[child_id_repr]
+            admits_only_empty[current_id_repr] = admits_empty[child_id_repr]
+            no_match[current_id_repr] = no_match[child_id_repr]
+            return
+
+        else:
+            raise RuntimeError(f'Cannot remove empty sequence matches before rewriting derived primitives, but encountered node {current_node}')
+
+    else:
+        raise RuntimeError(f'Can remove empty sequence matches only for clocked sequences and properties, but encountered node {current_node}')
+
+
+def precompute_node_info(
+    container: IrContainer) -> tuple[dict[NodeId, bool], dict[NodeId, bool], dict[NodeId, bool]]:
+    """Precompute the dicts admits_empty, admits_only_empty, and no_match that that
+    assigns each ClkSeq node a bool value with information about matches. Used by
+    remove_empty_matches_process_node to remove empty sequence matches."""
+
+    admits_empty: dict[NodeId, bool] = dict()
+    admits_only_empty: dict[NodeId, bool] = dict()
+    no_match: dict[NodeId, bool] = dict()
+
+    # question: compute all possible sequence lengths for additional optimizations by finding more no_match sequences?
+
+    nodes_to_process: deque[NodeId] = deque(container.sink_nodes)
+
+    while len(nodes_to_process) > 0:
+
+        current_id: NodeId = nodes_to_process.popleft()
+        current_id_repr: NodeId = container.merged_nodes.find(current_id)
+        if current_id_repr not in admits_empty:
+            precompute_node_info_process_node(current_id_repr, container, admits_empty, admits_only_empty, no_match)
+
+    return (admits_empty, admits_only_empty, no_match)
+
+
+def remove_empty_matches(container: IrContainer) -> IrContainer:
+    """Rewrite the expression graph such that no subsequences have empty matches.
+    Must be called after clock rewriting because that introduces empty matches."""
+
+    admits_empty, admits_only_empty, no_match = precompute_node_info(container)
+
+    corresponding_nodes: dict[NodeId, NodeId] = dict()
+
+    # add signals to output container
+    output_container: IrContainer = IrContainer()
+    for name, node_id in container.source_nodes.items():
+        signal_repr_id = container.merged_nodes.find(node_id)
+        signal_node = output_container.add_signal_node(name)
+        corresponding_nodes[(signal_repr_id)] = signal_node.node_id
+        logger.debug('Added Signal node %s', signal_node)
+        output_container.global_nodes[name] = signal_node.node_id
+        output_container.node_names[name] = signal_node.node_id
+        output_container.source_nodes[name] = (signal_node.node_id)
+
+    # for each root node call remove_empty_matches_process_node
+    # and add resulting output node to output_container root nodes
+    nodes_to_process: deque[NodeId] = deque(container.sink_nodes)
+
+    while len(nodes_to_process) > 0:
+
+        current_id: NodeId = nodes_to_process.popleft()
+
+        if current_id in corresponding_nodes:
+            corresponding_id = corresponding_nodes[current_id]
+            output_container.sink_nodes.append(corresponding_id)
+            continue
+
+        logger.debug('Empty match removal process root node %s', container[current_id])
+
+        output_node_id: NodeId = remove_empty_matches_process_node(current_id, container, output_container, corresponding_nodes, admits_empty, admits_only_empty, no_match)
+
+        output_container.sink_nodes.append(output_node_id)
+
+
+
+    # TODO add node names to output container
+
+    return output_container
+
+
+
+
+
 
 
 # ADD WEAK/STRONG
