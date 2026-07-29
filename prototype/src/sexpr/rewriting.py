@@ -5,7 +5,7 @@ import logging
 from typeguard import typechecked
 
 from sexpr.base import ClockedSequence, ClockedProperty, PropertyIrNode, PlaceholderNode, IrContainer, RawSExpr, NodeId, RawSExprList, Signal, LiteralType, Property, Sequence, Bool, Range, BoundedRange, IntOrUnbounded
-from sexpr.primitives import And, ClkPropAlwaysRanged, ClkPropClocked, ClkPropEventually, ClkPropOverlappedFollowedBy, ClkPropOverlappedImplication, ClkPropStrong, ClkPropStrongEventuallyRanged, ClkPropWeak
+from sexpr.primitives import And, ClkPropAlwaysRanged, ClkPropClocked, ClkPropEventually, ClkPropOverlappedFollowedBy, ClkPropOverlappedImplication, ClkPropSeq, ClkPropStrong, ClkPropStrongEventuallyRanged, ClkPropWeak, ClkSeqNoMatch
 from sexpr.primitives import ClkSeqClocked, ClkSeqConcat, ClkSeqFirstMatch, ClkSeqIntersect, ClkSeqRepeat, Constant, FutureGclk
 from sexpr.primitives import Not, Or, Initial, PropAcceptOn, PropNexttime, PropAnd, PropNot, PropOr, PropStrong, PropWeak, PropWeakBool, PropStrongBool
 from sexpr.primitives import PropOverlappedFollowedBy, PropOverlappedImplication, PropRejectOn, PropStrongNexttime, PropUntil, PropStrongUntilWith, PropRefuted
@@ -929,15 +929,61 @@ def remove_empty_matches_process_node(
     if current_id_repr in corresponding_nodes:
         return corresponding_nodes[current_id_repr]
 
-    # the following 4 primitives are the only property primitives taking a sequence argument
-    # if sequence property has only empty match this should cause an error, or add no-match primitive?
-    if isinstance(current_node, ClkPropStrong) or isinstance(current_node, ClkPropWeak):
-        pass
-        # TODO
-    # What about overlapped implication/followed-by with only empty match or no match?
+    # the following 5 primitives are the only property primitives taking a sequence argument
+    # sequence properties shall not admit empty matches
+    # so we will remove empty matches, which may result in a no-match sequence
+    if isinstance(current_node, ClkPropStrong) or isinstance(current_node, ClkPropWeak) or isinstance(current_node, ClkPropSeq):
+        child_id: NodeId = current_node.child
+        child_id_repr = container.merged_nodes.find(child_id)
+        if no_match[child_id_repr] or admits_only_empty[child_id_repr]:
+            if child_id_repr in corresponding_nodes:
+                no_match_node_id: NodeId = corresponding_nodes[child_id_repr]
+                assert isinstance(output_container[no_match_node_id], ClkSeqNoMatch)
+            else:
+                no_match_node: PropertyIrNode = output_container.add_node_by_kwargs(ClkSeqNoMatch, dict())
+                no_match_node_id: NodeId = no_match_node.node_id
+                corresponding_nodes[child_id_repr] = no_match_node_id
+            added_node: PropertyIrNode = output_container.add_node_by_kwargs(current_node.node_type(), {'child': no_match_node_id})
+            corresponding_nodes[current_id_repr] = added_node.node_id
+            return added_node.node_id
+        else:
+            placeholder: PropertyIrNode = container.add_placeholder_node()
+            placeholder_id = placeholder.node_id
+            corresponding_nodes[current_id_repr] = placeholder_id
+            output_child_id: NodeId = remove_empty_matches_process_node(child_id_repr, container, output_container, corresponding_nodes, admits_empty, admits_only_empty, no_match)
+            added_node: PropertyIrNode = output_container.add_node_by_kwargs(current_node.node_type(), {'child': output_child_id})
+            placeholder.instantiate_placeholder(added_node)
+            return placeholder_id
+
+    # question: replace the RHS of overlapped implication/followed-by to some default expression if LHS can have no matches?
+    # or can we replace the whole expression by some default expression with the same semantics?
+    # overlapped implication is vacuously true, and overlapped followed-by fails from the beginning (because it cannot be fulfilled in the future)
     elif isinstance(current_node, ClkPropOverlappedImplication) or isinstance(current_node, ClkPropOverlappedFollowedBy):
-        pass
-        # TODO
+        placeholder: PropertyIrNode = container.add_placeholder_node()
+        placeholder_id = placeholder.node_id
+        corresponding_nodes[current_id_repr] = placeholder_id
+
+        seq_child_id: NodeId = current_node.child1
+        seq_child_id_repr = container.merged_nodes.find(seq_child_id)
+        prop_child_id: NodeId = current_node.child2
+        prop_child_id_repr = container.merged_nodes.find(prop_child_id)
+
+        if no_match[seq_child_id_repr] or admits_only_empty[seq_child_id_repr]:
+            if seq_child_id_repr in corresponding_nodes:
+                no_match_node_id: NodeId = corresponding_nodes[seq_child_id_repr]
+                assert isinstance(output_container[no_match_node_id], ClkSeqNoMatch)
+            else:
+                no_match_node: PropertyIrNode = output_container.add_node_by_kwargs(ClkSeqNoMatch, dict())
+                no_match_node_id: NodeId = no_match_node.node_id
+                corresponding_nodes[seq_child_id_repr] = no_match_node_id
+
+        seq_output_child_id: NodeId = remove_empty_matches_process_node(seq_child_id_repr, container, output_container, corresponding_nodes, admits_empty, admits_only_empty, no_match)
+        prop_output_child_id: NodeId = remove_empty_matches_process_node(prop_child_id_repr, container, output_container, corresponding_nodes, admits_empty, admits_only_empty, no_match)
+
+        added_node: PropertyIrNode = output_container.add_node_by_kwargs(current_node.node_type(), {'child1': seq_output_child_id, 'child2': prop_output_child_id})
+        placeholder.instantiate_placeholder(added_node)
+        return placeholder_id
+
 
     # leave the node for these types as-is and perform subcall for children
     elif isinstance(current_node, Bool) or isinstance(current_node, ClockedProperty) or \
@@ -947,20 +993,33 @@ def remove_empty_matches_process_node(
 
         placeholder: PropertyIrNode = container.add_placeholder_node()
         placeholder_id = placeholder.node_id
+        corresponding_nodes[current_id_repr] = placeholder_id
 
-        #for child_id in current_node.get_child_ids():
-        #    pass
+        signature = type(current_node).signature()
+        kwargs: dict[str, Any] = {}
 
-        ## case ClkSeqBool:
-        #child_id: NodeId = current_node.child
-        #child_id_repr = container.merged_nodes.find(child_id)
-        #remove_empty_matches_process_node(child_id_repr, container, output_container, corresponding_nodes, admits_empty, admits_only_empty, no_match)
+        for index, field in enumerate(current_node.get_child_fields()):
+            field_type: type = signature[index]
+            if get_origin(field_type) is list:
+                list_elems = getattr(current_node, field.name)
+                output_child_list: list[NodeId] = []
+                for child_id in list_elems:
+                    output_child_id: NodeId = remove_empty_matches_process_node(child_id, container, output_container, corresponding_nodes, admits_empty, admits_only_empty, no_match)
+                    output_child_list.append(output_child_id)
+                kwargs[field.name] = output_child_list
 
-        #added_node = output_container.add_node_by_kwargs(ClkSeqBool, {'child': corresponding_nodes[child_id_repr]})
-        #placeholder.instantiate_placeholder(added_node)
-        #return placeholder_id
+            elif issubclass(field_type, PropertyIrNode):
+                child_id = getattr(current_node, field.name)
+                output_child_id: NodeId = remove_empty_matches_process_node(child_id, container, output_container, corresponding_nodes, admits_empty, admits_only_empty, no_match)
+                kwargs[field.name] = output_child_id
 
-        # TODO
+            elif issubclass(field_type, LiteralType.__value__):
+                child_literal = getattr(current_node, field.name)
+                kwargs[field.name] = child_literal
+
+        added_node: PropertyIrNode = output_container.add_node_by_kwargs(current_node.node_type(), kwargs)
+        placeholder.instantiate_placeholder(added_node)
+        return placeholder_id
 
 
     # at this points we assume that the current node has a nonempty part
@@ -1012,14 +1071,11 @@ def remove_empty_matches_process_node(
                     else:
                         added_node = output_container.add_node_by_kwargs(ClkSeqOr, {'children': concat_node_list})
 
-                elif isinstance(current_node, ClkSeqFusion):
-                    added_node = output_container.add_node_by_kwargs(ClkSeqFusion, {'children': child_corresponding_ids})
-                elif isinstance(current_node, ClkSeqOr):
-                    added_node = output_container.add_node_by_kwargs(ClkSeqOr, {'children': child_corresponding_ids})
-                elif isinstance(current_node, ClkSeqIntersect):
-                    added_node = output_container.add_node_by_kwargs(ClkSeqIntersect, {'children': child_corresponding_ids})
+                else: # ClkSeqFusion, ClkSeqOr, ClkSeqIntersect
+                    added_node = output_container.add_node_by_kwargs(current_node.node_type(), {'children': child_corresponding_ids})
 
                 placeholder.instantiate_placeholder(added_node)
+
             return placeholder_id
 
 
@@ -1027,13 +1083,13 @@ def remove_empty_matches_process_node(
             input_range: Range = current_node.child1
             child_id: NodeId = current_node.child2
             child_id_repr = container.merged_nodes.find(child_id)
-            remove_empty_matches_process_node(child_id_repr, container, output_container, corresponding_nodes, admits_empty, admits_only_empty, no_match)
+            output_child_id: NodeId = remove_empty_matches_process_node(child_id_repr, container, output_container, corresponding_nodes, admits_empty, admits_only_empty, no_match)
             assert input_range.upper_bound != 0
             if input_range.lower_bound == 0:
                 output_range: Range = Range(1, IntOrUnbounded(input_range.upper_bound.value))
             else:
                 output_range: Range = input_range # question: should this be a copy? but ranges are never modified
-            added_node = output_container.add_node_by_kwargs(ClkSeqRepeat, {'child1': output_range, 'child2': corresponding_nodes[child_id_repr]})
+            added_node = output_container.add_node_by_kwargs(ClkSeqRepeat, {'child1': output_range, 'child2': output_child_id})
             placeholder.instantiate_placeholder(added_node)
             return placeholder_id
 

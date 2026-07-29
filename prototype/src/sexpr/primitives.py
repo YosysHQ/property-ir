@@ -71,6 +71,14 @@ class Initial(Bool):
 
 # Sequence primitives
 
+# this primitive is a sequence with no matches, not even the top symbol is matched
+# shorthand for intersection of conflictings sequence lengths
+# used for empty sequence match removal
+@typechecked
+@dataclass
+class SeqNoMatch(Sequence):
+    pass
+
 @typechecked
 @dataclass
 class SeqBool(Sequence):
@@ -234,6 +242,14 @@ class PropAlwaysRanged(Property):
 
 # Clocked Sequence primitives
 
+# this primitive is a clocked sequence with no matches, not even the top symbol is matched
+# shorthand for intersection of conflictings sequence lengths
+# used for empty sequence match removal
+@typechecked
+@dataclass
+class ClkSeqNoMatch(ClockedSequence):
+    pass
+
 @typechecked
 @dataclass
 class ClkSeqBool(ClockedSequence):
@@ -319,6 +335,7 @@ class ClkSeqWithin(ClockedSequence):
 
 # Clocked Property primitives
 
+# TODO this needs to get renamed to ClkPropClkSeq for consistency
 @typechecked
 @dataclass
 class ClkPropSeq(ClockedProperty):
