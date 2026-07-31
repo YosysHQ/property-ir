@@ -122,6 +122,20 @@ class SeqFirstMatch(Sequence):
 
 # non-derived primitives
 
+# this property will become a false-sink in the automaton representation
+# used as a default RHS for overlapped implication/followed-by where the LHS is a no-match sequence
+@typechecked
+@dataclass
+class PropFalse(Property):
+    pass
+
+# this property will become a true-sink in the automaton representation
+# used as a default RHS for overlapped implication/followed-by where the LHS is a no-match sequence
+@typechecked
+@dataclass
+class PropTrue(Property):
+    pass
+
 @typechecked
 @dataclass
 class PropWeakBool(Property):
@@ -334,6 +348,20 @@ class ClkSeqWithin(ClockedSequence):
 
 
 # Clocked Property primitives
+
+# this property will become a false-sink in the automaton representation
+# used as a default RHS for overlapped implication/followed-by where the LHS is a no-match sequence
+@typechecked
+@dataclass
+class ClkPropFalse(Property):
+    pass
+
+# this property will become a true-sink in the automaton representation
+# used as a default RHS for overlapped implication/followed-by where the LHS is a no-match sequence
+@typechecked
+@dataclass
+class ClkPropTrue(Property):
+    pass
 
 # TODO this needs to get renamed to ClkPropClkSeq for consistency
 @typechecked

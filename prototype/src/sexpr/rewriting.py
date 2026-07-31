@@ -5,11 +5,11 @@ import logging
 from typeguard import typechecked
 
 from sexpr.base import ClockedSequence, ClockedProperty, PropertyIrNode, PlaceholderNode, IrContainer, RawSExpr, NodeId, RawSExprList, Signal, LiteralType, Property, Sequence, Bool, Range, BoundedRange, IntOrUnbounded
-from sexpr.primitives import And, ClkPropAlwaysRanged, ClkPropClocked, ClkPropEventually, ClkPropOverlappedFollowedBy, ClkPropOverlappedImplication, ClkPropSeq, ClkPropStrong, ClkPropStrongEventuallyRanged, ClkPropWeak, ClkSeqNoMatch
+from sexpr.primitives import And, ClkPropAlwaysRanged, ClkPropClocked, ClkPropEventually, ClkPropOverlappedFollowedBy, ClkPropOverlappedImplication, ClkPropSeq, ClkPropStrong, ClkPropStrongEventuallyRanged, ClkPropTrue, ClkPropWeak, ClkSeqNoMatch, PropFalse
 from sexpr.primitives import ClkSeqClocked, ClkSeqConcat, ClkSeqFirstMatch, ClkSeqIntersect, ClkSeqRepeat, Constant, FutureGclk
 from sexpr.primitives import Not, Or, Initial, PropAcceptOn, PropNexttime, PropAnd, PropNot, PropOr, PropStrong, PropWeak, PropWeakBool, PropStrongBool
 from sexpr.primitives import PropOverlappedFollowedBy, PropOverlappedImplication, PropRejectOn, PropStrongNexttime, PropUntil, PropStrongUntilWith, PropRefuted
-from sexpr.primitives import ClkPropNexttime, ClkPropStrongNexttime, ClkSeqAnd, ClkSeqOr, ClkSeqFusion, ClkSeqBool
+from sexpr.primitives import ClkPropNexttime, ClkPropStrongNexttime, ClkSeqAnd, ClkSeqOr, ClkSeqFusion, ClkSeqBool, PropTrue, PropFalse
 from sexpr.parsing import get_op_symbols, parse_expression
 
 
@@ -947,7 +947,7 @@ def remove_empty_matches_process_node(
             corresponding_nodes[current_id_repr] = added_node.node_id
             return added_node.node_id
         else:
-            placeholder: PropertyIrNode = container.add_placeholder_node()
+            placeholder: PropertyIrNode = output_container.add_placeholder_node()
             placeholder_id = placeholder.node_id
             corresponding_nodes[current_id_repr] = placeholder_id
             output_child_id: NodeId = remove_empty_matches_process_node(child_id_repr, container, output_container, corresponding_nodes, admits_empty, admits_only_empty, no_match)
@@ -955,11 +955,11 @@ def remove_empty_matches_process_node(
             placeholder.instantiate_placeholder(added_node)
             return placeholder_id
 
-    # question: replace the RHS of overlapped implication/followed-by to some default expression if LHS can have no matches?
-    # or can we replace the whole expression by some default expression with the same semantics?
     # overlapped implication is vacuously true, and overlapped followed-by fails from the beginning (because it cannot be fulfilled in the future)
+    # replace the LHS by a no-match sequence and the RHS by clk-prop-true/false, which will become a true/false-sink later
+    # in order to keep the correct vacuity (else we could replace the whole expression by clk-prop-true/false)
     elif isinstance(current_node, ClkPropOverlappedImplication) or isinstance(current_node, ClkPropOverlappedFollowedBy):
-        placeholder: PropertyIrNode = container.add_placeholder_node()
+        placeholder: PropertyIrNode = output_container.add_placeholder_node()
         placeholder_id = placeholder.node_id
         corresponding_nodes[current_id_repr] = placeholder_id
 
@@ -976,8 +976,11 @@ def remove_empty_matches_process_node(
                 no_match_node: PropertyIrNode = output_container.add_node_by_kwargs(ClkSeqNoMatch, dict())
                 no_match_node_id: NodeId = no_match_node.node_id
                 corresponding_nodes[seq_child_id_repr] = no_match_node_id
-
-        seq_output_child_id: NodeId = remove_empty_matches_process_node(seq_child_id_repr, container, output_container, corresponding_nodes, admits_empty, admits_only_empty, no_match)
+            # if the LHS is a no-match sequence, the RHS will never be checked, so we can use any property
+            seq_output_child: PropertyIrNode = output_container.add_node_by_kwargs(ClkPropTrue, dict())
+            seq_output_child_id: NodeId = seq_output_child.node_id
+        else:
+            seq_output_child_id: NodeId = remove_empty_matches_process_node(seq_child_id_repr, container, output_container, corresponding_nodes, admits_empty, admits_only_empty, no_match)
         prop_output_child_id: NodeId = remove_empty_matches_process_node(prop_child_id_repr, container, output_container, corresponding_nodes, admits_empty, admits_only_empty, no_match)
 
         added_node: PropertyIrNode = output_container.add_node_by_kwargs(current_node.node_type(), {'child1': seq_output_child_id, 'child2': prop_output_child_id})
@@ -991,7 +994,7 @@ def remove_empty_matches_process_node(
         isinstance(current_node, ClkSeqFirstMatch) or \
         isinstance(current_node, ClkSeqClocked):
 
-        placeholder: PropertyIrNode = container.add_placeholder_node()
+        placeholder: PropertyIrNode = output_container.add_placeholder_node()
         placeholder_id = placeholder.node_id
         corresponding_nodes[current_id_repr] = placeholder_id
 
@@ -1058,12 +1061,12 @@ def remove_empty_matches_process_node(
                     admits_empty_subsets: list[set[NodeId]] = [set(subset) for n in range(len(admits_empty_list) + 1)
                         for subset in combinations(admits_empty_list, n) ]
                     for subset in admits_empty_subsets:
-                        nodes_to_concat: list[NodeId] = [node_id for node_id in nonempty_child_reprs if node_id not in subset]
-                        if len(nodes_to_concat) > 1:
-                            added_concat_node: PropertyIrNode = output_container.add_node_by_kwargs(ClkSeqConcat, {'children': nodes_to_concat})
+                        output_nodes_to_concat: list[NodeId] = [corresponding_nodes[node_id] for node_id in nonempty_child_reprs if node_id not in subset]
+                        if len(output_nodes_to_concat) > 1:
+                            added_concat_node: PropertyIrNode = output_container.add_node_by_kwargs(ClkSeqConcat, {'children': output_nodes_to_concat})
                             concat_node_list.append(added_concat_node.node_id)
-                        elif len(nodes_to_concat) == 1:
-                            concat_node_list.append(nodes_to_concat[0])
+                        elif len(output_nodes_to_concat) == 1:
+                            concat_node_list.append(output_nodes_to_concat[0])
 
                     assert len(concat_node_list) > 0
                     if len(concat_node_list) == 1:
@@ -1088,7 +1091,7 @@ def remove_empty_matches_process_node(
             if input_range.lower_bound == 0:
                 output_range: Range = Range(1, IntOrUnbounded(input_range.upper_bound.value))
             else:
-                output_range: Range = input_range # question: should this be a copy? but ranges are never modified
+                output_range: Range = input_range
             added_node = output_container.add_node_by_kwargs(ClkSeqRepeat, {'child1': output_range, 'child2': output_child_id})
             placeholder.instantiate_placeholder(added_node)
             return placeholder_id
@@ -1154,9 +1157,9 @@ def precompute_node_info_process_node(
                 admits_empty[current_id_repr] = any(admits_empty_set)
                 admits_only_empty[current_id_repr] = all(admits_only_empty_set)
                 no_match[current_id_repr] = any(no_match_set)
-                # question: is it correct that a sequence can fail immerdiately when it is clear that a later subsequence cannot match?
-                # what if the trace ends before the contradiction in the sequence is encountered?
-                # or is it only no match if also with the top symbol there is no match?
+                # if a sequence cannot match at all later on, it should fail immediately
+                # therefore it is sufficient for any of of the subsequences to have no match
+                # note that a no-match sequence cannot even match the top symbol
                 return
 
             elif isinstance(current_node, ClkSeqFusion):
@@ -1173,15 +1176,15 @@ def precompute_node_info_process_node(
 
             elif isinstance(current_node, ClkSeqIntersect):
                 # note: here we could check the lengths of argument sequences for further optimizations
-                admits_empty[current_id_repr] = all(admits_empty_set)
-                admits_only_empty[current_id_repr] = all(admits_only_empty_set)
+                # the intersect might not have any match at all
                 no_match[current_id_repr] = any(no_match_set)
+                admits_empty[current_id_repr] = all(admits_empty_set)
+                admits_only_empty[current_id_repr] = any(admits_only_empty_set)
                 return
 
         elif isinstance(current_node, ClkSeqBool):
             admits_empty[current_id_repr] = False
             admits_only_empty[current_id_repr] = False
-            # note: here we could check if the Bool is a contradiction for further optimizations
             no_match[current_id_repr] = False
             return
 
@@ -1236,7 +1239,8 @@ def precompute_node_info(
     admits_only_empty: dict[NodeId, bool] = dict()
     no_match: dict[NodeId, bool] = dict()
 
-    # question: compute all possible sequence lengths for additional optimizations by finding more no_match sequences?
+    # note: we could compute all possible sequence lengths for additional optimizations
+    # to find more no-match sequences at intersect
 
     nodes_to_process: deque[NodeId] = deque(container.sink_nodes)
 
@@ -1332,7 +1336,10 @@ dual_primitives: dict[type[PropertyIrNode], type[PropertyIrNode]] = {
     PropStrongBool: PropWeakBool, # move negation into Bool
     PropWeakBool: PropStrongBool,  # move negation into Bool
 
-    PropWeak: PropRefuted # child (seq) not negated
+    PropWeak: PropRefuted, # child (seq) not negated
+
+    PropTrue: PropFalse,
+    PropFalse: PropTrue
 }
 
 
