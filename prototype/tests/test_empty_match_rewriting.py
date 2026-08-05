@@ -487,7 +487,7 @@ def test_empty_match_removal_admits_empty_dict():
 def check_empty_match_removal_no_error(doc):
     doc_raw_sexpr: RawSExprList = parse_raw_sexpr(doc)
     container1: IrContainer = IrContainer()
-    #container3: IrContainer = IrContainer()
+    container3: IrContainer = IrContainer()
     parse_document(doc_raw_sexpr, container1)
 
     #output_directory: Path = Path('./output')
@@ -497,11 +497,11 @@ def check_empty_match_removal_no_error(doc):
     #container1.show_graph(output_directory / 'check_empty_match_input2.png')
     reduce_primitives(container1)
     #container1.show_graph(output_directory / 'check_empty_match_input3.png')
-    #container3 = rewrite_clocks(container1)
+    container3 = rewrite_clocks(container1)
     #output_directory: Path = Path('./output')
     #container3.show_graph(output_directory / 'check_empty_match_input4.png')
 
-    container2: IrContainer = remove_empty_matches(container1)
+    container2: IrContainer = remove_empty_matches(container3)
     container2.canonical_id_renaming(remove_unreachable_declared_nodes=False)
     #container2.show_graph(output_directory / 'check_empty_match_output.png')
 

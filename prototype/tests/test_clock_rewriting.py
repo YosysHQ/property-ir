@@ -489,6 +489,7 @@ def test_clock_rewriting_root_node_already_finished():
 
 
 
+
 def check_clock_rewriting_no_error(doc):
     doc_raw_sexpr: RawSExprList = parse_raw_sexpr(doc)
     container1: IrContainer = IrContainer()
@@ -499,6 +500,12 @@ def check_clock_rewriting_no_error(doc):
     #container2.show_graph(output_directory / 'check_clock_rewriting_output.png')
     container2.canonical_id_renaming(remove_unreachable_declared_nodes=False)
 
+@example("""(document
+    (declare-input 0)
+    (parse-sexpr (let-rec (step0 (clk-seq-bool (true)))
+        (step1 (clk-seq-clocked (true) step0))
+        (step2 (clk-seq-concat step1 step0))
+        (step3 (clk-seq-clocked (true) step2)) step3)))""")
 @settings(verbosity=Verbosity.verbose, max_examples=50, deadline=500)
 @given((random_ir_clocked(final_node_type=ClkSeqClocked, primitive_filter=lambda node_type: False if issubclass(node_type, ClockedProperty) else True)))
 def test_clock_rewriting_random_seq_no_error(doc):
