@@ -5,7 +5,7 @@ import logging
 from typeguard import typechecked
 
 from sexpr.base import ClockedSequence, ClockedProperty, PropertyIrNode, PlaceholderNode, IrContainer, RawSExpr, NodeId, RawSExprList, Signal, LiteralType, Property, Sequence, Bool, Range, BoundedRange, IntOrUnbounded
-from sexpr.primitives import And, ClkPropAlwaysRanged, ClkPropClocked, ClkPropEventually, ClkPropOverlappedFollowedBy, ClkPropOverlappedImplication, ClkPropSeq, ClkPropStrong, ClkPropStrongEventuallyRanged, ClkPropTrue, ClkPropWeak, ClkSeqNoMatch, PropFalse
+from sexpr.primitives import And, ClkPropAlwaysRanged, ClkPropClocked, ClkPropEventually, ClkPropOverlappedFollowedBy, ClkPropOverlappedImplication, ClkPropSeq, ClkPropStrong, ClkPropStrongEventuallyRanged, ClkPropTrue, ClkPropWeak, ClkSeqNoMatch, ClkSeqSeq, PropFalse
 from sexpr.primitives import ClkSeqClocked, ClkSeqConcat, ClkSeqFirstMatch, ClkSeqIntersect, ClkSeqRepeat, Constant, FutureGclk
 from sexpr.primitives import Not, Or, Initial, PropAcceptOn, PropNexttime, PropAnd, PropNot, PropOr, PropStrong, PropWeak, PropWeakBool, PropStrongBool
 from sexpr.primitives import PropOverlappedFollowedBy, PropOverlappedImplication, PropRejectOn, PropStrongNexttime, PropUntil, PropStrongUntilWith, PropRefuted
@@ -955,7 +955,7 @@ def remove_empty_matches_process_node(
             placeholder.instantiate_placeholder(added_node)
             return placeholder_id
 
-    # overlapped implication is vacuously true, and overlapped followed-by fails from the beginning (because it cannot be fulfilled in the future)
+    # if the LHS has no nonempty part overlapped implication is vacuously true, and overlapped followed-by fails from the beginning (because it cannot be fulfilled in the future)
     # replace the LHS by a no-match sequence and the RHS by clk-prop-true/false, which will become a true/false-sink later
     # in order to keep the correct vacuity (else we could replace the whole expression by clk-prop-true/false)
     elif isinstance(current_node, ClkPropOverlappedImplication) or isinstance(current_node, ClkPropOverlappedFollowedBy):
@@ -976,12 +976,13 @@ def remove_empty_matches_process_node(
                 no_match_node: PropertyIrNode = output_container.add_node_by_kwargs(ClkSeqNoMatch, dict())
                 no_match_node_id: NodeId = no_match_node.node_id
                 corresponding_nodes[seq_child_id_repr] = no_match_node_id
+            seq_output_child_id: NodeId = no_match_node_id
             # if the LHS is a no-match sequence, the RHS will never be checked, so we can use any property
-            seq_output_child: PropertyIrNode = output_container.add_node_by_kwargs(ClkPropTrue, dict())
-            seq_output_child_id: NodeId = seq_output_child.node_id
+            prop_output_child: PropertyIrNode = output_container.add_node_by_kwargs(ClkPropTrue, dict())
+            prop_output_child_id: NodeId = prop_output_child.node_id
         else:
             seq_output_child_id: NodeId = remove_empty_matches_process_node(seq_child_id_repr, container, output_container, corresponding_nodes, admits_empty, admits_only_empty, no_match)
-        prop_output_child_id: NodeId = remove_empty_matches_process_node(prop_child_id_repr, container, output_container, corresponding_nodes, admits_empty, admits_only_empty, no_match)
+            prop_output_child_id: NodeId = remove_empty_matches_process_node(prop_child_id_repr, container, output_container, corresponding_nodes, admits_empty, admits_only_empty, no_match)
 
         added_node: PropertyIrNode = output_container.add_node_by_kwargs(current_node.node_type(), {'child1': seq_output_child_id, 'child2': prop_output_child_id})
         placeholder.instantiate_placeholder(added_node)
@@ -989,10 +990,21 @@ def remove_empty_matches_process_node(
 
 
     # leave the node for these types as-is and perform subcall for children
-    elif isinstance(current_node, Bool) or isinstance(current_node, ClockedProperty) or \
-        isinstance(current_node, ClkSeqBool) or \
+    elif isinstance(current_node, Bool) or \
+        isinstance(current_node, Sequence) or isinstance(current_node, Property) or \
+        isinstance(current_node, ClockedProperty) or \
+        isinstance(current_node, ClkSeqBool) or isinstance(current_node, ClkSeqSeq) or \
         isinstance(current_node, ClkSeqFirstMatch) or \
         isinstance(current_node, ClkSeqClocked):
+
+        # unless it is a sequence type root node that admits no nonempty match
+        # removing ClkSeqClocked in that case is not problematic because the clock gets rewritten beforehand
+        if isinstance(current_node, ClockedSequence):
+            if admits_only_empty[current_id_repr] or no_match[current_id_repr] or \
+                (isinstance(current_node, ClkSeqFirstMatch) and admits_empty[current_id_repr]):
+                added_node: PropertyIrNode = output_container.add_node_by_kwargs(ClkSeqNoMatch, dict())
+                corresponding_nodes[current_id_repr] = added_node.node_id
+                return added_node.node_id
 
         placeholder: PropertyIrNode = output_container.add_placeholder_node()
         placeholder_id = placeholder.node_id
@@ -1028,6 +1040,18 @@ def remove_empty_matches_process_node(
     # at this points we assume that the current node has a nonempty part
     # because we will perform subcalls only on children that will not disappear
     elif isinstance(current_node, ClockedSequence):
+
+        # question: if a root sequence node has empty matches that might be relevant
+        # for the cover sequence statement
+        # keep track of root sequence node empty matches in container?
+
+        # if the sequence is a root node, we may produce a no-match sequence
+        # this will not happen for non-root sequence nodes
+        # because subcalls are not performed for children with no nonempty part
+        if admits_only_empty[current_id_repr] or no_match[current_id_repr]:
+            added_node: PropertyIrNode = output_container.add_node_by_kwargs(ClkSeqNoMatch, dict())
+            corresponding_nodes[current_id_repr] = added_node.node_id
+            return added_node.node_id
 
         placeholder: PropertyIrNode = output_container.add_placeholder_node()
         placeholder_id = placeholder.node_id
@@ -1074,7 +1098,7 @@ def remove_empty_matches_process_node(
                     else:
                         added_node = output_container.add_node_by_kwargs(ClkSeqOr, {'children': concat_node_list})
 
-                else: # ClkSeqFusion, ClkSeqOr, ClkSeqIntersect
+                else: # ClkSeqFusion, ClkSeqOr, ClkSeqIntersect (ClkSeqFusion will only be handled here if all children have nonempty part)
                     added_node = output_container.add_node_by_kwargs(current_node.node_type(), {'children': child_corresponding_ids})
 
                 placeholder.instantiate_placeholder(added_node)
@@ -1096,9 +1120,6 @@ def remove_empty_matches_process_node(
             placeholder.instantiate_placeholder(added_node)
             return placeholder_id
 
-        # ClkSeqBool, ClkSeqFirstMatch, and ClkSeqClocked are handled in the case above
-        # where nothing changes for the primitive itself
-
     raise RuntimeError(f'Encountered node with forbidden primitive while removing empty matches: {current_node}')
 
 
@@ -1118,10 +1139,12 @@ def precompute_node_info_process_node(
     current_node: PropertyIrNode = container[node_id]
     current_id_repr: NodeId = container.merged_nodes.find(node_id)
 
+    logger.debug('Precompute node info for %s', current_node)
+
     if current_id_repr in admits_empty:
         return
 
-    if isinstance(current_node, Bool):
+    if isinstance(current_node, Bool) or isinstance(current_node, Sequence) or isinstance(current_node, Property):
         admits_empty[current_id_repr] = False
         admits_only_empty[current_id_repr] = False
         no_match[current_id_repr] = False
@@ -1182,7 +1205,7 @@ def precompute_node_info_process_node(
                 admits_only_empty[current_id_repr] = any(admits_only_empty_set)
                 return
 
-        elif isinstance(current_node, ClkSeqBool):
+        elif isinstance(current_node, ClkSeqBool) or isinstance(current_node, ClkSeqSeq):
             admits_empty[current_id_repr] = False
             admits_only_empty[current_id_repr] = False
             no_match[current_id_repr] = False
@@ -1251,6 +1274,10 @@ def precompute_node_info(
         if current_id_repr not in admits_empty:
             precompute_node_info_process_node(current_id_repr, container, admits_empty, admits_only_empty, no_match)
 
+    for node_id in container.sink_nodes:
+        node_repr: NodeId = container.merged_nodes.find(node_id)
+        container.admits_empty_sink_nodes[node_repr] = admits_empty[node_repr]
+
     return (admits_empty, admits_only_empty, no_match)
 
 
@@ -1280,26 +1307,43 @@ def remove_empty_matches(container: IrContainer) -> IrContainer:
     while len(nodes_to_process) > 0:
 
         current_id: NodeId = nodes_to_process.popleft()
+        current_repr: NodeId = container.merged_nodes.find(current_id)
 
         if current_id in corresponding_nodes:
-            corresponding_id = corresponding_nodes[current_id]
+            corresponding_id = corresponding_nodes[current_repr]
             output_container.sink_nodes.append(corresponding_id)
             continue
 
-        logger.debug('Empty match removal process root node %s', container[current_id])
+        logger.debug('Empty match removal process root node %s', container[current_repr])
 
-        output_node_id: NodeId = remove_empty_matches_process_node(current_id, container, output_container, corresponding_nodes, admits_empty, admits_only_empty, no_match)
+        output_node_id: NodeId = remove_empty_matches_process_node(current_repr, container, output_container, corresponding_nodes, admits_empty, admits_only_empty, no_match)
 
         output_container.sink_nodes.append(output_node_id)
 
 
+    # set names in output container
+    for (name, node_id) in container.global_nodes.items():
 
-    # TODO add node names to output container
+        logger.debug('Process global name %s of node %s', name, node_id)
+
+        if name not in container.inner_nodes: # ignore Signal nodes without other global names
+            continue
+
+        if node_id in corresponding_nodes:
+            output_container.global_nodes[name] = corresponding_nodes[node_id]
+            output_container.node_names[name] = corresponding_nodes[node_id]
+            output_container.inner_nodes[name] = corresponding_nodes[node_id]
+
+
+    # transfer information about empty matches of root node sequences to output container
+    for (node_id, value) in container.admits_empty_sink_nodes.items():
+        node_repr: NodeId = container.merged_nodes.find(node_id)
+        output_container.admits_empty_sink_nodes[corresponding_nodes[node_repr]] = value
+
+    logger.debug('Input container admits empty: %s', container.admits_empty_sink_nodes)
+    logger.debug('Output container admits empty: %s', output_container.admits_empty_sink_nodes)
 
     return output_container
-
-
-
 
 
 

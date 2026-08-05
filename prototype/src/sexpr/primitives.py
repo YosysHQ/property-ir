@@ -353,14 +353,14 @@ class ClkSeqWithin(ClockedSequence):
 # used as a default RHS for overlapped implication/followed-by where the LHS is a no-match sequence
 @typechecked
 @dataclass
-class ClkPropFalse(Property):
+class ClkPropFalse(ClockedProperty):
     pass
 
 # this property will become a true-sink in the automaton representation
 # used as a default RHS for overlapped implication/followed-by where the LHS is a no-match sequence
 @typechecked
 @dataclass
-class ClkPropTrue(Property):
+class ClkPropTrue(ClockedProperty):
     pass
 
 # TODO this needs to get renamed to ClkPropClkSeq for consistency

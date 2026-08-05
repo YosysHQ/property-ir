@@ -8,7 +8,7 @@ import string
 from sexpr.base import ClockedProperty, ClockedSequence, RawSExpr, RawSExprList, PropertyIrNode, IrContainer
 from sexpr.base import Property, Sequence, Bool, Range, BoundedRange, IntOrUnbounded, Signal
 from sexpr.parsing import parse_document, parse_raw_sexpr
-import sexpr.primitives
+from sexpr.primitives import ClkSeqNoMatch, SeqNoMatch
 from tests.helpers import wrap_signals_and_expr_in_document
 
 
@@ -19,13 +19,16 @@ logger = logging.getLogger(__name__)
 type IrGeneratingType = tuple[str, type[PropertyIrNode], list[type], list[int]]
 
 
+forbidden_primitives_filter: Callable[[type[PropertyIrNode]], bool] = lambda node_type: False if \
+    (issubclass(node_type, ClkSeqNoMatch) or issubclass(node_type, SeqNoMatch)) else True;
+
 
 def random_ir_clocked(
     final_node_type: type[PropertyIrNode],
     primitive_filter: Callable[[type[PropertyIrNode]], bool] = lambda node_type: True,
     **lists_params) -> st.SearchStrategy[str]:
     only_clocked_filter : Callable[[type[PropertyIrNode]], bool] = lambda node_type: False if (issubclass(node_type, Property) or issubclass(node_type, Sequence)) else True
-    adjusted_filter: Callable[[type[PropertyIrNode]], bool] = lambda node_type: only_clocked_filter(node_type) and primitive_filter(node_type)
+    adjusted_filter: Callable[[type[PropertyIrNode]], bool] = lambda node_type: only_clocked_filter(node_type) and primitive_filter(node_type) and forbidden_primitives_filter(node_type)
     return random_ir(final_node_type=final_node_type, primitive_filter=adjusted_filter, **lists_params)
 
 
@@ -36,7 +39,7 @@ def random_ir_simple(
     primitive_filter: Callable[[type[PropertyIrNode]], bool] = lambda node_type: True,
     **lists_params) -> st.SearchStrategy[str]:
     only_simple_filter : Callable[[type[PropertyIrNode]], bool] = lambda node_type: False if (issubclass(node_type, ClockedProperty) or issubclass(node_type, ClockedSequence)) else True
-    adjusted_filter: Callable[[type[PropertyIrNode]], bool] = lambda node_type: only_simple_filter(node_type) and primitive_filter(node_type)
+    adjusted_filter: Callable[[type[PropertyIrNode]], bool] = lambda node_type: only_simple_filter(node_type) and primitive_filter(node_type) and forbidden_primitives_filter(node_type)
     return random_ir(final_node_type=final_node_type, primitive_filter=adjusted_filter, **lists_params)
 
 

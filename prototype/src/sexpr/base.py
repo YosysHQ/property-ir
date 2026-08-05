@@ -245,6 +245,9 @@ class IrContainer:
     inner_nodes: dict[str, NodeId] # def/use = declare/declare-rec named global nodes
     sink_nodes: list[NodeId] # use-only = unnamed expression roots
 
+    # this is computed by rewriting.precompute_node_info
+    admits_empty_sink_nodes: dict[NodeId, bool] # ClkSeq type sink nodes might admit empty matches
+
     next_raw_node_id: int
 
     def __init__(self):
@@ -257,6 +260,7 @@ class IrContainer:
         self.inner_nodes = dict()
         self.sink_nodes = list()
         self.next_raw_node_id = 1
+        self.admits_empty_sink_nodes = dict()
 
     def __eq__(self, other):
         """Two containers are only considered equivalent if they have the same types of nodes with the same node ids
@@ -546,6 +550,7 @@ class IrContainer:
         new_source_nodes: dict[str, NodeId] = dict()
         new_inner_nodes: dict[str, NodeId] = dict()
         new_sink_nodes: list[NodeId] = list()
+        new_admits_empty_sink_nodes: dict[NodeId, bool] = dict()
 
         for old_id, new_id in id_mapping.items():
             new_nodes[new_id] = self.nodes[old_id]
@@ -557,6 +562,7 @@ class IrContainer:
                     new_str_id_dict[node_name] = id_mapping[old_id]
 
         new_sink_nodes = [id_mapping[old_id] for old_id in self.sink_nodes]
+        new_admits_empty_sink_nodes = { id_mapping[old_id]: value for (old_id, value) in self.admits_empty_sink_nodes.items() }
 
         self.nodes = new_nodes
         self.node_names = new_node_names
@@ -564,6 +570,7 @@ class IrContainer:
         self.source_nodes = new_source_nodes
         self.inner_nodes = new_inner_nodes
         self.sink_nodes = new_sink_nodes
+        self.admits_empty_sink_nodes = new_admits_empty_sink_nodes
 
         for declaration in self.declarations:
             if isinstance(declaration, SignalDeclaration | NamedExpressionDeclaration | UnnamedExpressionDeclaration):
@@ -737,6 +744,8 @@ class IrContainer:
                 for node_name, node_id in declaration.node_names.items():
                     declaration.node_names[node_name] = self.merged_nodes.find(node_id)
 
+        new_admits_empty_sink_nodes: dict[NodeId, bool] = { self.merged_nodes.find(node_id): value for (node_id, value) in self.admits_empty_sink_nodes.items() }
+        self.admits_empty_sink_nodes = new_admits_empty_sink_nodes
 
         for node in self.nodes.values():
             logger.debug('START NODE %s', node)
