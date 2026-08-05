@@ -46,12 +46,6 @@ expr_missing_ending_bracket =  '(or (and a b) (not (and (not a) c) d'
 expr_missing_close_bracket1 =  '(or (and a b) (not (and (not a) c) d)'
 expr_missing_close_bracket2 =  '(or (and a b (not (and (not a) c)) d)'
 
-expr_additional_brackets1 =  '(or ((and a b)) (not (and (not a) c)) d)'
-expr_additional_brackets2 =  '(or (and a (b)) (not (and (not a) c)) d)'
-expr_additional_brackets3 =  '(or (and a b ()) (not (and (not a) c)) d)'
-expr_additional_brackets4 =  '(or (and a b (  )) (not (and (not a) c)) d)'
-
-
 
 @pytest.mark.parametrize('str_input',
     [expr_missing_open_bracket1,
@@ -75,13 +69,6 @@ def test_parse_raw_sexpr_error_missing_close_bracket(str_input):
     with pytest.raises(ValueError, match='end of expression'):
         parse_raw_sexpr(str_input)
 
-# TODO: this is not handled by parse_raw_sexpr, but the error is detected in parse_expression
-@pytest.mark.xfail(reason='unnecessary brackets not handled yet')
-@pytest.mark.parametrize('str_input',
-    [expr_additional_brackets1, expr_additional_brackets2, expr_additional_brackets3, expr_additional_brackets4])
-def test_parse_raw_sexpr_error_additional_brackets(str_input):
-    with pytest.raises(ValueError, match='Unexpected token'):
-        parse_raw_sexpr(str_input)
 
 @pytest.mark.parametrize('raw_sexpr_input', raw_sexpr_list)
 def test_parse_raw_sexpr_roundtrip(raw_sexpr_input):
