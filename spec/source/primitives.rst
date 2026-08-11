@@ -406,15 +406,15 @@ Clocked property base primitives
 
 .. code-block:: sexpr
 
-    (clk-prop-seq <clk_seq>)
+    (clk-prop-clk-seq <clk_seq>)
 
     (clk-prop-bool <bool>)
 
-The primitive :sexpr:`clk-prop-seq`
+The primitive :sexpr:`clk-prop-clk-seq`
 converts a clocked sequence to *sequence property*,
 wheres :sexpr:`clk-prop-bool`
 converts a Boolean expression directly to a sequence property,
-which is equivalent to :sexpr:`(clk-prop-seq (clk-seq-bool <bool>))`.
+which is equivalent to :sexpr:`(clk-prop-clk-seq (clk-seq-bool <bool>))`.
 Note that sequence properties must not admit empty matches.
 
 .. code-block:: sexpr
@@ -500,7 +500,7 @@ assert the following property.
 
 .. code-block:: sexpr
 
-    (clk-prop-not (clk-prop-seq
+    (clk-prop-not (clk-prop-clk-seq
         (clk-seq-concat (seq-bool a) (seq-bool b))))
 
 By default, :sexpr:`assert-property` uses weak satisfaction, and the property
