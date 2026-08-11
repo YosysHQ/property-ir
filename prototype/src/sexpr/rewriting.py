@@ -5,7 +5,7 @@ import logging
 from typeguard import typechecked
 
 from sexpr.base import ClockedSequence, ClockedProperty, PropertyIrNode, PlaceholderNode, IrContainer, RawSExpr, NodeId, RawSExprList, Signal, LiteralType, Property, Sequence, Bool, Range, BoundedRange, IntOrUnbounded
-from sexpr.primitives import And, ClkPropAlwaysRanged, ClkPropClocked, ClkPropEventually, ClkPropOverlappedFollowedBy, ClkPropOverlappedImplication, ClkPropSeq, ClkPropStrong, ClkPropStrongEventuallyRanged, ClkPropTrue, ClkPropWeak, ClkSeqNoMatch, ClkSeqSeq, PropFalse
+from sexpr.primitives import And, ClkPropAlwaysRanged, ClkPropClocked, ClkPropEventually, ClkPropOverlappedFollowedBy, ClkPropOverlappedImplication, ClkPropClkSeq, ClkPropStrong, ClkPropStrongEventuallyRanged, ClkPropTrue, ClkPropWeak, ClkSeqNoMatch, ClkSeqSeq, PropFalse
 from sexpr.primitives import ClkSeqClocked, ClkSeqConcat, ClkSeqFirstMatch, ClkSeqIntersect, ClkSeqRepeat, Constant, FutureGclk
 from sexpr.primitives import Not, Or, Initial, PropAcceptOn, PropNexttime, PropAnd, PropNot, PropOr, PropStrong, PropWeak, PropWeakBool, PropStrongBool
 from sexpr.primitives import PropOverlappedFollowedBy, PropOverlappedImplication, PropRejectOn, PropStrongNexttime, PropUntil, PropStrongUntilWith, PropRefuted
@@ -574,7 +574,7 @@ clock_strong_until: RewriteRule = (['clk-prop-strong-until', '<clk_prop1>', '<cl
 # the following are basically the same
 clock_seq_bool: RewriteRule = (['clk-seq-bool', '<bool>'], ['clk-seq-concat', ['clk-seq-repeat', ['range', '0', '$'], ['clk-seq-bool', ['not', '<clock>']]], ['clk-seq-bool', ['and', '<clock>', '<bool>']]])
 
-clock_prop_bool: RewriteRule = (['clk-prop-bool', '<bool>'], ['clk-prop-seq', ['clk-seq-concat', ['clk-seq-repeat', ['range', '0', '$'], ['clk-seq-bool', ['not', '<clock>']]], ['clk-seq-bool', ['and', '<clock>', '<bool>']]]])
+clock_prop_bool: RewriteRule = (['clk-prop-bool', '<bool>'], ['clk-prop-clk-seq', ['clk-seq-concat', ['clk-seq-repeat', ['range', '0', '$'], ['clk-seq-bool', ['not', '<clock>']]], ['clk-seq-bool', ['and', '<clock>', '<bool>']]]])
 
 clock_prop_strong_bool: RewriteRule = (['clk-prop-strong-bool', '<bool>'], ['clk-prop-strong', ['clk-seq-concat', ['clk-seq-repeat', ['range', '0', '$'], ['clk-seq-bool', ['not', '<clock>']]], ['clk-seq-bool', ['and', '<clock>', '<bool>']]]])
 
@@ -823,7 +823,7 @@ def rewrite_clocks(container: IrContainer) -> IrContainer:
     """Rewrite the expression graph such that the global clock is used.
     All clk-prop-nexttime and clk-prop-strong-nexttime must already be unrolled (can be done with rewrite_nexttime_primitives).
     Each clock-specifying primitive remains, but all pointing to the same "(constant true)".
-    Each root node needs to start with a clk-prop-clocked/clk-prop-seq primitive to specify the clock.
+    Each root node needs to start with a clk-prop-clocked/clk-prop-clk-seq primitive to specify the clock.
     (This is required because assuming a clock could lead to unexpected results otherwise, especially when cycles are involved.)
     Parts of the graph that are used with different clocks are copied.
     Nexttime and s_nexttime get unrolled before the clocks are rewritten (in-place in the input container).
@@ -939,7 +939,7 @@ def remove_empty_matches_process_node(
     # the following 5 primitives are the only property primitives taking a sequence argument
     # sequence properties shall not admit empty matches
     # so we will remove empty matches, which may result in a no-match sequence
-    if isinstance(current_node, ClkPropStrong) or isinstance(current_node, ClkPropWeak) or isinstance(current_node, ClkPropSeq):
+    if isinstance(current_node, ClkPropStrong) or isinstance(current_node, ClkPropWeak) or isinstance(current_node, ClkPropClkSeq):
         child_id: NodeId = current_node.child
         child_id_repr = container.merged_nodes.find(child_id)
         if no_match[child_id_repr] or admits_only_empty[child_id_repr]:

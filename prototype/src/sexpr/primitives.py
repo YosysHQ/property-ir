@@ -363,10 +363,9 @@ class ClkPropFalse(ClockedProperty):
 class ClkPropTrue(ClockedProperty):
     pass
 
-# TODO this needs to get renamed to ClkPropClkSeq for consistency
 @typechecked
 @dataclass
-class ClkPropSeq(ClockedProperty):
+class ClkPropClkSeq(ClockedProperty):
     child: NodeId[ClockedSequence]
 
 @typechecked

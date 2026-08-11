@@ -83,14 +83,14 @@ def test_replace_single_node_goto(add_identifiers_to_container):
     goto_repeat_rule: RewriteRule = (['clk-seq-goto-repeat', '<range>', '<bool>'],
     ['clk-seq-repeat', '<range>', ['clk-seq-concat', ['clk-seq-repeat', ['range', '0', '$'], ['clk-seq-bool', ['not', '<bool>']]], ['clk-seq-bool', '<bool>']]])
 
-    input_document_str: str = """(document (declare-input a) (declare p (clk-seq-goto-repeat (range 3 5) a )) (declare q (clk-prop-seq p)) (parse-sexpr q))"""
+    input_document_str: str = """(document (declare-input a) (declare p (clk-seq-goto-repeat (range 3 5) a )) (declare q (clk-prop-clk-seq p)) (parse-sexpr q))"""
 
     expected_output_document_str: str = """(document (declare-input a)
         (declare p
             (clk-seq-repeat (range 3 5) (clk-seq-concat
                 (clk-seq-repeat (range 0 $) (clk-seq-bool (not a)))
                 (clk-seq-bool a) )))
-        (declare q (clk-prop-seq p))
+        (declare q (clk-prop-clk-seq p))
         (parse-sexpr q) )"""
 
     check_replace_single_node(input_document_str, expected_output_document_str, goto_repeat_rule, add_identifiers_to_container=add_identifiers_to_container)

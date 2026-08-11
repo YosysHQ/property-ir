@@ -20,7 +20,7 @@ def test_precompute_node_info_1():
         (declare-input c)
         (declare s1 (clk-seq-repeat (range 0 0) (clk-seq-bool a)) )
         (declare s2 (clk-seq-repeat (range 1 5) (clk-seq-or s1 (clk-seq-concat (clk-seq-bool a) s1 ) )) )
-        (declare p (clk-prop-clocked c (clk-prop-seq s2)) )
+        (declare p (clk-prop-clocked c (clk-prop-clk-seq s2)) )
         (parse-sexpr p))"""
     input_document: RawSExprList = parse_raw_sexpr(input_document_str)
 
@@ -98,7 +98,7 @@ def test_empty_match_removal_no_change_2():
         (declare-input c)
         (declare s1 (clk-seq-bool c))
         (declare s2 (clk-seq-repeat (range 1 5) (clk-seq-or s1 (clk-seq-concat (clk-seq-bool a) s1 ) )) )
-        (declare p (clk-prop-clocked c (clk-prop-seq s2)) )
+        (declare p (clk-prop-clocked c (clk-prop-clk-seq s2)) )
         (parse-sexpr p))"""
     output_document: str = input_document
     check_empty_match_removal(input_document, output_document, visualize=False)
@@ -109,7 +109,7 @@ def test_empty_match_removal_no_change_3():
         (declare-input c)
         (declare s1 (clk-seq-bool c))
         (declare s2 (clk-seq-repeat (range 1 5) (clk-seq-or s1 (clk-seq-concat (clk-seq-bool a) s1 ) )) )
-        (declare p (clk-prop-clocked c (clk-prop-overlapped-implication s1 (clk-prop-seq s2)) ))
+        (declare p (clk-prop-clocked c (clk-prop-overlapped-implication s1 (clk-prop-clk-seq s2)) ))
         (parse-sexpr p))"""
     output_document: str = input_document
     check_empty_match_removal(input_document, output_document, visualize=False)

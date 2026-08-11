@@ -4,7 +4,7 @@ from hypothesis import given, settings, Verbosity, example
 
 from sexpr.base import RawSExprList, IrContainer, ClockedProperty, ClockedSequence
 from sexpr.parsing import parse_raw_sexpr, parse_document
-from sexpr.primitives import ClkPropSeq, ClkSeqClocked, ClkPropClocked
+from sexpr.primitives import ClkPropClkSeq, ClkSeqClocked, ClkPropClocked
 from sexpr.rewriting import rewrite_clocks, rewrite_nexttime_primitives
 from tests.strategies import random_ir_clocked
 
@@ -54,7 +54,7 @@ def test_clock_rewriting_base_case():
     output_document: str = """(document
         (declare-input a)
         (declare-input c)
-        (parse-sexpr (clk-prop-clocked (true) (clk-prop-seq (clk-seq-concat (clk-seq-repeat (range 0 $) (clk-seq-bool (not c))) (clk-seq-bool (and c a))) ))))"""
+        (parse-sexpr (clk-prop-clocked (true) (clk-prop-clk-seq (clk-seq-concat (clk-seq-repeat (range 0 $) (clk-seq-bool (not c))) (clk-seq-bool (and c a))) ))))"""
 
     check_clock_rewriting(input_document, output_document)
 
@@ -90,7 +90,7 @@ def test_clock_rewriting_clock_change():
         (declare-input b)
         (declare-input c1)
         (declare-input c2)
-        (parse-sexpr (clk-prop-clocked c1 (clk-prop-seq (clk-seq-concat (clk-seq-bool a) (clk-seq-clocked c2 (clk-seq-bool b)) )))))"""
+        (parse-sexpr (clk-prop-clocked c1 (clk-prop-clk-seq (clk-seq-concat (clk-seq-bool a) (clk-seq-clocked c2 (clk-seq-bool b)) )))))"""
 
     output_document: str = """(document
         (declare-input a)
@@ -100,7 +100,7 @@ def test_clock_rewriting_clock_change():
         (declare gclk (true))
         (declare p1 (clk-seq-clocked gclk (clk-seq-concat (clk-seq-repeat (range 0 $) (clk-seq-bool (not c2)) ) (clk-seq-bool (and c2 b) ) )))
         (declare p2 (clk-seq-concat (clk-seq-repeat (range 0 $) (clk-seq-bool (not c1)) ) (clk-seq-bool (and c1 a) ) ))
-        (declare p3 (clk-prop-clocked gclk (clk-prop-seq (clk-seq-concat p2 p1) ) ))
+        (declare p3 (clk-prop-clocked gclk (clk-prop-clk-seq (clk-seq-concat p2 p1) ) ))
         (parse-sexpr p3))"""
 
     check_clock_rewriting(input_document, output_document)
@@ -121,8 +121,8 @@ def test_clock_rewriting_copy_subgraph():
         (declare-input c1)
         (declare-input c2)
         (declare gclk (true))
-        (parse-sexpr (clk-prop-clocked gclk (clk-prop-seq (clk-seq-concat (clk-seq-repeat (range 0 $) (clk-seq-bool (not c1))) (clk-seq-bool (and c1 a)) ) )))
-        (parse-sexpr (clk-prop-clocked gclk (clk-prop-seq (clk-seq-concat (clk-seq-repeat (range 0 $) (clk-seq-bool (not c2))) (clk-seq-bool (and c2 a)) ) )))
+        (parse-sexpr (clk-prop-clocked gclk (clk-prop-clk-seq (clk-seq-concat (clk-seq-repeat (range 0 $) (clk-seq-bool (not c1))) (clk-seq-bool (and c1 a)) ) )))
+        (parse-sexpr (clk-prop-clocked gclk (clk-prop-clk-seq (clk-seq-concat (clk-seq-repeat (range 0 $) (clk-seq-bool (not c2))) (clk-seq-bool (and c2 a)) ) )))
         )"""
 
     check_clock_rewriting(input_document, output_document)
@@ -142,7 +142,7 @@ def test_clock_rewriting_with_cycle():
         (declare gclk (true))
         (declare seq_a (clk-seq-concat (clk-seq-repeat (range 0 $) (clk-seq-bool (not c)) ) (clk-seq-bool (and c a) ) ))
         (declare seq_b (clk-seq-concat (clk-seq-repeat (range 0 $) (clk-seq-bool (not c)) ) (clk-seq-bool (and c b) ) ))
-        (declare-rec (declare p (clk-prop-clocked gclk (clk-prop-non-overlapped-implication seq_a (clk-prop-and (clk-prop-seq seq_b) p)))))
+        (declare-rec (declare p (clk-prop-clocked gclk (clk-prop-non-overlapped-implication seq_a (clk-prop-and (clk-prop-clk-seq seq_b) p)))))
         (parse-sexpr p))"""
 
     check_clock_rewriting(input_document, output_document)
@@ -165,7 +165,7 @@ def test_clock_rewriting_with_cycle_and_clock_change():
         (declare gclk (true))
         (declare seq_a (clk-seq-concat (clk-seq-repeat (range 0 $) (clk-seq-bool (not c1)) ) (clk-seq-bool (and c1 a) ) ))
         (declare seq_b (clk-seq-concat (clk-seq-repeat (range 0 $) (clk-seq-bool (not c2)) ) (clk-seq-bool (and c2 b) ) ))
-        (declare-rec (declare p (clk-prop-clocked gclk (clk-prop-non-overlapped-implication seq_a (clk-prop-clocked gclk (clk-prop-and (clk-prop-seq seq_b) p))))))
+        (declare-rec (declare p (clk-prop-clocked gclk (clk-prop-non-overlapped-implication seq_a (clk-prop-clocked gclk (clk-prop-and (clk-prop-clk-seq seq_b) p))))))
         (parse-sexpr p))"""
 
     check_clock_rewriting(input_document, output_document)
@@ -195,7 +195,7 @@ def test_clock_rewriting_accept_on():
         (declare-input clk)
         (declare gclk (true))
         (declare seq_b (clk-seq-concat (clk-seq-repeat (range 0 $) (clk-seq-bool (not clk)) ) (clk-seq-bool (and clk b) ) ))
-        (parse-sexpr (clk-prop-clocked gclk (clk-prop-accept-on (and a clk) (clk-prop-seq seq_b)))))"""
+        (parse-sexpr (clk-prop-clocked gclk (clk-prop-accept-on (and a clk) (clk-prop-clk-seq seq_b)))))"""
 
     check_clock_rewriting(input_document, output_document)
 
@@ -212,7 +212,7 @@ def test_clock_rewriting_reject_on():
         (declare-input clk)
         (declare gclk (true))
         (declare seq_b (clk-seq-concat (clk-seq-repeat (range 0 $) (clk-seq-bool (not clk)) ) (clk-seq-bool (and clk b) ) ))
-        (parse-sexpr (clk-prop-clocked gclk (clk-prop-reject-on (and a clk) (clk-prop-seq seq_b)))))"""
+        (parse-sexpr (clk-prop-clocked gclk (clk-prop-reject-on (and a clk) (clk-prop-clk-seq seq_b)))))"""
 
     check_clock_rewriting(input_document, output_document)
 
@@ -233,8 +233,8 @@ def test_clock_rewriting_until():
         (declare seq_a (clk-seq-concat (clk-seq-repeat (range 0 $) (clk-seq-bool (not clk)) ) (clk-seq-bool (and clk a) ) ))
         (declare seq_b (clk-seq-concat (clk-seq-repeat (range 0 $) (clk-seq-bool (not clk)) ) (clk-seq-bool (and clk b) ) ))
         (parse-sexpr (clk-prop-clocked gclk (clk-prop-until
-            (clk-prop-not (clk-prop-and (clk-prop-bool clk)  (clk-prop-not  (clk-prop-seq seq_a)  )   ))
-            (clk-prop-and (clk-prop-bool clk) (clk-prop-seq seq_b) ) ))))"""
+            (clk-prop-not (clk-prop-and (clk-prop-bool clk)  (clk-prop-not  (clk-prop-clk-seq seq_a)  )   ))
+            (clk-prop-and (clk-prop-bool clk) (clk-prop-clk-seq seq_b) ) ))))"""
 
     check_clock_rewriting(input_document, output_document)
 
@@ -250,7 +250,7 @@ def test_clock_rewriting_nexttime_1():
         (declare-input a)
         (declare-input clk)
         (declare gclk (true))
-        (declare prop_a (clk-prop-seq (clk-seq-concat (clk-seq-repeat (range 0 $) (clk-seq-bool (not clk)) ) (clk-seq-bool (and clk a) ) )))
+        (declare prop_a (clk-prop-clk-seq (clk-seq-concat (clk-seq-repeat (range 0 $) (clk-seq-bool (not clk)) ) (clk-seq-bool (and clk a) ) )))
         (parse-sexpr (clk-prop-clocked gclk
             (clk-prop-until (clk-prop-bool (not clk))
                 (clk-prop-and (clk-prop-bool clk)
@@ -272,7 +272,7 @@ def test_clock_rewriting_nexttime_0():
         (declare-input clk)
         (declare gclk (true))
         (declare seq_true (clk-seq-concat (clk-seq-repeat (range 0 $) (clk-seq-bool (not clk)) ) (clk-seq-bool (and clk (true)) ) ))
-        (declare prop_a (clk-prop-seq (clk-seq-concat (clk-seq-repeat (range 0 $) (clk-seq-bool (not clk)) ) (clk-seq-bool (and clk a) ) )))
+        (declare prop_a (clk-prop-clk-seq (clk-seq-concat (clk-seq-repeat (range 0 $) (clk-seq-bool (not clk)) ) (clk-seq-bool (and clk a) ) )))
         (parse-sexpr (clk-prop-clocked gclk (clk-prop-overlapped-implication seq_true prop_a) ) ))"""
 
     check_clock_rewriting(input_document, output_document)
@@ -288,7 +288,7 @@ def test_clock_rewriting_nexttime_2():
         (declare-input a)
         (declare-input clk)
         (declare gclk (true))
-        (declare prop_a (clk-prop-seq (clk-seq-concat (clk-seq-repeat (range 0 $) (clk-seq-bool (not clk)) ) (clk-seq-bool (and clk a) ) )))
+        (declare prop_a (clk-prop-clk-seq (clk-seq-concat (clk-seq-repeat (range 0 $) (clk-seq-bool (not clk)) ) (clk-seq-bool (and clk a) ) )))
         (parse-sexpr (clk-prop-clocked gclk
 
             (clk-prop-until (clk-prop-bool (not clk))
@@ -321,7 +321,7 @@ def test_clock_rewriting_strong_nexttime_0():
         (declare-input clk)
         (declare gclk (true))
         (declare seq_true (clk-seq-concat (clk-seq-repeat (range 0 $) (clk-seq-bool (not clk)) ) (clk-seq-bool (and clk (true)) ) ))
-        (declare prop_a (clk-prop-seq (clk-seq-concat (clk-seq-repeat (range 0 $) (clk-seq-bool (not clk)) ) (clk-seq-bool (and clk a) ) )))
+        (declare prop_a (clk-prop-clk-seq (clk-seq-concat (clk-seq-repeat (range 0 $) (clk-seq-bool (not clk)) ) (clk-seq-bool (and clk a) ) )))
         (parse-sexpr (clk-prop-clocked gclk (clk-prop-overlapped-followed-by seq_true prop_a) ) ))"""
 
     check_clock_rewriting(input_document, output_document)
@@ -337,7 +337,7 @@ def test_clock_rewriting_strong_nexttime_1():
         (declare-input a)
         (declare-input clk)
         (declare gclk (true))
-        (declare prop_a (clk-prop-seq (clk-seq-concat (clk-seq-repeat (range 0 $) (clk-seq-bool (not clk)) ) (clk-seq-bool (and clk a) ) )))
+        (declare prop_a (clk-prop-clk-seq (clk-seq-concat (clk-seq-repeat (range 0 $) (clk-seq-bool (not clk)) ) (clk-seq-bool (and clk a) ) )))
         (parse-sexpr (clk-prop-clocked gclk
             (clk-prop-strong-until (clk-prop-bool (not clk))
                 (clk-prop-and (clk-prop-bool clk)
@@ -358,7 +358,7 @@ def test_clock_rewriting_strong_nexttime_2():
         (declare-input a)
         (declare-input clk)
         (declare gclk (true))
-        (declare prop_a (clk-prop-seq (clk-seq-concat (clk-seq-repeat (range 0 $) (clk-seq-bool (not clk)) ) (clk-seq-bool (and clk a) ) )))
+        (declare prop_a (clk-prop-clk-seq (clk-seq-concat (clk-seq-repeat (range 0 $) (clk-seq-bool (not clk)) ) (clk-seq-bool (and clk a) ) )))
         (parse-sexpr (clk-prop-clocked gclk
 
             (clk-prop-strong-until (clk-prop-bool (not clk))
@@ -437,8 +437,8 @@ def test_clock_rewriting_node_labels():
         (declare-input c1)
         (declare-input c2)
         (declare gclk (true))
-        (parse-sexpr (clk-prop-clocked gclk (clk-prop-seq (clk-seq-concat (clk-seq-repeat (range 0 $) (clk-seq-bool (not c1))) (clk-seq-bool (and c1 a)) ) )))
-        (parse-sexpr (clk-prop-clocked gclk (clk-prop-seq (clk-seq-concat (clk-seq-repeat (range 0 $) (clk-seq-bool (not c2))) (clk-seq-bool (and c2 a)) ) )))
+        (parse-sexpr (clk-prop-clocked gclk (clk-prop-clk-seq (clk-seq-concat (clk-seq-repeat (range 0 $) (clk-seq-bool (not c1))) (clk-seq-bool (and c1 a)) ) )))
+        (parse-sexpr (clk-prop-clocked gclk (clk-prop-clk-seq (clk-seq-concat (clk-seq-repeat (range 0 $) (clk-seq-bool (not c2))) (clk-seq-bool (and c2 a)) ) )))
         )"""
 
     check_clock_rewriting(input_document, output_document, visualize=False)
@@ -455,7 +455,7 @@ def test_clock_rewriting_node_labels():
     for name, node_id in container2.global_nodes.items():
         if name.startswith('p_clk_'):
             found_p_clk_labels += 1
-            assert isinstance(container2[node_id], ClkPropSeq)
+            assert isinstance(container2[node_id], ClkPropClkSeq)
     assert found_p_clk_labels == 2
 
 
