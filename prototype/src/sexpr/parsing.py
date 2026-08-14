@@ -1,10 +1,11 @@
 from __future__ import annotations
-from typing import Optional, Any, TypeAliasType,get_origin, get_args, Literal
+from itertools import batched
+from typing import Optional, Any, get_origin, get_args, Literal
 from typeguard import typechecked
 import re
 import logging
 
-from .base import RawSExpr, RawSExprList, LiteralType, NodeId
+from .base import Directive, EvaluationScope, PropertyType, RawSExpr, RawSExprList, LiteralType, NodeId, VacuityMode
 from .base import IrContainer, PropertyIrNode, PlaceholderNode
 from .base import Bool, Sequence, Property
 from .base import Range, BoundedRange, IntOrUnbounded
@@ -26,8 +27,15 @@ def get_op_symbols() -> dict[str, type[PropertyIrNode]]:
 
     return ops_to_cls
 
+def get_directive_symbols() -> dict[str, type[Directive]]:
+    name_to_cls: dict[str, type[Directive]] = dict()
+    for cls in Directive.__subclasses__():
+        name_to_cls[cls.op_symbol()] = cls
+    return name_to_cls
+
 
 op_to_cls: dict[str, type[PropertyIrNode]] = get_op_symbols()
+name_to_directive: dict[str, type[Directive]] = get_directive_symbols()
 
 
 @typechecked
@@ -322,6 +330,46 @@ def parse_declare_rec(expression_list: list[RawSExprList], ir_container: IrConta
 
 
 @typechecked
+def parse_directive(directive_str: str, expression: RawSExpr, parameter_list: list[RawSExpr], ir_container):
+
+    directive_type: type[Directive] = name_to_directive[directive_str]
+    kwargs: dict[str, Any] = dict()
+    root_node_type: type[PropertyIrNode] = directive_type.node_type()
+    root_node_id: NodeId = parse_expression(expr=expression, expected_type=root_node_type, local_nodes=ir_container.global_nodes, ir_container=ir_container)
+    kwargs['node_id'] = root_node_id
+
+    if len(parameter_list) % 2 != 0:
+        raise RuntimeError(f'Directive {directive_str} has malformed parameter list: {parameter_list}')
+
+    for name, value in batched(parameter_list,2, strict=True):
+        match(name, value):
+            case(':disable-iff', expr):
+                disable_iff_node_id: NodeId = parse_expression(expr=expr, expected_type=Bool, local_nodes=ir_container.global_nodes, ir_container=ir_container)
+                kwargs['disable_iff'] = disable_iff_node_id
+            case(':reset-iff', expr):
+                reset_iff_node_id: NodeId = parse_expression(expr=expr, expected_type=Bool, local_nodes=ir_container.global_nodes, ir_container=ir_container)
+                kwargs['reset_iff'] = reset_iff_node_id
+            case(':enable-iff', expr):
+                enable_node_id: NodeId = parse_expression(expr=expr, expected_type=Bool, local_nodes=ir_container.global_nodes, ir_container=ir_container)
+                kwargs['enable'] = enable_node_id
+            case(':negated', 'true'):
+                kwargs['negated'] = True
+            case(':negated', 'false'):
+                kwargs['negated'] = False
+            case(':vacuity-mode', value):
+                kwargs['vacuity_mode'] = VacuityMode(value)
+            case(':property-type', value):
+                kwargs['property_type'] = PropertyType(value)
+            case(':evaluation_scope', value):
+                kwargs['evaluation_scope'] = EvaluationScope(value)
+            case _:
+                raise ValueError(f'Unexpected keyword parameter {name} {value}')
+
+    new_directive: Directive = directive_type(**kwargs)
+    ir_container.add_directive(new_directive)
+
+
+@typechecked
 def parse_document(document: RawSExprList, ir_container: IrContainer):
     """Parses a document of property IR statements and adds it to the given ir_container.
     Adds declarations to the container (which in turn updates the global nodes).
@@ -351,6 +399,10 @@ def parse_document(document: RawSExprList, ir_container: IrContainer):
                     case ['declare-rec', *expression_list]:
                         root_nodes_dict = parse_declare_rec(expression_list, ir_container) # type:ignore # TODO can this be typechecked?
                         ir_container.add_declaration(NamedRecursiveDeclaration(root_nodes_dict))
+
+                    case ['assert-property' | 'assume-property' | 'restrict-property' | 'cover-property' | \
+                            'cover-sequence' | 'trigger-sequence' as directive_name, list(expression), *parameter_list]:
+                        parse_directive(directive_name, expression, parameter_list, ir_container)
 
                     case _:
                         raise ValueError(f'Unexpected statement form {statement}')
