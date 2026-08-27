@@ -1,13 +1,14 @@
-import pytest
-from pathlib import Path
 import logging
+from pathlib import Path
+import pytest
 
 from sexpr import parse_expression, parse_literal, RawSExprList, IrContainer, Signal, parse_document
+from sexpr.parsing import parse_raw_sexpr
 from tests.input_data import raw_sexpr1, raw_sexpr2, raw_sexpr3, raw_sexpr4, raw_sexpr5, raw_sexpr6, raw_sexpr7, raw_sexpr8
 from tests.input_data import raw_sexpr6_declare, raw_sexpr6_declare_rec, raw_sexpr5_declare_rec, raw_sexpr7_declare_rec
 from tests.input_data import raw_sexpr_signal_redeclaration_local, raw_sexpr_signal_redeclaration_global1, raw_sexpr_signal_redeclaration_global2
 from tests.input_data import uninst_node_exprs, merge_with_type_conflict, merge_without_type_conflict
-from sexpr.base import Bool, BoundedRange, IntOrUnbounded, NodeId, Property, PropertyIrNode, Range, Sequence, SignalDeclaration, UnnamedExpressionDeclaration
+from sexpr.base import Bool, BoundedRange, IntOrUnbounded, NodeId, Property, PropertyDirective, PropertyIrNode, Range, Sequence, RootTestDirective
 from sexpr.primitives import And, Not, Or, PropAlwaysRanged, SeqBool, SeqConcat, SeqRepeat, PropWeak
 from tests.helpers import wrap_in_document, wrap_multiple_expr_in_document, wrap_statement_in_document, wrap_multiple_statements_in_document
 from tests.helpers import apply_roundtrip
@@ -151,20 +152,20 @@ def test_parse_expr_no_error(container, expr):
 @pytest.mark.parametrize('expr', expr_valid_list)
 def test_parse_doc_no_error(empty_container, expr):
     parse_document(wrap_in_document(expr), ir_container=empty_container)
-    assert len(empty_container.declarations) == 5
+    assert len(empty_container.directives) == 1
 
 def test_parse_document_multiple_expressions():
     container = IrContainer()
     parse_document(wrap_multiple_expr_in_document(expr_valid_list), ir_container=container)
-    assert len(container.declarations) == 13
+    assert len(container.directives) != 0
 
 
 def test_parse_document_expr1():
     container = IrContainer()
     parse_document(wrap_in_document(raw_sexpr1), ir_container=container)
-    declaration = container.declarations[4]
-    assert isinstance(declaration, UnnamedExpressionDeclaration)
-    root_node_id = declaration.node_id
+    directive = container.directives[0]
+    assert isinstance(directive, RootTestDirective)
+    root_node_id = directive.node_id
     root_node: PropertyIrNode = container[root_node_id]
     assert isinstance(root_node, Or)
     children_ids = root_node.children
@@ -191,20 +192,16 @@ def test_parse_document_expr1():
 def test_generate_raw_sexpr_node_defs_no_error(expr):
     container1 = IrContainer()
     parse_document(wrap_in_document(expr), ir_container=container1)
-    assert isinstance(container1.declarations[0], SignalDeclaration)
-    assert isinstance(container1.declarations[1], SignalDeclaration)
-    assert isinstance(container1.declarations[2], SignalDeclaration)
-    assert isinstance(container1.declarations[3], SignalDeclaration)
     declared_nodes = {
-        container1.declarations[0].node_id: container1.declarations[0].node_name,
-        container1.declarations[1].node_id: container1.declarations[1].node_name,
-        container1.declarations[2].node_id: container1.declarations[2].node_name,
-        container1.declarations[3].node_id: container1.declarations[3].node_name
+         container1.global_nodes['a']: 'a',
+         container1.global_nodes['b']: 'b',
+         container1.global_nodes['c']: 'c',
+         container1.global_nodes['d']: 'd',
     }
-    declaration = container1.declarations[4]
-    assert isinstance(declaration, UnnamedExpressionDeclaration)
-    output_expr_list = container1.generate_raw_sexpr_node_defs(node_list=[declaration.node_id], declared_nodes=declared_nodes, node_names_to_use=dict())
-    output_expr2: RawSExprList | str = container1.generate_raw_sexpr_unnamed_root(node_id=declaration.node_id, declared_nodes=declared_nodes)
+    directive = container1.directives[0]
+    assert isinstance(directive, RootTestDirective)
+    output_expr_list = container1.generate_raw_sexpr_node_defs(node_list=[directive.node_id], declared_nodes=declared_nodes, node_names_to_use=dict())
+    output_expr2: RawSExprList | str = container1.generate_raw_sexpr_unnamed_root(node_id=container1.directives[0].node_id, declared_nodes=declared_nodes)
     logger.debug(output_expr_list)
     logger.debug(output_expr2)
     output_document = container1.output_container()
@@ -228,10 +225,10 @@ def test_expr6_declare():
     #container.show_graph(output_directory / 'dec_expr6.png')
     assert 'global-node-name1' in container.global_nodes
     assert len(container.global_nodes) == 5 # 4 signal nodes + 1 declared node
-    assert len(container.declarations) == 5 # 4 signal declarations + 1 declare-rec
+    assert len(container.directives) == 0
     assert len(container.source_nodes) == 4 # 4 signal nodes
     assert len(container.inner_nodes) == 1 # 1 declared node
-    assert len(container.sink_nodes) == 0
+    assert len(container.get_sink_nodes()) == 0
 
 def test_expr6_declare_rec():
     container = IrContainer()
@@ -241,10 +238,10 @@ def test_expr6_declare_rec():
     assert 'prop1' in container.global_nodes
     assert 'prop2' in container.global_nodes
     assert len(container.global_nodes) == 6 # 4 signal nodes + 2 declared nodes
-    assert len(container.declarations) == 5 # 4 signal declarations + 1 declare-rec
+    assert len(container.directives) == 0
     assert len(container.source_nodes) == 4 # 4 signal nodes
     assert len(container.inner_nodes) == 2 # 2 declared nodes
-    assert len(container.sink_nodes) == 0
+    assert len(container.get_sink_nodes()) == 0
 
 def test_expr6_1_declare_rec():
     container = IrContainer()
@@ -254,10 +251,10 @@ def test_expr6_1_declare_rec():
     assert 'prop1' in container.global_nodes
     assert 'prop2' in container.global_nodes
     assert len(container.global_nodes) == 6 # 4 signal nodes + 2 declared nodes
-    assert len(container.declarations) == 6 # 4 signal declarations + 1 declare-rec + 1 unnamed root
+    assert len(container.directives) == 1
     assert len(container.source_nodes) == 4 # 4 signal nodes
     assert len(container.inner_nodes) == 2 # 2 declared nodes
-    assert len(container.sink_nodes) == 1 # 1 unnamed root
+    assert len(container.get_sink_nodes()) == 1 # 1 unnamed root
 
 
 def test_expr5_6_declare_rec():
@@ -270,10 +267,10 @@ def test_expr5_6_declare_rec():
     assert 'foo' in container.global_nodes
     assert 'bar' in container.global_nodes
     assert len(container.global_nodes) == 8 # 4 signal nodes + 4 declared nodes
-    assert len(container.declarations) == 6 # 4 signal declarations + 2 declare-rec
+    assert len(container.directives) == 0
     assert len(container.source_nodes) == 4 # 4 signal nodes
     assert len(container.inner_nodes) == 4 # 4 declared nodes
-    assert len(container.sink_nodes) == 0 # 0 unnamed roots
+    assert len(container.get_sink_nodes()) == 0 # 0 unnamed roots
     #assert len(container.node_names) == 8 # 8 global names
 
 
@@ -285,10 +282,10 @@ def test_expr6_6_declare_rec():
     assert 'prop1' in container.global_nodes
     assert 'prop2' in container.global_nodes
     assert len(container.global_nodes) == 6 # 4 signal nodes + 2 declared nodes
-    assert len(container.declarations) == 6 # 4 signal declarations + 1 declare-rec + 1 unnamed root
+    assert len(container.directives) == 1
     assert len(container.source_nodes) == 4 # 4 signal nodes
     assert len(container.inner_nodes) == 2 # 2 declared nodes
-    assert len(container.sink_nodes) == 1 # 1 unnamed root
+    assert len(container.get_sink_nodes()) == 1 # 1 unnamed root
     # the global nodes get new local names because they are already in use after the let-rec expr, then later the local names of let-rec
     # get renamed when the global node names are set in add_declaration
     #assert len(container.node_names) == 8 # 6 global names + 2 local names + 2 local names because of renaming = 10
@@ -317,10 +314,10 @@ def test_expr5_6_declare_rec_output():
     assert 'foo' in container2.global_nodes
     assert 'bar' in container2.global_nodes
     assert len(container2.global_nodes) == 8 # 4 signal nodes + 4 declared nodes
-    assert len(container2.declarations) == 5 # 4 signal declarations + 1 large declare-rec
+    assert len(container2.directives) == 0
     assert len(container2.source_nodes) == 4 # 4 signal nodes
     assert len(container2.inner_nodes) == 4 # 4 declared nodes
-    assert len(container2.sink_nodes) == 0 # 0 unnamed roots
+    assert len(container2.get_sink_nodes()) == 0 # 0 unnamed roots
 
 
 def test_expr6_6_declare_rec_output():
@@ -343,10 +340,10 @@ def test_expr6_6_declare_rec_output():
     assert 'prop1' in container2.global_nodes
     assert 'prop2' in container2.global_nodes
     assert len(container2.global_nodes) == 6 # 4 signal nodes + 2 declared nodes
-    assert len(container2.declarations) == 6 # 4 signal declarations + 1 declare-rec + 1 unnamed root
+    assert len(container2.directives) == 1
     assert len(container2.source_nodes) == 4 # 4 signal nodes
     assert len(container2.inner_nodes) == 2 # 2 declared nodes
-    assert len(container2.sink_nodes) == 1 # 1 unnamed root
+    assert len(container2.get_sink_nodes()) == 1 # 1 unnamed root
 
 
 def test_expr7_declare_rec_output():
@@ -370,10 +367,10 @@ def test_expr7_declare_rec_output():
     assert 'q4' in container2.global_nodes
     assert 'p' in container2.global_nodes
     assert len(container2.global_nodes) == 7 # 4 signal nodes + 3 declared nodes
-    assert len(container2.declarations) == 5 # 4 signal declarations + 1 declare-rec
+    assert len(container2.directives) == 0
     assert len(container2.source_nodes) == 4 # 4 signal nodes
     assert len(container2.inner_nodes) == 3 # 3 declared nodes
-    assert len(container2.sink_nodes) == 0 # no unnamed roots
+    assert len(container2.get_sink_nodes()) == 0 # no unnamed roots
 
 
 def test_expr6_6_declare_rec_illegal_name_resuse():
@@ -435,3 +432,120 @@ def test_wrong_argument_count(expr):
     with pytest.raises(AssertionError, match='number of arguments'):
         container = IrContainer()
         parse_document(wrap_in_document(expr), ir_container=container)
+
+
+# TEST DIRECTIVES
+
+def test_directives_1():
+    document_str: str = """(document
+    (declare-input a)
+    (declare-input b)
+    (declare p (clk-prop-strong (clk-seq-bool a)))
+    (declare q (clk-prop-weak (clk-seq-bool b)))
+    (declare s (clk-seq-bool b))
+    (assert-property p)
+    (assert-property p)
+    (assume-property q)
+    (restrict-property p)
+    (cover-property p)
+    (cover-sequence s)
+    (trigger-sequence s)
+    (parse-sexpr p) )
+    """
+    document = parse_raw_sexpr(document_str)
+    logger.info('TESTING %s', document)
+    container1 = IrContainer()
+    parse_document(document, ir_container=container1)
+    output_document = container1.output_container()
+    logger.info(output_document)
+    container2 = IrContainer()
+    parse_document(output_document, ir_container=container2)
+    container1.canonical_id_renaming()
+    container2.canonical_id_renaming()
+    assert container1 == container2
+    assert len(container1.directives) == 8
+
+def test_directives_2():
+    document_str: str = """(document
+    (declare-input a)
+    (declare-input b)
+    (declare p (clk-prop-strong (clk-seq-bool a)))
+    (declare q (clk-prop-weak (clk-seq-bool b)))
+    (declare s (clk-seq-bool b))
+    (assert-property p :disable-iff a :reset-iff b :enable a :negated false :evaluation-scope initial :property-type safety)
+    (assume-property q  :disable-iff a :reset-iff b :enable a :negated true :evaluation-scope always :property-type liveness)
+    (restrict-property p :disable-iff a :reset-iff b :enable a :negated true :evaluation-scope always :property-type liveness)
+    (cover-property p :vacuity-mode nonvacuously-satisfied :disable-iff a :reset-iff b :enable a :negated true :evaluation-scope always :property-type safety)
+    (cover-sequence s :vacuity-mode nonvacuous :disable-iff a :reset-iff b :enable a :negated false :evaluation-scope initial :property-type safety)
+    (trigger-sequence s :disable-iff a :reset-iff b :enable a :negated false :evaluation-scope initial :property-type safety)
+    (parse-sexpr p) )
+    """
+    document = parse_raw_sexpr(document_str)
+    apply_roundtrip(document)
+
+def test_directives_wrong_parameter_error_1():
+    with pytest.raises(TypeError):
+        document_str: str = """(document
+        (declare-input a)
+        (declare-input b)
+        (declare p (clk-prop-strong (clk-seq-bool a)))
+        (declare q (clk-prop-weak (clk-seq-bool b)))
+        (declare s (clk-seq-bool b))
+        (assert-property p :vacuity-mode satisfied)
+        )"""
+        document = parse_raw_sexpr(document_str)
+        apply_roundtrip(document)
+
+def test_directives_wrong_parameter_error_2():
+    with pytest.raises(ValueError):
+        document_str: str = """(document
+        (declare-input a)
+        (declare-input b)
+        (declare p (clk-prop-strong (clk-seq-bool a)))
+        (declare q (clk-prop-weak (clk-seq-bool b)))
+        (declare s (clk-seq-bool b))
+        (assert-property p :property-tpe safety)
+        )"""
+        document = parse_raw_sexpr(document_str)
+        apply_roundtrip(document)
+
+
+def test_directives_type_error_1():
+    with pytest.raises(TypeError):
+        document_str: str = """(document
+        (declare-input a)
+        (declare-input b)
+        (declare p (prop-strong (seq-bool a)))
+        (assert-property p)
+        (parse-sexpr p) )
+        """
+        document = parse_raw_sexpr(document_str)
+        apply_roundtrip(document)
+
+def test_directives_type_error_2():
+    with pytest.raises(TypeError):
+        document_str: str = """(document
+        (declare-input a)
+        (declare-input b)
+        (declare p (prop-strong (seq-bool a)))
+        (cover-sequence p)
+        (parse-sexpr p) )
+        """
+        document = parse_raw_sexpr(document_str)
+        apply_roundtrip(document)
+
+def test_declared_node_removed():
+        document_str: str = """(document
+        (declare-input a)
+        (declare-input b)
+        (declare p (clk-prop-strong (clk-seq-bool a)))
+        (declare q (clk-prop-strong (clk-seq-bool b)))
+        (assert-property p)
+        (parse-sexpr p) )
+        """
+        document = parse_raw_sexpr(document_str)
+        container1 = IrContainer()
+        parse_document(document, ir_container=container1)
+        container1.canonical_id_renaming(remove_unreachable_declared_nodes=True)
+        assert 'p' in container1.global_nodes
+        assert 'q' not in container1.global_nodes

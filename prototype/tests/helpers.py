@@ -1,8 +1,9 @@
 import logging
+from pathlib import Path
 
 from sexpr import RawSExprList
-from sexpr import parse_document, IrContainer
-from sexpr.base import PropertyIrNode
+from sexpr import parse_document
+from sexpr.base import PropertyIrNode, IrContainer
 
 
 logger = logging.getLogger(__name__)
@@ -31,7 +32,7 @@ def wrap_signals_and_expr_in_document(signals: list[str], expr: RawSExprList) ->
     return ['document'] + signal_list + [['parse-sexpr', expr]]
 
 
-def apply_roundtrip(document: RawSExprList):
+def apply_roundtrip(document: RawSExprList, visualize=False, remove_unreachable_declared_nodes=False):
     logger.info('TESTING %s', document)
     container1 = IrContainer()
     parse_document(document, ir_container=container1)
@@ -39,8 +40,12 @@ def apply_roundtrip(document: RawSExprList):
     logger.info(output_document)
     container2 = IrContainer()
     parse_document(output_document, ir_container=container2)
-    container1.canonical_id_renaming()
-    container2.canonical_id_renaming()
+    container1.canonical_id_renaming(remove_unreachable_declared_nodes)
+    container2.canonical_id_renaming(remove_unreachable_declared_nodes)
+    if visualize:
+        output_directory: Path = Path('./output')
+        container1.show_graph(output_directory / 'container1.png')
+        container2.show_graph(output_directory / 'container2.png')
     assert container1 == container2
 
 

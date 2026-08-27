@@ -502,7 +502,7 @@ def check_empty_match_removal_no_error(doc):
     #container3.show_graph(output_directory / 'check_empty_match_input4.png')
 
     container2: IrContainer = remove_empty_matches(container3)
-    container2.canonical_id_renaming(remove_unreachable_declared_nodes=False)
+    container2.canonical_id_renaming(remove_unreachable_declared_nodes=True)
     #container2.show_graph(output_directory / 'check_empty_match_output.png')
 
 @example("""(document
@@ -521,3 +521,28 @@ def test_empty_match_removal_random_seq_no_error(doc):
 def test_empty_match_removal_random_prop_no_error(doc):
     check_empty_match_removal_no_error(doc)
 
+
+def test_empty_match_removal_directives_no_error():
+    doc = """(document
+    (declare-input a)
+    (declare-input c)
+    (declare ds (and a (not c)))
+    (declare en (or a (not c)))
+    (declare s1 (clk-seq-bool a))
+    (declare s2 (clk-seq-bool c))
+    (declare no_match (clk-seq-repeat (range 0 0) (clk-seq-bool a)) )
+    (declare maybe_match (clk-seq-repeat (range 0 5) (clk-seq-bool a)) )
+    (declare s3 (clk-seq-intersect s1 s2 no_match maybe_match))
+    (declare p (clk-prop-clocked c (clk-prop-weak s3)))
+    (assert-property p :disable-iff ds :enable en))"""
+    doc_raw_sexpr: RawSExprList = parse_raw_sexpr(doc)
+    container1: IrContainer = IrContainer()
+    container3: IrContainer = IrContainer()
+    parse_document(doc_raw_sexpr, container1)
+
+    rewrite_nexttime_primitives(container1)
+    reduce_primitives(container1)
+    container3 = rewrite_clocks(container1)
+
+    container2: IrContainer = remove_empty_matches(container3)
+    container2.canonical_id_renaming(remove_unreachable_declared_nodes=True)

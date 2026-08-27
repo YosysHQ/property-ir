@@ -68,11 +68,11 @@ def test_node_renaming1():
     parse_document(wrap_in_document(raw_sexpr1), container2)
     container2.canonical_id_renaming()
 
-    assert container1.sink_nodes[0] == NodeId(5)
+    assert container1.get_sink_nodes()[0] == NodeId(5)
 
     assert container1.global_nodes == container2.global_nodes
     assert container1.source_nodes == container2.source_nodes
-    assert container1.sink_nodes == container2.sink_nodes
+    assert container1.get_sink_nodes() == container2.get_sink_nodes()
     assert container1.inner_nodes == container2.inner_nodes
 
     assert container1 == container2
@@ -97,7 +97,7 @@ def test_node_renaming2():
 
     assert container1.global_nodes == container2.global_nodes
     assert container1.source_nodes == container2.source_nodes
-    assert container1.sink_nodes == container2.sink_nodes
+    assert container1.get_sink_nodes() == container2.get_sink_nodes()
     assert container1.inner_nodes == container2.inner_nodes
 
     assert container1 == container2

@@ -408,7 +408,7 @@ def apply_rules(container: IrContainer, rules: dict[type[PropertyIrNode], Rewrit
     through the graph. The rules must not enable any circular rewriting, or else this will
     end up in an infinite loop. For each node type, there can only be one rewrite rule."""
 
-    nodes_to_visit: deque[NodeId] = deque(container.sink_nodes)
+    nodes_to_visit: deque[NodeId] = deque(container.get_sink_nodes())
     encountered_nodes: set[NodeId] = set()
 
     #logger.debug('Apply rules %s to container %s', rules, container)
@@ -832,9 +832,9 @@ def rewrite_clocks(container: IrContainer) -> IrContainer:
     and local node names are removed."""
 
 
-    for sink_node_id in container.sink_nodes:
+    for sink_node_id in container.get_sink_nodes():
         sink_node: PropertyIrNode = container[sink_node_id]
-        if not isinstance(sink_node, ClkPropClocked) and not isinstance(sink_node, ClkSeqClocked):
+        if not isinstance(sink_node, ClkPropClocked) and not isinstance(sink_node, ClkSeqClocked) and not isinstance(sink_node, Bool):
             raise ValueError(f'Attempting to rewrite clocks and encountered unspecified clock at root node {sink_node}')
 
     output_container: IrContainer = IrContainer()
@@ -863,7 +863,7 @@ def rewrite_clocks(container: IrContainer) -> IrContainer:
         output_container.source_nodes[name] = (signal_node.node_id)
 
     # depth-first search starts from root nodes and assuming that the global clock is used
-    nodes_to_process: deque[tuple[NodeId, NodeId]] = deque([(node_id, NodeId(0)) for node_id in container.sink_nodes])
+    nodes_to_process: deque[tuple[NodeId, NodeId]] = deque([(node_id, NodeId(0)) for node_id in container.get_sink_nodes()])
 
     while len(nodes_to_process) > 0:
 
@@ -876,7 +876,6 @@ def rewrite_clocks(container: IrContainer) -> IrContainer:
         # (but it is an unnamed root, so add it to sink nodes, or else it might get removed)
         if (current_id, current_clock) in corresponding_nodes:
             corresponding_id = corresponding_nodes[current_id, current_clock]
-            output_container.sink_nodes.append(corresponding_id)
             continue
 
         logger.debug('clock rewriting process node %s', container[current_id])
@@ -884,8 +883,8 @@ def rewrite_clocks(container: IrContainer) -> IrContainer:
         output_node_id, output_clock_set = rewrite_clocks_process_node(current_id, container, current_clock, clock_set, output_container, corresponding_nodes)
         clock_set = clock_set.union(output_clock_set)
 
-        # add to sink nodes of output container because it corresponds to an unnamed rooot
-        output_container.sink_nodes.append(output_node_id)
+    # copy directives
+    container.copy_directives_to_container(output_container, lambda node_id: corresponding_nodes[node_id, NodeId(0)])
 
     # set names in output container
 
@@ -1272,7 +1271,7 @@ def precompute_node_info(
     # note: we could compute all possible sequence lengths for additional optimizations
     # to find more no-match sequences at intersect
 
-    nodes_to_process: deque[NodeId] = deque(container.sink_nodes)
+    nodes_to_process: deque[NodeId] = deque(container.get_sink_nodes())
 
     while len(nodes_to_process) > 0:
 
@@ -1281,7 +1280,7 @@ def precompute_node_info(
         if current_id_repr not in admits_empty:
             precompute_node_info_process_node(current_id_repr, container, admits_empty, admits_only_empty, no_match)
 
-    for node_id in container.sink_nodes:
+    for node_id in container.get_sink_nodes():
         node_repr: NodeId = container.merged_nodes.find(node_id)
         container.admits_empty_sink_nodes[node_repr] = admits_empty[node_repr]
 
@@ -1309,7 +1308,7 @@ def remove_empty_matches(container: IrContainer) -> IrContainer:
 
     # for each root node call remove_empty_matches_process_node
     # and add resulting output node to output_container root nodes
-    nodes_to_process: deque[NodeId] = deque(container.sink_nodes)
+    nodes_to_process: deque[NodeId] = deque(container.get_sink_nodes())
 
     while len(nodes_to_process) > 0:
 
@@ -1318,15 +1317,14 @@ def remove_empty_matches(container: IrContainer) -> IrContainer:
 
         if current_id in corresponding_nodes:
             corresponding_id = corresponding_nodes[current_repr]
-            output_container.sink_nodes.append(corresponding_id)
             continue
 
         logger.debug('Empty match removal process root node %s', container[current_repr])
 
         output_node_id: NodeId = remove_empty_matches_process_node(current_repr, container, output_container, corresponding_nodes, admits_empty, admits_only_empty, no_match)
 
-        output_container.sink_nodes.append(output_node_id)
-
+    # copy directives
+    container.copy_directives_to_container(output_container, corresponding_nodes)
 
     # set names in output container
     for (name, node_id) in container.global_nodes.items():
@@ -1590,7 +1588,7 @@ def nnf(container: IrContainer) -> IrContainer:
 
     # depth-first search through expression graph
     # start recursion at unnamed roots (sink nodes), which are those used directly in assertion statements
-    nodes_to_process: deque[NodeId] = deque(container.sink_nodes)
+    nodes_to_process: deque[NodeId] = deque(container.get_sink_nodes())
 
     while len(nodes_to_process) > 0:
 
@@ -1603,7 +1601,6 @@ def nnf(container: IrContainer) -> IrContainer:
         # (but it is an unnamed root, so add it to sink nodes, or else it might get removed)
         if (current_id, False) in corresponding_nodes:
             corresponding_id = corresponding_nodes[current_id, False]
-            output_container.sink_nodes.append(corresponding_id)
             continue
 
         logger.debug('nnf rewriting process node %s', container[current_id])
@@ -1611,9 +1608,8 @@ def nnf(container: IrContainer) -> IrContainer:
         # start with empty set as recursion stack
         output_node_id = nnf_process_node(current_id, container, False, output_container, corresponding_nodes, set())
 
-        # add to sink nodes of output container because it corresponds to an unnamed rooot
-        output_container.sink_nodes.append(output_node_id)
-
+    # copy directives
+    container.copy_directives_to_container(output_container, lambda node_id: corresponding_nodes[node_id, False])
 
     # keep global node names of input nodes and transfer to output nodes
     # and set inner nodes of output container accordingly

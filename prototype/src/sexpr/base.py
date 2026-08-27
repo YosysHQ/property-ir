@@ -4,7 +4,7 @@ from collections import deque
 from dataclasses import dataclass, fields, Field, field
 from enum import Enum
 import logging
-from typing import Literal, Optional, Any, get_origin, get_type_hints, get_args
+from typing import Literal, Optional, Any, get_origin, get_args, get_type_hints, get_args, Callable
 from typeguard import typechecked
 from graphviz import Digraph, escape
 from pathlib import Path
@@ -69,6 +69,15 @@ def forward_node_id_types(ty: Any) -> type:
         return ty.__origin__[*map(forward_node_id_types, ty.__args__)]
     return ty
 
+
+
+def renamed_id(node_id: NodeId, id_renaming: dict[NodeId, NodeId] | Callable[[NodeId], NodeId]) -> NodeId:
+    """Helper function to be able to use dicts and callables in the same way when renaming node ids."""
+
+    if isinstance(id_renaming, dict):
+        return id_renaming[node_id]
+    else:
+        return id_renaming(node_id)
 
 
 
@@ -219,13 +228,63 @@ class VacuityMode(Enum):
     NONVACUOUS = 'nonvacuous'
 
 
+@typechecked
 @dataclass
 class Directive[T: PropertyIrNode](ABC):
-
     node_id: NodeId[T]
 
+    @classmethod
+    def node_type(cls) -> Optional[type]:
+        bases = getattr(cls, '__orig_bases__', ())
+        if len(bases) > 0:
+            if get_origin(bases[0]) is PropertyDirective:
+                args = get_args(bases[0])
+                return args[0]
+        return None
+
+    @classmethod
+    def op_symbol(cls):
+        raise NotImplementedError
+
+    @abstractmethod
+    def __init__(self):
+        pass
+
+    def copy_to_container(self, input_container: IrContainer, output_container: IrContainer, id_renaming: dict[NodeId, NodeId] | Callable[[NodeId], NodeId]):
+        """Create a copy of the directive in the target container while renaming the node ids using the provided dict."""
+        node_id_repr: NodeId = input_container.merged_nodes.find(self.node_id)
+        if isinstance(self, RootTestDirective):
+            output_container.add_directive(RootTestDirective(renamed_id(node_id_repr, id_renaming)))
+        elif isinstance(self, PropertyDirective):
+            new_disable_iff: Optional[NodeId[Bool]] = None if self.disable_iff is None else renamed_id(input_container.merged_nodes.find(self.disable_iff), id_renaming)
+            new_enable: Optional[NodeId[Bool]] = None if self.enable is None else renamed_id(input_container.merged_nodes.find(self.enable), id_renaming)
+            new_reset_iff: Optional[NodeId[Bool]] = None if self.reset_iff is None else renamed_id(input_container.merged_nodes.find(self.reset_iff), id_renaming)
+            if isinstance(self, AssertProperty) or isinstance(self, AssumeProperty) or isinstance(self, RestrictProperty) or isinstance(self, TriggerSequence):
+                directive_type: type[PropertyDirective] = type(self)
+                output_container.add_directive(directive_type(node_id = renamed_id(self.node_id, id_renaming), property_type = self.property_type, evaluation_scope = self.evaluation_scope, \
+                    disable_iff = new_disable_iff, enable = new_enable, reset_iff = new_reset_iff, negated = self.negated))
+            elif isinstance(self, CoverProperty) or isinstance(self, CoverSequence):
+                directive_type: type[PropertyDirective] = type(self)
+                output_container.add_directive(directive_type(node_id = renamed_id(self.node_id, id_renaming), property_type = self.property_type, evaluation_scope = self.evaluation_scope, \
+                    disable_iff = new_disable_iff, enable = new_enable, reset_iff = new_reset_iff, negated = self.negated, vacuity_mode=self.vacuity_mode))
+
+
+
+@dataclass
+class RootTestDirective[T: PropertyIrNode](Directive):
+    """Contains an unnamed root node for testing purposes. Corresponds to the statement parse-sexpr."""
+
+    @classmethod
+    def op_symbol(cls):
+        return 'parse-sexpr'
+
+
+
+@dataclass
+class PropertyDirective[T: PropertyIrNode](Directive):
+
     # public interface
-    property_type: PropertyType = PropertyType.SAFETY
+    property_type: Optional[PropertyType] = None
     evaluation_scope: EvaluationScope = EvaluationScope.ALWAYS
 
     disable_iff: Optional[NodeId[Bool]] = None
@@ -241,43 +300,36 @@ class Directive[T: PropertyIrNode](ABC):
         lowercase: list[str] = [str.lower(s) for s in split if s != '']
         return('-'.join(lowercase))
 
-    @classmethod
-    def node_type(cls) -> type[T]:
-        type_args: tuple[type] = get_args(cls)
-        if len(type_args) > 0:
-            return type_args[0]
-
     @abstractmethod
     def __init__(self):
         pass
 
 
-
 @dataclass
-class AssertProperty(Directive[ClockedProperty]):
+class AssertProperty(PropertyDirective[ClockedProperty]):
     pass
 
 @dataclass
-class AssumeProperty(Directive[ClockedProperty]):
+class AssumeProperty(PropertyDirective[ClockedProperty]):
     pass
 
 @dataclass
-class RestrictProperty(Directive[ClockedProperty]):
+class RestrictProperty(PropertyDirective[ClockedProperty]):
     pass
 
 
 @dataclass
-class CoverProperty(Directive[ClockedProperty]):
+class CoverProperty(PropertyDirective[ClockedProperty]):
     # public interface
     vacuity_mode: VacuityMode = VacuityMode.SATISFIED
 
 @dataclass
-class CoverSequence(Directive[ClockedSequence]):
+class CoverSequence(PropertyDirective[ClockedSequence]):
     # public interface
     vacuity_mode: VacuityMode = VacuityMode.SATISFIED
 
 @dataclass
-class TriggerSeqence(Directive[ClockedSequence]):
+class TriggerSequence(PropertyDirective[ClockedSequence]):
     pass
 
 
@@ -303,10 +355,6 @@ class NamedExpressionDeclaration(Declaration):
 class NamedRecursiveDeclaration(Declaration):
     node_names: dict[str, NodeId[Any]]
 
-@dataclass
-class UnnamedExpressionDeclaration(Declaration):
-    node_id: NodeId[Any]
-
 
 
 # @typechecked  # TODO doesn't seem to support add_node_by_kwargs signature
@@ -318,14 +366,12 @@ class IrContainer:
     global_nodes: dict[str, NodeId] # contains signals and other declared node names
     merged_nodes: UnionFind[NodeId] # nodes that are equivalent through naming; each union must contain only one non-placeholder
 
-    # all declarations that were added to the container in the order they were added
-    # TODO remove declarations
-    declarations: list[Declaration]
     directives: list[Directive]
 
     source_nodes: dict[str, NodeId] # def-only = signal nodes
     inner_nodes: dict[str, NodeId] # def/use = declare/declare-rec named global nodes
-    sink_nodes: list[NodeId] # use-only = unnamed expression roots
+    # sink nodes are use-only = unnamed expression roots and accessed via get_sink_nodes()
+    # they are determined from the directives
 
     # this is computed by rewriting.precompute_node_info
     admits_empty_sink_nodes: dict[NodeId, bool] # ClkSeq type sink nodes might admit empty matches
@@ -336,12 +382,10 @@ class IrContainer:
         self.nodes =  dict()
         self.node_names = dict()
         self.global_nodes = dict()
-        self.declarations = list()
         self.directives = list()
         self.merged_nodes = UnionFind()
         self.source_nodes = dict()
         self.inner_nodes = dict()
-        self.sink_nodes = list()
         self.next_raw_node_id = 1
         self.admits_empty_sink_nodes = dict()
 
@@ -360,8 +404,8 @@ class IrContainer:
                 self.global_nodes == other.global_nodes and
                 self.source_nodes == other.source_nodes and
                 self.inner_nodes == other.inner_nodes and
-                self.sink_nodes == other.sink_nodes)
-
+                self.get_sink_nodes() == other.get_sink_nodes() and
+                self.directives == other.directives)
 
     def weakly_equivalent(self, other):
         """Two containers are only considered weakly equivalent if they have the same types of nodes with the same node ids
@@ -377,7 +421,7 @@ class IrContainer:
             return NotImplemented
         return (self.nodes == other.nodes and
                 self.source_nodes == other.source_nodes and
-                self.sink_nodes == other.sink_nodes)
+                self.get_sink_nodes() == other.get_sink_nodes())
 
     def _get_next_node_id(self) -> NodeId:
         node_id = NodeId(self.next_raw_node_id)
@@ -397,7 +441,7 @@ class IrContainer:
 
     def output_container(self) -> RawSExprList:
         """Output the complete contents of the container as a property ir document s-expression.
-        The order of output is source_nodes (signals), inner_nodes (declare/declare-rec), sink_nodes (first directives, then unnamed expression roots),
+        The order of output is source_nodes (signals), inner_nodes (declare/declare-rec), directives,
         where everything reachable from inner_nodes is output in one large declare-rec expression.
         """
 
@@ -412,57 +456,47 @@ class IrContainer:
 
         declared_nodes: dict[NodeId, str] = {self.merged_nodes.find(node_id): name for (name, node_id) in self.global_nodes.items()}
 
-        processed_sink_nodes: set[NodeId] = set()
         for directive in self.directives:
-            directive_statement, directive_processed_nodes = self.generate_directive_raw_sexpr(directive, declared_nodes)
+            directive_statement = self.generate_directive_raw_sexpr(directive, declared_nodes)
             statements.append(directive_statement)
-            processed_sink_nodes = processed_sink_nodes.union(directive_processed_nodes)
-
-        for node_id in self.sink_nodes:
-            node_id_repr = self.merged_nodes.find(node_id)
-            if node_id_repr not in processed_sink_nodes:
-                statements.append(['parse-sexpr', self.generate_raw_sexpr_unnamed_root(node_id=node_id_repr, declared_nodes=declared_nodes)])
-                processed_sink_nodes.add(node_id_repr)
 
         return ['document', *statements]
 
-    def generate_directive_raw_sexpr(self, directive: Directive, declared_nodes: dict[NodeId, str]) -> tuple[RawSExprList, set[NodeId]]:
+    def generate_directive_raw_sexpr(self, directive: Directive, declared_nodes: dict[NodeId, str]) -> RawSExprList:
         """Generate an expression for the given directive inside this container.
         The dict declared_nodes is expected to use representative node ids of merged nodes.
-        Also returns the set of sink (root) node representatives that have been output in this call.
         """
         output_expr: RawSExprList = []
-        processed_sink_nodes = set()
-
         output_expr.append(directive.op_symbol())
         output_expr.append(self.generate_raw_sexpr_unnamed_root(node_id=directive.node_id, declared_nodes=declared_nodes))
-        processed_sink_nodes.add(self.merged_nodes.find(directive.node_id))
 
-        if directive.property_type is not None:
-            output_expr.extend([':property-type', directive.property_type.value])
-        if directive.evaluation_scope is not None:
-            output_expr.extend([':evaluation-scope', directive.evaluation_scope.value])
+        if isinstance(directive, PropertyDirective):
 
-        if isinstance(directive, CoverProperty) or isinstance(directive, CoverSequence):
-            if directive.vacuity_mode is not None:
-                output_expr.extend([':vacuity-mode', directive.vacuity_mode.value])
+            if directive.property_type is not None:
+                output_expr.extend([':property-type', directive.property_type.value])
+            if directive.evaluation_scope is not None:
+                output_expr.extend([':evaluation-scope', directive.evaluation_scope.value])
 
-        if directive.disable_iff is not None:
-            output_expr.append(':disable-iff')
-            output_expr.append(self.generate_raw_sexpr_unnamed_root(node_id=directive.disable_iff, declared_nodes=declared_nodes))
-            processed_sink_nodes.add(self.merged_nodes.find(directive.disable_iff))
+            if isinstance(directive, CoverProperty) or isinstance(directive, CoverSequence):
+                if directive.vacuity_mode is not None:
+                    output_expr.extend([':vacuity-mode', directive.vacuity_mode.value])
 
-        if directive.enable is not None:
-            output_expr.append(':enable')
-            output_expr.append(self.generate_raw_sexpr_unnamed_root(node_id=directive.enable, declared_nodes=declared_nodes))
-            processed_sink_nodes.add(self.merged_nodes.find(directive.enable))
+            if directive.disable_iff is not None:
+                output_expr.append(':disable-iff')
+                output_expr.append(self.generate_raw_sexpr_unnamed_root(node_id=directive.disable_iff, declared_nodes=declared_nodes))
 
-        if directive.reset_iff is not None:
-            output_expr.append(':reset-iff')
-            output_expr.append(self.generate_raw_sexpr_unnamed_root(node_id=directive.reset_iff, declared_nodes=declared_nodes))
-            processed_sink_nodes.add(self.merged_nodes.find(directive.reset_iff))
+            if directive.enable is not None:
+                output_expr.append(':enable')
+                output_expr.append(self.generate_raw_sexpr_unnamed_root(node_id=directive.enable, declared_nodes=declared_nodes))
 
-        return output_expr, processed_sink_nodes
+            if directive.reset_iff is not None:
+                output_expr.append(':reset-iff')
+                output_expr.append(self.generate_raw_sexpr_unnamed_root(node_id=directive.reset_iff, declared_nodes=declared_nodes))
+
+            output_expr.append(':negated')
+            output_expr.append(str(directive.negated).lower())
+
+        return output_expr
 
     def generate_raw_sexpr_inner_nodes(self) -> RawSExprList:
         """Generates one large declare-rec expression for all inner nodes (added with declare/declare-rec).
@@ -622,12 +656,12 @@ class IrContainer:
 
     def canonical_id_renaming(self, remove_unreachable_declared_nodes: bool = False) -> None:
         """Gives each node a new NodeId by first bypassing placeholders and then searching from the root nodes contained
-        in source_nodes, inner_nodes, sink_nodes (in this order) depth-first and numbering nodes in the order they are
+        in source_nodes, inner_nodes, sink nodes (in this order) depth-first and numbering nodes in the order they are
         encountered first. Note that the order in which expressions are added to the container influences this order.
         References to and names of unreachable nodes are removed.
         By default, nodes with declared names (inner_nodes) stay in the graph.
         If remove_unreachable_declared_nodes is True, declared nodes (inner_nodes) that are not reachable from
-        unnamed roots (sink_nodes) are removed as well.
+        sink nodes are removed as well.
         Used to check equivalence of containers (for testing purposes only)."""
 
         self.bypass_placeholders()
@@ -638,7 +672,7 @@ class IrContainer:
         visit_next: deque[NodeId] = deque(self.source_nodes.values())
         if not remove_unreachable_declared_nodes:
             visit_next += self.inner_nodes.values()
-        visit_next += self.sink_nodes
+        visit_next += self.get_sink_nodes()
 
         logger.debug('visit_next %s', visit_next)
 
@@ -646,7 +680,7 @@ class IrContainer:
 
         logger.debug('canonical_id_renaming source_nodes: %s', self.source_nodes.values())
         logger.debug('canonical_id_renaming inner_nodes: %s', self.inner_nodes.values())
-        logger.debug('canonical_id_renaming sink_nodes: %s', self.sink_nodes)
+        logger.debug('canonical_id_renaming sink_nodes: %s', self.get_sink_nodes())
         logger.debug('canonical_id_renaming visit_next: %s', visit_next)
 
         while len(visit_next) > 0:
@@ -677,7 +711,6 @@ class IrContainer:
         new_global_nodes: dict[str, NodeId] = dict()
         new_source_nodes: dict[str, NodeId] = dict()
         new_inner_nodes: dict[str, NodeId] = dict()
-        new_sink_nodes: list[NodeId] = list()
         new_admits_empty_sink_nodes: dict[NodeId, bool] = dict()
 
         for old_id, new_id in id_mapping.items():
@@ -689,7 +722,6 @@ class IrContainer:
                 if old_id in id_mapping: # forget names of unreachable nodes
                     new_str_id_dict[node_name] = id_mapping[old_id]
 
-        new_sink_nodes = [id_mapping[old_id] for old_id in self.sink_nodes]
         new_admits_empty_sink_nodes = { id_mapping[old_id]: value for (old_id, value) in self.admits_empty_sink_nodes.items() }
 
         self.nodes = new_nodes
@@ -697,15 +729,9 @@ class IrContainer:
         self.global_nodes = new_global_nodes
         self.source_nodes = new_source_nodes
         self.inner_nodes = new_inner_nodes
-        self.sink_nodes = new_sink_nodes
         self.admits_empty_sink_nodes = new_admits_empty_sink_nodes
 
-        for declaration in self.declarations:
-            if isinstance(declaration, SignalDeclaration | NamedExpressionDeclaration | UnnamedExpressionDeclaration):
-                declaration.node_id = id_mapping[declaration.node_id]
-            elif isinstance(declaration, NamedRecursiveDeclaration):
-                for node_name, node_id in declaration.node_names.items():
-                    declaration.node_names[node_name] = id_mapping[node_id]
+        self.id_rename_directives(id_mapping)
 
         self.next_raw_id = next_raw_id
 
@@ -768,7 +794,7 @@ class IrContainer:
         return signal_node
 
     def add_declaration(self, declaration: Declaration):
-        """Adds the declaration to the container and sets global node names accordingly.
+        """Sets global node names according to the contents of the declaration.
         If an identical local name in node_names exists and points to a different node,
         that local name is renamed."""
 
@@ -784,8 +810,6 @@ class IrContainer:
             for node_name, node_id in declaration.node_names.items():
                 name_id_pairs.append((node_name, node_id))
                 self.inner_nodes[node_name] = node_id
-        elif isinstance(declaration, UnnamedExpressionDeclaration):
-            self.sink_nodes.append(declaration.node_id)
 
         for node_name, node_id in name_id_pairs:
             if node_id not in self.nodes:
@@ -798,16 +822,39 @@ class IrContainer:
                     self.node_names[self.uniquify(node_name)] = self.node_names[node_name]
             self.node_names[node_name] = node_id
 
-        self.declarations.append(declaration)
-
     def add_directive(self, directive: Directive):
-        self.sink_nodes.append(directive.node_id)
-        if directive.disable_iff is not None:
-            self.sink_nodes.append(directive.disable_iff)
-        if directive.enable is not None:
-            self.sink_nodes.append(directive.enable)
-        if directive.reset_iff is not None:
-            self.sink_nodes.append(directive.reset_iff)
+        self.directives.append(directive)
+
+    def copy_directives_to_container(self, container: IrContainer, id_renaming: dict[NodeId, NodeId] | Callable[[NodeId], NodeId]):
+        """Copy all directives of this container into another container in the same order while renaming the node ids stored in them
+        using the provided dict."""
+
+        for directive in self.directives:
+            directive.copy_to_container(self, container, id_renaming)
+
+    def id_rename_directives(self, id_renaming: dict[NodeId, NodeId] | Callable[[NodeId], NodeId]):
+        """Rename all node ids of directives of this container using the provided dict."""
+
+        directives: list[Directive] = self.directives
+        self.directives = list()
+        for directive in directives:
+            directive.copy_to_container(self, self, id_renaming)
+
+    def get_sink_nodes(self) -> list[NodeId]:
+        """Returns the list of sink nodes. These are all nodes that are directly used in directives,
+        including those used in disable-iff etc. May contain duplicates."""
+
+        sink_nodes: list[NodeId] = list()
+        for directive in self.directives:
+            sink_nodes.append(directive.node_id)
+            if isinstance(directive, PropertyDirective):
+                if directive.disable_iff is not None:
+                    sink_nodes.append(directive.disable_iff)
+                if directive.enable is not None:
+                    sink_nodes.append(directive.enable)
+                if directive.reset_iff is not None:
+                    sink_nodes.append(directive.reset_iff)
+        return sink_nodes
 
     def show_graph(self, output_path: Path) -> None:
 
@@ -862,7 +909,7 @@ class IrContainer:
     def bypass_placeholders(self) -> None:
         """Remove placeholder nodes by letting their parents point directly to
         the instantiated nodes they are to be replaced by.
-        Updates node_names, global_nodes, and declarations accordingly."""
+        Updates node_names, global_nodes, and directives accordingly."""
 
         placeholder_ids_to_remove = []
 
@@ -870,15 +917,7 @@ class IrContainer:
             for node_name, node_id in node_dict.items():
                 node_dict[node_name] = self.merged_nodes.find(node_id)
 
-        for index, node_id in enumerate(self.sink_nodes):
-            self.sink_nodes[index] = self.merged_nodes.find(node_id)
-
-        for declaration in self.declarations:
-            if isinstance(declaration, SignalDeclaration | NamedExpressionDeclaration | UnnamedExpressionDeclaration):
-                declaration.node_id = self.merged_nodes.find(declaration.node_id)
-            elif isinstance(declaration, NamedRecursiveDeclaration):
-                for node_name, node_id in declaration.node_names.items():
-                    declaration.node_names[node_name] = self.merged_nodes.find(node_id)
+        self.id_rename_directives(self.merged_nodes.find)
 
         new_admits_empty_sink_nodes: dict[NodeId, bool] = { self.merged_nodes.find(node_id): value for (node_id, value) in self.admits_empty_sink_nodes.items() }
         self.admits_empty_sink_nodes = new_admits_empty_sink_nodes

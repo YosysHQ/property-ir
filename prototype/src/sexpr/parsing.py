@@ -5,11 +5,11 @@ from typeguard import typechecked
 import re
 import logging
 
-from .base import Directive, EvaluationScope, PropertyType, RawSExpr, RawSExprList, LiteralType, NodeId, VacuityMode
+from .base import Directive, PropertyDirective, EvaluationScope, PropertyType, RawSExpr, RawSExprList, LiteralType, NodeId, RootTestDirective, VacuityMode
 from .base import IrContainer, PropertyIrNode, PlaceholderNode
 from .base import Bool, Sequence, Property
 from .base import Range, BoundedRange, IntOrUnbounded
-from .base import UnnamedExpressionDeclaration, NamedExpressionDeclaration, SignalDeclaration, NamedRecursiveDeclaration
+from .base import NamedExpressionDeclaration, SignalDeclaration, NamedRecursiveDeclaration
 from .primitives import *
 
 
@@ -27,10 +27,11 @@ def get_op_symbols() -> dict[str, type[PropertyIrNode]]:
 
     return ops_to_cls
 
-def get_directive_symbols() -> dict[str, type[Directive]]:
-    name_to_cls: dict[str, type[Directive]] = dict()
-    for cls in Directive.__subclasses__():
+def get_directive_symbols() -> dict[str, type]:
+    name_to_cls: dict[str, type] = dict()
+    for cls in PropertyDirective.__subclasses__():
         name_to_cls[cls.op_symbol()] = cls
+    name_to_cls[RootTestDirective.op_symbol()] = RootTestDirective
     return name_to_cls
 
 
@@ -59,7 +60,7 @@ def parse_raw_sexpr(expr: str) -> RawSExprList:
     stack: list[RawSExprList] = []
 
     for t in tokens:
-        if re.fullmatch(r'[a-zA-Z0-9\-\$\_]+', t):
+        if re.fullmatch(r'[a-zA-Z0-9\-\$\_\:]+', t):
             current_list.append(t)
         elif t == "(":
             stack.append(current_list)
@@ -333,15 +334,15 @@ def parse_declare_rec(expression_list: list[RawSExprList], ir_container: IrConta
 def parse_directive(directive_str: str, expression: RawSExpr, parameter_list: list[RawSExpr], ir_container):
 
     directive_type: type[Directive] = name_to_directive[directive_str]
+    root_node_type: Optional[type] = directive_type.node_type()
     kwargs: dict[str, Any] = dict()
-    root_node_type: type[PropertyIrNode] = directive_type.node_type()
     root_node_id: NodeId = parse_expression(expr=expression, expected_type=root_node_type, local_nodes=ir_container.global_nodes, ir_container=ir_container)
     kwargs['node_id'] = root_node_id
 
     if len(parameter_list) % 2 != 0:
         raise RuntimeError(f'Directive {directive_str} has malformed parameter list: {parameter_list}')
 
-    for name, value in batched(parameter_list,2, strict=True):
+    for name, value in batched(parameter_list, 2, strict=True):
         match(name, value):
             case(':disable-iff', expr):
                 disable_iff_node_id: NodeId = parse_expression(expr=expr, expected_type=Bool, local_nodes=ir_container.global_nodes, ir_container=ir_container)
@@ -349,7 +350,7 @@ def parse_directive(directive_str: str, expression: RawSExpr, parameter_list: li
             case(':reset-iff', expr):
                 reset_iff_node_id: NodeId = parse_expression(expr=expr, expected_type=Bool, local_nodes=ir_container.global_nodes, ir_container=ir_container)
                 kwargs['reset_iff'] = reset_iff_node_id
-            case(':enable-iff', expr):
+            case(':enable', expr):
                 enable_node_id: NodeId = parse_expression(expr=expr, expected_type=Bool, local_nodes=ir_container.global_nodes, ir_container=ir_container)
                 kwargs['enable'] = enable_node_id
             case(':negated', 'true'):
@@ -360,7 +361,7 @@ def parse_directive(directive_str: str, expression: RawSExpr, parameter_list: li
                 kwargs['vacuity_mode'] = VacuityMode(value)
             case(':property-type', value):
                 kwargs['property_type'] = PropertyType(value)
-            case(':evaluation_scope', value):
+            case(':evaluation-scope', value):
                 kwargs['evaluation_scope'] = EvaluationScope(value)
             case _:
                 raise ValueError(f'Unexpected keyword parameter {name} {value}')
@@ -388,10 +389,6 @@ def parse_document(document: RawSExprList, ir_container: IrContainer):
                         signal_node = ir_container.add_signal_node(signal_name)
                         ir_container.add_declaration(SignalDeclaration(signal_name, signal_node.node_id))
 
-                    case ['parse-sexpr', list(expression)] | ['parse-sexpr', str(expression)]:
-                        root_node_id = parse_expression(expr=expression, expected_type=None, local_nodes=ir_container.global_nodes, ir_container=ir_container)
-                        ir_container.add_declaration(UnnamedExpressionDeclaration(root_node_id))
-
                     case ['declare', str(node_name), list(expression)] | ['declare', str(node_name), str(expression)]:
                         root_node_id = parse_expression(expr=expression, expected_type=None, local_nodes=ir_container.global_nodes, ir_container=ir_container)
                         ir_container.add_declaration(NamedExpressionDeclaration(node_name, root_node_id))
@@ -401,7 +398,7 @@ def parse_document(document: RawSExprList, ir_container: IrContainer):
                         ir_container.add_declaration(NamedRecursiveDeclaration(root_nodes_dict))
 
                     case ['assert-property' | 'assume-property' | 'restrict-property' | 'cover-property' | \
-                            'cover-sequence' | 'trigger-sequence' as directive_name, list(expression), *parameter_list]:
+                            'cover-sequence' | 'trigger-sequence' | 'parse-sexpr' as directive_name, list(expression) | str(expression), *parameter_list]:
                         parse_directive(directive_name, expression, parameter_list, ir_container)
 
                     case _:
