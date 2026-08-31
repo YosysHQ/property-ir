@@ -70,7 +70,7 @@ within_rule: RewriteRule = (['clk-seq-within', '<clk_seq1>', '<clk_seq2>'],
     ['clk-seq-intersect',
         ['clk-seq-concat',
             ['clk-seq-repeat', ['range', '0', '$'], ['clk-seq-bool', ['true']]],
-            '<clk_seq2>',
+            '<clk_seq1>',
             ['clk-seq-repeat', ['range', '0', '$'], ['clk-seq-bool', ['true']]]],
         '<clk_seq2>'])
 
