@@ -833,6 +833,15 @@ class IrContainer:
         for directive in self.directives:
             directive.copy_to_container(self, container, id_renaming)
 
+    def copy_empty_match_info_to_container(self, container: IrContainer, id_renaming: dict[NodeId, NodeId] | Callable[[NodeId], NodeId]):
+        """Copies admits_empty_sink_nodes of this container into another container in the same order while renaming the node ids stored in them
+        using the provided dict."""
+
+        for (node_id, value) in self.admits_empty_sink_nodes.items():
+            node_repr: NodeId = self.merged_nodes.find(node_id)
+            container.admits_empty_sink_nodes[renamed_id(node_repr, id_renaming)] = value
+
+
     def id_rename_directives(self, id_renaming: dict[NodeId, NodeId] | Callable[[NodeId], NodeId]):
         """Rename all node ids of directives of this container using the provided dict."""
 

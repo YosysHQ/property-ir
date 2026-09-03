@@ -896,6 +896,9 @@ def rewrite_clocks(container: IrContainer) -> IrContainer:
 
         logger.debug('Process global name %s of node %s', name, node_id)
 
+        repr_id = container.merged_nodes.find(node_id)
+
+
         if name not in container.inner_nodes: # ignore Signal nodes without other global names
             continue
 
@@ -907,10 +910,10 @@ def rewrite_clocks(container: IrContainer) -> IrContainer:
                 # if other clock is used, add indicator of clock to node label
                 new_name = output_container.uniquify(name + '_clk_' + str(clk))
 
-            if (node_id, clk) in corresponding_nodes:
-                output_container.global_nodes[new_name] = corresponding_nodes[(node_id, clk)]
-                output_container.node_names[new_name] = corresponding_nodes[(node_id, clk)]
-                output_container.inner_nodes[new_name] = corresponding_nodes[(node_id, clk)]
+            if (repr_id, clk) in corresponding_nodes:
+                output_container.global_nodes[new_name] = corresponding_nodes[(repr_id, clk)]
+                output_container.node_names[new_name] = corresponding_nodes[(repr_id, clk)]
+                output_container.inner_nodes[new_name] = corresponding_nodes[(repr_id, clk)]
 
 
     return output_container
@@ -1333,21 +1336,20 @@ def remove_empty_matches(container: IrContainer) -> IrContainer:
     # set names in output container
     for (name, node_id) in container.global_nodes.items():
 
+        repr_id = container.merged_nodes.find(node_id)
+
         logger.debug('Process global name %s of node %s', name, node_id)
 
         if name not in container.inner_nodes: # ignore Signal nodes without other global names
             continue
 
-        if node_id in corresponding_nodes:
-            output_container.global_nodes[name] = corresponding_nodes[node_id]
-            output_container.node_names[name] = corresponding_nodes[node_id]
-            output_container.inner_nodes[name] = corresponding_nodes[node_id]
-
+        if repr_id in corresponding_nodes:
+            output_container.global_nodes[name] = corresponding_nodes[repr_id]
+            output_container.node_names[name] = corresponding_nodes[repr_id]
+            output_container.inner_nodes[name] = corresponding_nodes[repr_id]
 
     # transfer information about empty matches of root node sequences to output container
-    for (node_id, value) in container.admits_empty_sink_nodes.items():
-        node_repr: NodeId = container.merged_nodes.find(node_id)
-        output_container.admits_empty_sink_nodes[corresponding_nodes[node_repr]] = value
+    container.copy_empty_match_info_to_container(output_container, corresponding_nodes)
 
     logger.debug('Input container admits empty: %s', container.admits_empty_sink_nodes)
     logger.debug('Output container admits empty: %s', output_container.admits_empty_sink_nodes)
@@ -1498,7 +1500,6 @@ def add_weak_strong(input_container: IrContainer) -> IrContainer:
     for (name, node_id) in input_container.global_nodes.items():
 
         repr_id = input_container.merged_nodes.find(node_id)
-        # TODO do this also in the other passes before copying identifiers
 
         if name not in input_container.inner_nodes: # ignore Signal nodes without other global names
             continue
@@ -1516,6 +1517,10 @@ def add_weak_strong(input_container: IrContainer) -> IrContainer:
             output_container.global_nodes[new_name] = corresponding_nodes[(repr_id, Strength.STRONG)]
             output_container.node_names[new_name] = corresponding_nodes[(repr_id, Strength.STRONG)]
             output_container.inner_nodes[new_name] = corresponding_nodes[(repr_id, Strength.STRONG)]
+
+    # transfer information about empty matches of root node sequences to output container
+    input_container.copy_empty_match_info_to_container(output_container, \
+        lambda node_id: corresponding_nodes[node_id, Strength.WEAK] if (node_id, Strength.WEAK) in corresponding_nodes else corresponding_nodes[node_id, Strength.STRONG])
 
     return output_container
 
@@ -1780,28 +1785,32 @@ def nnf(container: IrContainer) -> IrContainer:
 
     for (name, node_id) in container.global_nodes.items():
 
+        repr_id = container.merged_nodes.find(node_id)
+
         logger.debug('Process global name %s of node %s', name, node_id)
 
         if name not in container.inner_nodes: # ignore Signal nodes without other global names
             continue
 
         # if uninverted, add to output container
-        if (node_id, False) in corresponding_nodes:
+        if (repr_id, False) in corresponding_nodes:
             new_name = output_container.uniquify(name)
-            output_container.global_nodes[new_name] = corresponding_nodes[(node_id, False)]
-            output_container.node_names[new_name] = corresponding_nodes[(node_id, False)]
-            output_container.inner_nodes[new_name] = corresponding_nodes[(node_id, False)]
+            output_container.global_nodes[new_name] = corresponding_nodes[(repr_id, False)]
+            output_container.node_names[new_name] = corresponding_nodes[(repr_id, False)]
+            output_container.inner_nodes[new_name] = corresponding_nodes[(repr_id, False)]
 
         # if negated node, add negation indicator to node label
-        if (node_id, True) in corresponding_nodes:
+        if (repr_id, True) in corresponding_nodes:
             new_name = output_container.uniquify(name + '_neg')
-            output_container.global_nodes[new_name] = corresponding_nodes[(node_id, True)]
-            output_container.node_names[new_name] = corresponding_nodes[(node_id, True)]
-            output_container.inner_nodes[new_name] = corresponding_nodes[(node_id, True)]
+            output_container.global_nodes[new_name] = corresponding_nodes[(repr_id, True)]
+            output_container.node_names[new_name] = corresponding_nodes[(repr_id, True)]
+            output_container.inner_nodes[new_name] = corresponding_nodes[(repr_id, True)]
 
 
     logger.debug('Global names output: %s', output_container.global_nodes.items())
     logger.debug('Inner nodes output: %s', output_container.inner_nodes.items())
 
+    # transfer information about empty matches of root node sequences to output container
+    container.copy_empty_match_info_to_container(output_container, lambda node_id: corresponding_nodes[node_id, False])
 
     return output_container
