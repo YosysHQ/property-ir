@@ -1,15 +1,19 @@
 from collections import deque
+from enum import Enum
 from itertools import combinations
 from typing import Callable, get_origin, Any, Optional, Literal
 import logging
 from typeguard import typechecked
 
-from sexpr.base import ClockedSequence, ClockedProperty, PropertyIrNode, PlaceholderNode, IrContainer, RawSExpr, NodeId, RawSExprList, Signal, LiteralType, Property, Sequence, Bool, Range, BoundedRange, IntOrUnbounded
+from sexpr.base import ClockedSequence, ClockedProperty, CoverProperty, PropertyDirective, PropertyIrNode, PlaceholderNode
+from sexpr.base import IrContainer, RawSExpr, NodeId, RawSExprList, Signal, LiteralType, Property, Sequence, Bool, Range
+from sexpr.base import BoundedRange, IntOrUnbounded, Directive
 from sexpr.primitives import And, ClkPropAlwaysRanged, ClkPropClocked, ClkPropEventually, ClkPropOverlappedFollowedBy, ClkPropOverlappedImplication, ClkPropClkSeq, ClkPropStrong, ClkPropStrongEventuallyRanged, ClkPropTrue, ClkPropWeak, ClkSeqNoMatch, ClkSeqSeq, PropFalse
 from sexpr.primitives import ClkSeqClocked, ClkSeqConcat, ClkSeqFirstMatch, ClkSeqIntersect, ClkSeqRepeat, Constant, FutureGclk
 from sexpr.primitives import Not, Or, Initial, PropAcceptOn, PropNexttime, PropAnd, PropNot, PropOr, PropStrong, PropWeak, PropWeakBool, PropStrongBool
 from sexpr.primitives import PropOverlappedFollowedBy, PropOverlappedImplication, PropRejectOn, PropStrongNexttime, PropUntil, PropStrongUntilWith, PropRefuted
 from sexpr.primitives import ClkPropNexttime, ClkPropStrongNexttime, ClkSeqAnd, ClkSeqOr, ClkSeqFusion, ClkSeqBool, PropTrue, PropFalse
+from sexpr.primitives import ClkPropBool, ClkPropWeakBool, ClkPropStrongBool, ClkPropClkSeq
 from sexpr.parsing import get_op_symbols, parse_expression
 
 
@@ -1355,10 +1359,165 @@ def remove_empty_matches(container: IrContainer) -> IrContainer:
 
 # ADD WEAK/STRONG
 
-def add_weak_strong_qualifiers(container: IrContainer, strong: Bool):
-    """Add weak or strong qualifiers to all sequence properties where it is missing."""
-    pass
+class Strength(Enum):
+    WEAK = 'weak'
+    STRONG = 'strong'
 
+
+def add_weak_strong_process_node(
+    node_id: NodeId,
+    input_container: IrContainer,
+    strength: Strength,
+    output_container: IrContainer,
+    corresponding_nodes: dict[tuple[NodeId, Strength], NodeId]) -> NodeId:
+
+    repr_id: NodeId = input_container.merged_nodes.find(node_id)
+    current_node: PropertyIrNode = input_container[node_id]
+
+    # check node type, change strength to weak if strength does not apply at all
+    if not isinstance(current_node, ClockedProperty):
+        strength = Strength.WEAK
+
+    # check if already existing, if yes, return the stored node
+    if (repr_id, strength) in corresponding_nodes:
+        return corresponding_nodes[repr_id, strength]
+
+    primitive_type: type = type(current_node)
+
+    # in case with missing qualifier change primitive to more specific one
+    if primitive_type is ClkPropClkSeq and strength is Strength.WEAK:
+        primitive_type = ClkPropWeak
+    elif primitive_type is ClkPropClkSeq and strength is Strength.STRONG:
+        primitive_type = ClkPropStrong
+    elif primitive_type is ClkPropBool and strength is Strength.WEAK:
+        primitive_type = ClkPropWeakBool
+    elif primitive_type is ClkPropBool and strength is Strength.STRONG:
+        primitive_type = ClkPropStrongBool
+
+
+    placeholder_node = output_container.add_placeholder_node(expected_type=primitive_type)
+    corresponding_nodes[(repr_id, strength)] = placeholder_node.node_id
+
+    signature = type(current_node).signature()
+    kwargs: dict[str, Any] = {}
+
+    for index, field in enumerate(current_node.get_child_fields()):
+        field_type: type = signature[index]
+        if get_origin(field_type) is list:
+            list_elems = getattr(current_node, field.name)
+            output_child_list = []
+            for child_id in list_elems:
+                output_child_id = add_weak_strong_process_node(child_id, input_container, strength, output_container, corresponding_nodes)
+                output_child_list.append(output_child_id)
+            kwargs[field.name] = output_child_list
+
+        elif issubclass(field_type, PropertyIrNode):
+            child_id = getattr(current_node, field.name)
+            output_child_id = add_weak_strong_process_node(child_id, input_container, strength, output_container, corresponding_nodes)
+            kwargs[field.name] = output_child_id
+
+        elif issubclass(field_type, LiteralType.__value__):
+            child_literal = getattr(current_node, field.name)
+            kwargs[field.name] = child_literal
+
+    new_node = output_container.add_node_by_kwargs(primitive_type, kwargs)
+    placeholder_node.instantiate_placeholder(new_node)
+
+    return corresponding_nodes[repr_id, strength]
+
+
+def add_weak_strong(input_container: IrContainer) -> IrContainer:
+    """Add weak or strong qualifiers to all sequence properties where it is missing,
+    depending on the type of assertion statement. This may lead to parts of the
+    expression graph being duplicated, if a property is used in an assert and a cover
+    statement. Therefore, the output is placed into a new container.
+    Nodes of type Bool or ClockedSequence will not be duplicated but be stored under
+    strength weak."""
+
+    # NOTE this could be made more efficient by determining beforehand
+    # whether a part of the graph actually contains sequence properties
+    # with missing qualifiers
+
+    # for each root node, determine whether weak or strong should be used
+    # queue it with the correct qualifier
+    # the Bool root nodes do not need to be changed, but only copied
+    # store them with strength weak (the same applies to cover-sequence)
+    nodes_to_process: deque[tuple[NodeId, Strength]] = deque()
+    for directive in input_container.directives:
+        if isinstance(directive, CoverProperty):
+            nodes_to_process.append((directive.node_id, Strength.STRONG))
+        else:
+            nodes_to_process.append((directive.node_id, Strength.WEAK))
+
+        if isinstance(directive, PropertyDirective):
+            if directive.disable_iff is not None:
+                nodes_to_process.append((directive.disable_iff, Strength.WEAK))
+            if directive.reset_iff is not None:
+                nodes_to_process.append((directive.reset_iff, Strength.WEAK))
+            if directive.enable is not None:
+                nodes_to_process.append((directive.enable, Strength.WEAK))
+
+    corresponding_nodes: dict[tuple[NodeId, Strength], NodeId] = dict()
+
+    # create new container and add signals to it
+    # add with weak into corresponding_nodes dict
+
+    output_container: IrContainer = IrContainer()
+
+    for name, node_id in input_container.source_nodes.items():
+        signal_repr_id = input_container.merged_nodes.find(node_id)
+        signal_node = output_container.add_signal_node(name)
+        corresponding_nodes[(signal_repr_id, Strength.WEAK)] = signal_node.node_id
+        output_container.global_nodes[name] = signal_node.node_id
+        output_container.node_names[name] = signal_node.node_id
+        output_container.source_nodes[name] = (signal_node.node_id)
+
+    # loop with call on each queued node
+
+    while len(nodes_to_process) > 0:
+
+        current_id, strength = nodes_to_process.popleft()
+        node_repr = input_container.merged_nodes.find(current_id)
+
+        if (current_id, strength) in corresponding_nodes:
+            continue
+
+        output_node_id = add_weak_strong_process_node(node_repr, input_container, strength, output_container, corresponding_nodes)
+
+    # when copying directives we need to correct the node_id in the case cover-property
+    input_container.copy_directives_to_container(output_container, \
+        lambda node_id: corresponding_nodes[node_id, Strength.WEAK] if (node_id, Strength.WEAK) in corresponding_nodes else corresponding_nodes[node_id, Strength.STRONG])
+    for index, output_directive in enumerate(output_container.directives):
+        if isinstance(output_directive, CoverProperty):
+            input_directive: Directive = input_container.directives[index]
+            input_node_id: NodeId = input_directive.node_id
+            input_node_repr: NodeId = input_container.merged_nodes.find(input_node_id)
+            output_directive.node_id = corresponding_nodes[input_node_repr, Strength.STRONG]
+
+    # add identifiers to output container
+    for (name, node_id) in input_container.global_nodes.items():
+
+        repr_id = input_container.merged_nodes.find(node_id)
+        # TODO do this also in the other passes before copying identifiers
+
+        if name not in input_container.inner_nodes: # ignore Signal nodes without other global names
+            continue
+
+        # if weak context, add to output container as-is
+        if (repr_id, Strength.WEAK) in corresponding_nodes:
+            new_name = output_container.uniquify(name)
+            output_container.global_nodes[new_name] = corresponding_nodes[(repr_id, Strength.WEAK)]
+            output_container.node_names[new_name] = corresponding_nodes[(repr_id, Strength.WEAK)]
+            output_container.inner_nodes[new_name] = corresponding_nodes[(repr_id, Strength.WEAK)]
+
+        # if strong context, add strong indicator to node label
+        if (repr_id, Strength.STRONG) in corresponding_nodes:
+            new_name = output_container.uniquify(name + '_strong')
+            output_container.global_nodes[new_name] = corresponding_nodes[(repr_id, Strength.STRONG)]
+            output_container.node_names[new_name] = corresponding_nodes[(repr_id, Strength.STRONG)]
+            output_container.inner_nodes[new_name] = corresponding_nodes[(repr_id, Strength.STRONG)]
+
+    return output_container
 
 
 
