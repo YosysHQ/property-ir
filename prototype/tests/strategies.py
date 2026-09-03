@@ -1,12 +1,12 @@
 from typing import Optional, Callable, get_origin, get_args, Any
 from collections import defaultdict
 from hypothesis import strategies as st
-from hypothesis import settings
 import logging
 import string
 
-from sexpr.base import ClockedProperty, ClockedSequence, RawSExpr, RawSExprList, PropertyIrNode, IrContainer
+from sexpr.base import ClockedProperty, ClockedSequence, RawSExpr, RawSExprList, PropertyIrNode, IrContainer, RootTestDirective
 from sexpr.base import Property, Sequence, Bool, Range, BoundedRange, IntOrUnbounded, Signal
+from sexpr.base import Directive, RootTestDirective
 from sexpr.parsing import parse_document, parse_raw_sexpr
 from sexpr.primitives import ClkSeqNoMatch, SeqNoMatch
 from tests.helpers import wrap_signals_and_expr_in_document
@@ -26,10 +26,11 @@ forbidden_primitives_filter: Callable[[type[PropertyIrNode]], bool] = lambda nod
 def random_ir_clocked(
     final_node_type: type[PropertyIrNode],
     primitive_filter: Callable[[type[PropertyIrNode]], bool] = lambda node_type: True,
+    directive: type[Directive] = RootTestDirective,
     **lists_params) -> st.SearchStrategy[str]:
     only_clocked_filter : Callable[[type[PropertyIrNode]], bool] = lambda node_type: False if (issubclass(node_type, Property) or issubclass(node_type, Sequence)) else True
     adjusted_filter: Callable[[type[PropertyIrNode]], bool] = lambda node_type: only_clocked_filter(node_type) and primitive_filter(node_type) and forbidden_primitives_filter(node_type)
-    return random_ir(final_node_type=final_node_type, primitive_filter=adjusted_filter, **lists_params)
+    return random_ir(final_node_type=final_node_type, primitive_filter=adjusted_filter, directive=directive, **lists_params)
 
 
 
@@ -48,6 +49,7 @@ def random_ir_simple(
 def random_ir(
     final_node_type: type[PropertyIrNode],
     primitive_filter: Callable[[type[PropertyIrNode]], bool] = lambda node_type: True,
+    directive: type[Directive] = RootTestDirective,
     **lists_params) -> st.SearchStrategy[str]:
     """Generate a random Property IR expression whose graph has the form of a DAG.
     For this, collect all strategies to generate data for each allowed primitive.
@@ -69,7 +71,7 @@ def random_ir(
     return st.tuples(
         st.lists(st.one_of(primitive_generators), **lists_params),
         st.one_of(final_primitive_generators),
-        identifier_list).map(build_ir_from_random_data)
+        identifier_list, st.just(directive)).map(build_ir_from_random_data)
 
 
 def random_ir_primitive_template_and_args(node_class: type[PropertyIrNode]) -> st.SearchStrategy[IrGeneratingType]:
@@ -92,13 +94,14 @@ def random_ir_primitive_template_and_args(node_class: type[PropertyIrNode]) -> s
     return st.tuples(st.just(primitive_name), st.just(node_type), st.just(primitive_class_signature), st.lists(st.integers(), min_size=min_s, max_size=max_s))
 
 
-def build_ir_from_random_data(strategy_drawn_data: tuple[list[IrGeneratingType], IrGeneratingType, list[str]]) -> str:
+def build_ir_from_random_data(strategy_drawn_data: tuple[list[IrGeneratingType], IrGeneratingType, list[str], type[Directive]]) -> str:
     """Construct one Property IR document with a large let-rec generated from the
     given random data. The return value of the let-rec is represented by the second
     element of the given tuple. Each element in the list (the first element of the tuple)
     becomes one line."""
 
     generating_list: list[IrGeneratingType] = strategy_drawn_data[0] + [strategy_drawn_data[1]]
+    directive: type[Directive] = strategy_drawn_data[3]
 
     logger.debug('generating_list: %s', generating_list)
 
@@ -203,7 +206,7 @@ def build_ir_from_random_data(strategy_drawn_data: tuple[list[IrGeneratingType],
     signals_str: str = " ".join([f"(declare-input {signal})" for signal in signal_list])
     subexpressions_str: str = " ".join(let_rec_subexpressions)
 
-    return f'(document {signals_str} (parse-sexpr (let-rec {subexpressions_str} step{len(generating_list) - 1})))'
+    return f'(document {signals_str} ({directive.op_symbol()} (let-rec {subexpressions_str} step{len(generating_list) - 1})))'
 
 
 
