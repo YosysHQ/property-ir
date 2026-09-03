@@ -261,11 +261,11 @@ class Directive[T: PropertyIrNode](ABC):
             new_reset_iff: Optional[NodeId[Bool]] = None if self.reset_iff is None else renamed_id(input_container.merged_nodes.find(self.reset_iff), id_renaming)
             if isinstance(self, AssertProperty) or isinstance(self, AssumeProperty) or isinstance(self, RestrictProperty) or isinstance(self, TriggerSequence):
                 directive_type: type[PropertyDirective] = type(self)
-                output_container.add_directive(directive_type(node_id = renamed_id(self.node_id, id_renaming), property_type = self.property_type, evaluation_scope = self.evaluation_scope, \
+                output_container.add_directive(directive_type(node_id = renamed_id(node_id_repr, id_renaming), property_type = self.property_type, evaluation_scope = self.evaluation_scope, \
                     disable_iff = new_disable_iff, enable = new_enable, reset_iff = new_reset_iff, negated = self.negated))
             elif isinstance(self, CoverProperty) or isinstance(self, CoverSequence):
                 directive_type: type[PropertyDirective] = type(self)
-                output_container.add_directive(directive_type(node_id = renamed_id(self.node_id, id_renaming), property_type = self.property_type, evaluation_scope = self.evaluation_scope, \
+                output_container.add_directive(directive_type(node_id = renamed_id(node_id_repr, id_renaming), property_type = self.property_type, evaluation_scope = self.evaluation_scope, \
                     disable_iff = new_disable_iff, enable = new_enable, reset_iff = new_reset_iff, negated = self.negated, vacuity_mode=self.vacuity_mode))
 
 
@@ -409,7 +409,7 @@ class IrContainer:
 
     def weakly_equivalent(self, other):
         """Two containers are only considered weakly equivalent if they have the same types of nodes with the same node ids
-        connected in the same way, and the same signals and unnamed root nodes in the same order,
+        connected in the same way, and the same signals and unnamed root nodes in the same order, and the same directives,
         respectively. It is less strict than __eq__ because it ignores node names and inner nodes.
         No merged nodes are allowed, else the equality check is not possible.
         Use canonical_id_renaming first in order to remove all unreachable or redundant nodes and rename node ids in
@@ -421,7 +421,8 @@ class IrContainer:
             return NotImplemented
         return (self.nodes == other.nodes and
                 self.source_nodes == other.source_nodes and
-                self.get_sink_nodes() == other.get_sink_nodes())
+                self.get_sink_nodes() == other.get_sink_nodes() and
+                self.directives == other.directives)
 
     def _get_next_node_id(self) -> NodeId:
         node_id = NodeId(self.next_raw_node_id)
