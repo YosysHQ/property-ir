@@ -98,6 +98,22 @@ Assertions
 |                  |                                              |                                          |                                      |
 |                  |                                              |                                          |                                      |
 +------------------+----------------------------------------------+------------------------------------------+--------------------------------------+
+| initial          |                                              | assertion statement                      |  9.2.1 Initial procedures            |
+| and always       |                                              | parameter                                |                                      |
+| procedures       |  ``initial``                                 |                                          |  9.2.2 Always procedures             |
+|                  |                                              |                                          |                                      |
+|                  |                                              | ``:evaluate initial``                    |  16.12.11 Always property            |
+|                  |                                              |                                          |                                      |
+|                  +                                              +                                          +  16.14.6 Embedding concurrent        |
+|                  |  ``always``                                  | ``:evaluate always``                     |  assertions in procedural            |
+|                  |                                              |                                          |  code (p. 481)                       |
+|                  |                                              |                                          |                                      |
+|                  |                                              |                                          |  F.5.3.1 Neutral satisfaction        |
+|                  |                                              |                                          |  (p. 1247)                           |
+|                  |                                              |                                          |                                      |
+|                  |                                              |                                          |                                      |
+|                  |                                              |                                          |                                      |
++------------------+----------------------------------------------+------------------------------------------+--------------------------------------+
 | vacuity          |                                              | assertion statement                      | 16.14.8 Nonvacuous evaluations       |
 |                  | assertion control                            | parameter                                |                                      |
 |                  | system tasks                                 |                                          | 20.11 Assertion control system tasks |

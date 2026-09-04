@@ -188,6 +188,7 @@ External input declaration
 Signals that are handled outside of Property IR, but referred to in statements,
 need to be declared using the :sexpr:`declare-input` statement.
 At the moment only one-bit signals are supported.
+For this default case the :sexpr:`<type>` may be omitted.
 
 .. code-block:: sexpr
 
@@ -222,13 +223,13 @@ necessarily always satisfied in the design.
 
 .. code-block:: sexpr
 
-    (assert-property <clk_prop> [:disable-iff <bool1>] [:enable <bool2>])
+    (assert-property <clk_prop> [:disable-iff <bool1>] [:enable <bool2>] [:evaluate <evaluate>])
 
-    (assume-property <clk_prop> [:disable-iff <bool1>] [:enable <bool2>])
+    (assume-property <clk_prop> [:disable-iff <bool1>] [:enable <bool2>] [:evaluate <evaluate>])
 
-    (restrict-property <clk_prop> [:disable-iff <bool1>] [:enable <bool2>])
+    (restrict-property <clk_prop> [:disable-iff <bool1>] [:enable <bool2>] [:evaluate <evaluate>])
 
-There are two optional keyword parameters that may follow after the clocked
+There are three optional keyword parameters that may follow after the clocked
 property in any order.
 
 
@@ -243,6 +244,12 @@ property in any order.
     For example, a procedural concurrent assertion that is located inside an
     ``if`` block is only evaluated if the ``if`` condition is true
     (see Table :ref:`Assertions <Assertions>`).
+
+:sexpr:`:evaluate`
+    ``always``
+        Default evaluation scope. Evaluate at each clock tick.
+    ``initial``
+        Evaluate only at the first clock tick.
 
 
 While the disable condition controls whether an evaluation attempt yields a result,
@@ -286,9 +293,9 @@ will be the same, with the only difference being the provided type.
 
 .. code-block:: sexpr
 
-    (cover-property  <clk_prop> [:disable-iff <bool1>] [:enable <bool2>] [:mode <mode>])
+    (cover-property  <clk_prop> [:disable-iff <bool1>] [:enable <bool2>] [:evaluate <evaluate>] [:mode <mode>])
 
-    (cover-sequence  <clk_prop> [:disable-iff <bool1>] [:enable <bool2>] [:mode <mode>])
+    (cover-sequence  <clk_prop> [:disable-iff <bool1>] [:enable <bool2>] [:evaluate <evaluate>] [:mode <mode>])
 
 
 :sexpr:`:mode`
@@ -326,7 +333,7 @@ that the sequence matches, and low otherwise.
 
 .. code-block:: sexpr
 
-    (trigger-sequence <clk_seq> [:disable-iff <bool1>] [:enable <bool2>])
+    (trigger-sequence <clk_seq> [:disable-iff <bool1>] [:enable <bool2>] [:evaluate <evaluate>])
 
 
 .. note::
@@ -339,10 +346,6 @@ that the sequence matches, and low otherwise.
 
 Notes
 """"""
-
-* In order to use an assertion inside an ``initial`` block,
-  use the :sexpr:`initial` Boolean expression primitive that is high only in the
-  first time step.
 
 * Assertion statements in SVA may contain a clocking event.
   Property IR does not provide this option because it is semantically equivalent
