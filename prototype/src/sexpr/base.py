@@ -169,7 +169,7 @@ class PlaceholderNode(PropertyIrNode):
     def instantiate_placeholder(self, node: PropertyIrNode):
         # merging 2 uninstantiated placeholders
         if isinstance(node, PlaceholderNode):
-            if self.expected_type is None and node.expected_type is None:
+            if self.expected_type is None or node.expected_type is None:
                 self.ir_container.merge_nodes(self.node_id, node.node_id)
                 return
 
@@ -429,7 +429,8 @@ class IrContainer:
         self.next_raw_node_id += 1
         return node_id
 
-    def _generate_literal_raw_sexpr(self, literal: LiteralType) -> RawSExprList | str:
+    @classmethod
+    def generate_literal_raw_sexpr(cls, literal: LiteralType) -> RawSExprList | str:
         if isinstance(literal, str):
             return literal
         elif isinstance(literal, bool):
@@ -619,7 +620,7 @@ class IrContainer:
                     current_node_expr.append(id_to_node_name[child_repr_id])
                     visit_next.append(child_repr_id)
                 elif isinstance(child_elem, LiteralType.__value__):
-                    current_node_expr.append(self._generate_literal_raw_sexpr(child_elem))
+                    current_node_expr.append(IrContainer.generate_literal_raw_sexpr(child_elem))
                 else:
                     raise TypeError(f'Unexpected child type of {child_elem} while generating s-expression for node {current_node}')
 

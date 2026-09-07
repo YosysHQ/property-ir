@@ -231,24 +231,24 @@ class PropStrongUntilWith(Property):
     child2: NodeId[Property]
 
 
-# the following are probably not needed for simple properties
-
-@typechecked
-@dataclass
-class PropNonOverlappedImplication(Property):
-    child1: NodeId[Sequence]
-    child2: NodeId[Property]
-
-@typechecked
-@dataclass
-class PropAlways(Property):
-    child: NodeId[Property]
-
-@typechecked
-@dataclass
-class PropAlwaysRanged(Property):
-    child1: Range
-    child2: NodeId[Property]
+## the following are probably not needed for simple properties
+#
+#@typechecked
+#@dataclass
+#class PropNonOverlappedImplication(Property):
+#    child1: NodeId[Sequence]
+#    child2: NodeId[Property]
+#
+#@typechecked
+#@dataclass
+#class PropAlways(Property):
+#    child: NodeId[Property]
+#
+#@typechecked
+#@dataclass
+#class PropAlwaysRanged(Property):
+#    child1: Range
+#    child2: NodeId[Property]
 
 
 

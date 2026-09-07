@@ -13,7 +13,8 @@ from sexpr.primitives import ClkSeqClocked, ClkSeqConcat, ClkSeqFirstMatch, ClkS
 from sexpr.primitives import Not, Or, Initial, PropAcceptOn, PropNexttime, PropAnd, PropNot, PropOr, PropStrong, PropWeak, PropWeakBool, PropStrongBool
 from sexpr.primitives import PropOverlappedFollowedBy, PropOverlappedImplication, PropRejectOn, PropStrongNexttime, PropUntil, PropStrongUntilWith, PropRefuted
 from sexpr.primitives import ClkPropNexttime, ClkPropStrongNexttime, ClkSeqAnd, ClkSeqOr, ClkSeqFusion, ClkSeqBool, PropTrue, PropFalse
-from sexpr.primitives import ClkPropBool, ClkPropWeakBool, ClkPropStrongBool, ClkPropClkSeq
+from sexpr.primitives import ClkPropBool, ClkPropWeakBool, ClkPropStrongBool, ClkPropClkSeq, ClkPropFalse, ClkPropAnd, ClkPropProp
+from sexpr.primitives import ClkPropNot, ClkPropOr, ClkPropUntil, ClkPropStrongUntilWith, ClkPropAcceptOn, ClkPropRejectOn
 from sexpr.parsing import get_op_symbols, parse_expression
 
 
@@ -29,7 +30,7 @@ op_to_cls: dict[str, type[PropertyIrNode]] = get_op_symbols()
 # DERIVED PRIMITIVES REWRITING
 
 
-type RewriteRule = tuple[RawSExprList, RawSExprList]
+type RewriteRule = tuple[RawSExprList, RawSExpr]
 
 type RewriteRuleGenerator = Callable[[IrContainer, NodeId], RewriteRule]
 
@@ -229,24 +230,16 @@ def prepare_primitive_rewrite_rule_dict() -> dict[type[PropertyIrNode], RewriteR
 
 
 
-def replace_single_node(container: IrContainer, node_id: NodeId, rule: RewriteRule, add_identifiers_to_container: bool = False):
-    """Replace a single node in the container in-place by an expression. The LHS of the rewrite rule has the form
-    ['new_primitive_name', 'argument_identifier1', ...] and the RHS is a RawSExprList that can use the
-    argument identifiers of the LHS to refer to the children of the node to replace.
-    Thus, the LHS must be a list of strings (might extend to more complex patterns as needed).
-    If add_identifiers_to_container is True, the child identifiers of the LHS of the rule will be uniquified and
-    added to the container as local names (for debugging purposes).
+def prepare_child_mappings(node_to_replace: PropertyIrNode, rule: RewriteRule) -> tuple[dict[str, NodeId], dict[str, RawSExpr], Optional[str], list[str]]:
+    """Given a node and a rewrite rule to apply to it, collect the children of the node and prepare
+    the following needed for rewriting:
+    - children_node_dict: maps identifiers used in the rule to node ids
+    - literals_to_replace: maps identifiers used in the rule to literals
+    - children_list_identifier: stores the single child identifier of the rule if it represents a list of arguments
+    - expanded_children_list: if the child of the LHS primitive is a list, it needs to be expanded to this list of identifiers (attaching indices 0, .. to it)
     """
 
-    node_to_replace: PropertyIrNode = container[node_id]
-    node_id_repr: NodeId = node_to_replace.node_id
-
-    rhs: RawSExprList = rule[1]
-
-    primitive, arg_identifiers = get_lhs_primitive_and_identifiers(rule)
-
-    # get children of node to replace
-    # and put them into dict associating with identifiers in rule
+    arg_identifiers: list[str] = get_lhs_primitive_and_identifiers(rule)[1]
 
     # check whether signature of primitive and LHS rule argument count matches
     # if the rule applies to a primitive with a list type argument, the rule may have a varying number of LHS argument identifiers
@@ -262,7 +255,7 @@ def replace_single_node(container: IrContainer, node_id: NodeId, rule: RewriteRu
         else:
             argument_count_error = True
     if argument_count_error:
-            raise ValueError(f'Number of argument identifiers in {rule} does not match with child count of node {node_id}')
+            raise ValueError(f'Number of argument identifiers in {rule} does not match with child count of node {node_to_replace.node_id}')
 
     children_dict: dict[str, NodeId | LiteralType] = dict() # individually named children
     children_list: list[NodeId] = list() # children list of arbitrary length (for primitives like 'and', 'or', etc.)
@@ -281,7 +274,7 @@ def replace_single_node(container: IrContainer, node_id: NodeId, rule: RewriteRu
 
     # check whether LHS rule argument count and number of children of node matches (list type argument without expansion)
     if list_needs_no_expansion and len(arg_identifiers) != len(children_list):
-        raise ValueError(f'Number of argument identifiers in {rule} does not match with child count of node {node_id}')
+        raise ValueError(f'Number of argument identifiers in {rule} does not match with child count of node {node_to_replace.node_id}')
 
 
     # prepare dicts to replace literals in RHS of rewrite rule
@@ -295,27 +288,48 @@ def replace_single_node(container: IrContainer, node_id: NodeId, rule: RewriteRu
         if isinstance(child_elem, NodeId):
             children_node_dict[identifier] = child_elem
         elif isinstance(child_elem, LiteralType.__value__):
-            literal_raw_sexpr: RawSExpr = container._generate_literal_raw_sexpr(child_elem)
+            literal_raw_sexpr: RawSExpr = IrContainer.generate_literal_raw_sexpr(child_elem)
             literals_to_replace[identifier] = literal_raw_sexpr
+
+    expanded_children_list: list[str] = list()
 
     if children_list_identifier is not None: # list type argument with expansion
         for index, elem in enumerate(children_list):
             identifier: str = children_list_identifier + str(index)
             children_node_dict[identifier] = elem
+            expanded_children_list.append(identifier)
 
     elif list_needs_no_expansion: # list type argument without expansion
         for index, elem in enumerate(children_list):
             identifier: str = arg_identifiers[index]
             children_node_dict[identifier] = elem
 
+    return children_node_dict, literals_to_replace, children_list_identifier, expanded_children_list
+
+
+def replace_single_node(container: IrContainer, node_id: NodeId, rule: RewriteRule, add_identifiers_to_container: bool = False):
+    """Replace a single node in the container in-place by an expression. The LHS of the rewrite rule has the form
+    ['new_primitive_name', 'argument_identifier1', ...] and the RHS is a RawSExprList that can use the
+    argument identifiers of the LHS to refer to the children of the node to replace.
+    Thus, the LHS must be a list of strings (might extend to more complex patterns as needed).
+    If add_identifiers_to_container is True, the child identifiers of the LHS of the rule will be uniquified and
+    added to the container as local names (for debugging purposes)."""
+
+    node_to_replace: PropertyIrNode = container[node_id]
+    node_id_repr: NodeId = node_to_replace.node_id
+
+    rhs: RawSExpr= rule[1]
+
+    # get children of node to replace and put them into dict associating with identifiers in rule
+    children_node_dict, literals_to_replace, children_list_identifier, expanded_children_list = prepare_child_mappings(node_to_replace, rule)
 
     uniquified_children_node_dict: dict[str, NodeId] = dict() # map uniquified name to node id - only used for debug information
     local_nodes: dict[str, NodeId] = dict(container.global_nodes) # node identifier information handed to parse_expression
     child_name_mapping: dict[str, str] = dict() # map name used in LHS to uniquified name
-    expanded_children_list: list[str] = [] # when the child of the LHS primitive is a list, it needs to be expanded to this list of identifiers
 
     # uniquify names used in LHS and add these node identifiers to the container as local node names
     if add_identifiers_to_container:
+        expanded_children_list = list()
         for name in children_node_dict:
             unique_name: str = container.uniquify(name)
             container.node_names[unique_name] = children_node_dict[name]
@@ -327,14 +341,11 @@ def replace_single_node(container: IrContainer, node_id: NodeId, rule: RewriteRu
         logger.debug('uniquified children: %s', uniquified_children_node_dict)
 
     else: # do not add the names to the container, but overwrite the dict local_nodes that will get handed to parse_expression
-        for name in children_node_dict:
-            local_nodes[name] = children_node_dict[name]
-            if children_list_identifier is not None:
-                expanded_children_list.append(name)
+        local_nodes = children_node_dict
 
     # replace literals and child list identifier in RHS
 
-    prepared_rhs: RawSExprList = prepare_rhs(rhs, literals_to_replace, child_name_mapping, (children_list_identifier, expanded_children_list))
+    prepared_rhs: RawSExpr = prepare_rhs(rhs, literals_to_replace, child_name_mapping, (children_list_identifier, expanded_children_list))
 
     # call parse_expression on RHS
 
@@ -351,10 +362,18 @@ def replace_single_node(container: IrContainer, node_id: NodeId, rule: RewriteRu
 
 
 
-def prepare_rhs(rhs: RawSExprList, literals_to_replace: dict[str, RawSExpr], child_name_mapping: dict[str, str], children_list_to_expand: tuple[Optional[str], list[str]]) -> RawSExprList:
+def prepare_rhs(rhs: RawSExpr, literals_to_replace: dict[str, RawSExpr], child_name_mapping: dict[str, str], children_list_to_expand: tuple[Optional[str], list[str]]) -> RawSExpr:
 
     children_list_identifier: Optional[str] = children_list_to_expand[0]
     expanded_children_list: list[str] = children_list_to_expand[1]
+
+    if isinstance(rhs, str):
+        if rhs in child_name_mapping:
+            return child_name_mapping[rhs]
+        elif rhs in literals_to_replace:
+            return literals_to_replace[rhs]
+        else:
+            return rhs
 
     logger.debug('Prepare RHS subcall for input %s with children_list_identifier %s', rhs, children_list_identifier)
     logger.debug('Prepare RHS subcall for input %s with literals_to_replace %s', rhs, literals_to_replace)
@@ -611,6 +630,35 @@ clock_rewrite_rule_dict: dict[type[PropertyIrNode], RewriteRule] = prepare_clock
 
 
 
+def get_expression_from_node(node: PropertyIrNode) -> RawSExpr:
+    """Given some PropertyIrNode, construct a RawSExprList for that node and its children.
+    The non-literal children are called chil0, child1, etc."""
+
+    current_node_expr: RawSExpr = [node.op_symbol()]
+    signature = type(node).signature()
+
+    collected_children: list[NodeId | LiteralType] = list()
+
+    for index, field in enumerate(node.get_child_fields()):
+        field_type: type = signature[index]
+        if get_origin(field_type) is list:
+            collected_children += getattr(node, field.name)
+        else:
+            collected_children.append(getattr(node, field.name))
+
+    index: int = 0
+    for child_elem in collected_children:
+        if isinstance(child_elem, NodeId):
+            current_node_expr.append('child' + str(index))
+            index += 1
+        elif isinstance(child_elem, LiteralType.__value__):
+            current_node_expr.append(IrContainer.generate_literal_raw_sexpr(child_elem))
+        else:
+            raise TypeError(f'Unexpected child type of {child_elem} while preparing clock rewriting s-expression for node {node}')
+
+    return current_node_expr
+
+
 @typechecked
 def rewrite_clocks_process_node(
     node_id: NodeId,
@@ -754,29 +802,9 @@ def rewrite_clocks_process_node(
     # recreate expression of encountered node in input container that should just be copied
     if rewrite_rule is None:
 
-        current_node_expr: RawSExprList = [current_node.op_symbol()]
-        signature = type(current_node).signature()
+        current_node_expr = get_expression_from_node(current_node)
 
-        collected_children: list[NodeId | LiteralType] = list()
-
-        for index, field in enumerate(current_node.get_child_fields()):
-            field_type: type = signature[index]
-            if get_origin(field_type) is list:
-                collected_children += getattr(current_node, field.name)
-            else:
-                collected_children.append(getattr(current_node, field.name))
-
-        index: int = 0
-        for child_elem in collected_children:
-            if isinstance(child_elem, NodeId):
-                current_node_expr.append('child' + str(index))
-                index += 1
-            elif isinstance(child_elem, LiteralType.__value__):
-                current_node_expr.append(container._generate_literal_raw_sexpr(child_elem))
-            else:
-                raise TypeError(f'Unexpected child type of {child_elem} while preparing clock rewriting s-expression for node {current_node}')
-
-        expression_to_add: RawSExprList = current_node_expr
+        expression_to_add: RawSExpr = current_node_expr
 
     # if there is a rewriting rule to apply, prepare rhs expression for parsing by using identifiers child0, child1 etc. instead of the names used in the rule lhs
     # there is a special case for the lhs identifier '<int=1>', which is the only case with a literal identifier on a lhs of the clock rewriting rules!
@@ -784,7 +812,7 @@ def rewrite_clocks_process_node(
     else:
         primitive_type, children_identifiers = get_lhs_primitive_and_identifiers(rewrite_rule)
         child_name_mapping: dict[str, str] = dict()
-        rhs: RawSExprList = rewrite_rule[1]
+        rhs: RawSExpr = rewrite_rule[1]
         index: int = 0
         for rule_child_identifier in children_identifiers:
             if rule_child_identifier != '<int=1>':
@@ -1526,6 +1554,251 @@ def add_weak_strong(input_container: IrContainer) -> IrContainer:
 
 
 
+# MAIN CLOCKED TO SIMPLE PASS
+
+
+def construct_rewritten_container_process_node(
+    node_id: NodeId,
+    input_container: IrContainer,
+    output_container: IrContainer,
+    rules: dict[type[PropertyIrNode], RewriteRule | RewriteRuleGenerator],
+    corresponding_nodes: dict[NodeId, NodeId],
+    type_classes_to_copy: list[type]):
+
+    repr_id = input_container.merged_nodes.find(node_id)
+    current_node = input_container[repr_id]
+
+    current_cls: type[PropertyIrNode] = current_node.node_type()
+    current_type_class: type[PropertyIrNode] = current_node.type_class()
+
+    rhs: Optional[RawSExpr] = None
+
+    # get rule to apply
+    rule: Optional[RewriteRule] = None
+    if current_cls in rules:
+        if isinstance(rules[current_cls], Callable):
+            fct: RewriteRuleGenerator = rules[current_cls] # type: ignore
+            rule = fct(input_container, repr_id)
+            if rule == ([], []):
+                rule = None
+        elif isinstance(rules[current_cls], tuple):
+            rule = rules[current_cls] # type: ignore
+        assert rule is not None
+        rhs = rule[1]
+
+    if current_node.type_class() in type_classes_to_copy: # these type nodes are copied as they are
+        rhs = get_expression_from_node(current_node)
+
+
+    if rhs is None:
+        raise ValueError(f'Encountered node with type {current_node.node_type()} that has no rewrite rule')
+
+
+    # check if node was already finished processing
+    if repr_id in corresponding_nodes:
+        corresponding_node_id: NodeId = corresponding_nodes[repr_id]
+        output_node: PropertyIrNode = output_container[corresponding_node_id]
+        if not isinstance(output_node, PlaceholderNode):
+            return corresponding_nodes[repr_id]
+
+
+    local_nodes: dict[str, NodeId] = dict()
+    subcall_children: list[NodeId] = list()
+
+    children_identifier_list: list[str] = list() # identifiers as used in rule; only used for to-copy types
+    child_name_mapping: dict[str, str] = dict() # mapping to use child0, child1, etc. instead; only used for to-copy types
+    literals_to_replace: dict[str, RawSExpr] = dict() # mapping from child identifier to literal RawSExpr; only used for to-copy types
+    children_list_identifier: Optional[str] = None # single identifier for list of arguments; only used for to-copy types
+    expanded_children_list: list[str] = list() # list of identifiers to replace chilodren_list_identifier; only used for to-copy types
+
+    if current_type_class not in type_classes_to_copy:
+        assert rule is not None
+        children_node_dict, literals_to_replace, children_list_identifier, _ = prepare_child_mappings(current_node, rule)
+        children_identifier_list = list(children_node_dict)
+
+
+    # create PlaceholderNodes for children if they do not already exist
+    for index, child_id in enumerate(current_node.get_child_ids()):
+        child_repr_id: NodeId = input_container.merged_nodes.find(child_id)
+        child_name: str = 'child' + str(index)
+        if children_list_identifier is not None:
+            expanded_children_list.append(child_name)
+        if child_repr_id in corresponding_nodes:
+            local_nodes[child_name] = corresponding_nodes[child_repr_id]
+        else:
+            child_placeholder: PropertyIrNode = output_container.add_placeholder_node()
+            local_nodes[child_name] = child_placeholder.node_id
+            corresponding_nodes[child_repr_id] = child_placeholder.node_id
+            subcall_children.append(child_id)
+        if current_type_class not in type_classes_to_copy:
+            child_name_mapping[children_identifier_list[index]] = child_name
+
+    expression_to_add: RawSExpr = rhs
+    if current_type_class is not Bool:
+        expression_to_add = prepare_rhs(rhs=rhs, literals_to_replace=literals_to_replace, child_name_mapping=child_name_mapping,\
+            children_list_to_expand=(children_list_identifier, expanded_children_list))
+
+    # add rhs of rule to output container
+    added_node_id: NodeId = parse_expression(expression_to_add, None, local_nodes, output_container)
+    added_node: PropertyIrNode = output_container[added_node_id]
+
+    # add to corresponding_nodes or instantiate if placeholder
+    if repr_id in corresponding_nodes:
+        corresponding_node_id: NodeId = corresponding_nodes[repr_id]
+        output_node: PropertyIrNode = output_container[corresponding_node_id]
+        if isinstance(output_node, PlaceholderNode):
+            output_node.instantiate_placeholder(added_node)
+        else:
+            raise ValueError(f'Child node exists but is already instantiated')
+    else:
+        corresponding_nodes[repr_id] = added_node_id
+
+    # make subcalls for children - if it was already processed, the child node will be immediately returned
+    for index, child_id in enumerate(subcall_children):
+        logger.debug('Make subcall for child_id %s', child_id)
+        output_child_id: NodeId = construct_rewritten_container_process_node(child_id, input_container, output_container, rules, corresponding_nodes, type_classes_to_copy)
+
+
+    return added_node_id
+
+
+
+
+def construct_rewritten_container(
+    input_container: IrContainer,
+    rules: dict[type[PropertyIrNode], RewriteRule | RewriteRuleGenerator],
+    type_classes_to_copy: list[type]) -> IrContainer:
+    """Takes a container and constructs a new container based on the given rewriting rules.
+    Every node type that is encountered must exist in the rewrite_rules.
+    This approach needs to be taken when rewriting rules change the types of replaced nodes
+    to ensure that the expression graph is always well-typed."""
+
+    corresponding_nodes: dict[NodeId, NodeId] = dict()
+
+    nodes_to_process: deque[NodeId] = deque(input_container.get_sink_nodes())
+
+    output_container: IrContainer = IrContainer()
+
+    for name, node_id in input_container.source_nodes.items():
+        signal_repr_id = input_container.merged_nodes.find(node_id)
+        signal_node = output_container.add_signal_node(name)
+        corresponding_nodes[signal_repr_id] = signal_node.node_id
+        output_container.global_nodes[name] = signal_node.node_id
+        output_container.node_names[name] = signal_node.node_id
+        output_container.source_nodes[name] = (signal_node.node_id)
+
+
+    while len(nodes_to_process) > 0:
+
+        current_id: NodeId = nodes_to_process.popleft()
+        node_repr = input_container.merged_nodes.find(current_id)
+
+        if current_id in corresponding_nodes:
+            continue
+
+        output_node_id = construct_rewritten_container_process_node(node_repr, input_container, output_container, rules, corresponding_nodes, type_classes_to_copy)
+
+
+    # add identifiers to output_container
+
+    for (name, node_id) in input_container.global_nodes.items():
+
+        repr_id = input_container.merged_nodes.find(node_id)
+
+        if name not in input_container.inner_nodes: # ignore Signal nodes without other global names
+            continue
+
+        if repr_id in corresponding_nodes:
+            new_name = output_container.uniquify(name)
+            output_container.global_nodes[new_name] = corresponding_nodes[repr_id]
+            output_container.node_names[new_name] = corresponding_nodes[repr_id]
+            output_container.inner_nodes[new_name] = corresponding_nodes[repr_id]
+
+
+    # copy directives and wrap with correct type conversion primitive
+    # (e.g. wrap sequence/property root nodes in primitive to convert to clocked type)
+    # and rename ids of directive root nodes and of empty match info
+
+    root_id_mapping: dict[NodeId, NodeId] = dict()
+    for directive in input_container.directives:
+        input_root_repr: NodeId = input_container.merged_nodes.find(directive.node_id)
+        input_root_node: PropertyIrNode = input_container[directive.node_id]
+        output_root_id: NodeId = corresponding_nodes[input_root_repr]
+        output_root_node: PropertyIrNode = output_container[output_root_id]
+
+        if output_root_node.type_class() is Sequence:
+            new_node: PropertyIrNode = output_container.add_node_by_kwargs(ClkSeqSeq, {'child': output_root_id})
+        elif output_root_node.type_class() is Property:
+            new_node: PropertyIrNode = output_container.add_node_by_kwargs(ClkPropProp, {'child': output_root_id})
+        # TODO add other node types for other passes
+        else:
+            raise ValueError(f'Unexpected root node type {output_root_node.type_class()}')
+
+        root_id_mapping[input_root_repr] = new_node.node_id
+
+    for input_id, new_root_id in root_id_mapping.items():
+            corresponding_nodes[input_id] = new_root_id
+
+    input_container.copy_directives_to_container(output_container, corresponding_nodes)
+    input_container.copy_empty_match_info_to_container(output_container, corresponding_nodes)
+
+    return output_container
+
+
+
+
+def clocked_to_simple_pass(input_container: IrContainer):
+    """Converts the clocked properties/sequences in the container into their simple counterparts in-place.
+    The resulting simple properties/sequences are wrapped into clk-prop-prop or clk-seq-seq primitives to preserve the correct
+    root node type used in directives.
+    For this transformation, all preparation step must already have been performed:
+    reduce_primitives, rewrite_nexttime_primitives, rewrite_clocks, remove_empty_matches, add_weak_strong, reduce_primitives (removes strong-until)"""
+
+    rewrite_rules: dict[type[PropertyIrNode], RewriteRule | RewriteRuleGenerator] = {
+        ClkSeqNoMatch: (['clk-seq-no-match'], ['seq-no-match']),
+        ClkSeqBool: (['clk-seq-bool', '<bool>'], ['seq-bool', '<bool>']),
+        ClkSeqRepeat: (['clk-seq-repeat', '<range>', '<clk_seq>'], ['seq-repeat', '<range>', '<clk_seq>']),
+        ClkSeqConcat: (['clk-seq-concat', '<clk_seq_list>'], ['seq-concat', '<clk_seq_list>']),
+        ClkSeqFusion: (['clk-seq-fusion', '<clk_seq_list>'], ['seq-fusion', '<clk_seq_list>']),
+        ClkSeqOr: (['clk-seq-or', '<clk_seq_list>'], ['seq-or', '<clk_seq_list>']),
+        ClkSeqIntersect: (['clk-seq-intersect', '<clk_seq_list>'], ['seq-intersect', '<clk_seq_list>']),
+        ClkSeqFirstMatch: (['clk-seq-first-match', '<clk_seq>'], ['seq-first-match', '<clk_seq>']),
+
+        ClkPropFalse: (['clk-prop-false'], ['prop-false']),
+        ClkPropTrue: (['clk-prop-true'], ['prop-true']),
+        ClkPropWeakBool: (['clk-prop-weak-bool', '<bool>'], ['prop-weak-bool', '<bool>']),
+        ClkPropStrongBool: (['clk-prop-strong-bool', '<bool>'], ['prop-strong-bool', '<bool>']),
+        ClkPropStrong: (['clk-prop-strong', '<clk_seq>'], ['prop-strong', '<clk_seq>']),
+        ClkPropWeak: (['clk-prop-weak', '<clk_seq>'], ['prop-weak', '<clk_seq>']),
+        ClkPropNot: (['clk-prop-not', '<clk_prop>'], ['prop-not', '<clk_prop>']),
+        ClkPropAnd: (['clk-prop-and', '<clk_prop_list>'], ['prop-and', '<clk_prop_list>']),
+        ClkPropOr: (['clk-prop-or', '<clk_prop_list>'], ['prop-or', '<clk_prop_list>']),
+        ClkPropNexttime: (['clk-prop-nexttime', '<int>', '<clk_prop>'], ['prop-nexttime', '<int>', '<clk_prop>']),
+        ClkPropStrongNexttime: (['clk-prop-strong-nexttime', '<int>', '<clk_prop>'], ['prop-strong-nexttime', '<int>', '<clk_prop>']),
+        ClkPropOverlappedImplication: (['clk-prop-overlapped-implication', '<clk_seq>', '<clk_prop>'], ['prop-overlapped-implication', '<clk_seq>', '<clk_prop>']),
+        ClkPropOverlappedFollowedBy: (['clk-prop-overlapped-followed-by', '<clk_seq>', '<clk_prop>'], ['prop-overlapped-followed-by', '<clk_seq>', '<clk_prop>']),
+        ClkPropUntil: (['clk-prop-until', '<clk_prop1>', '<clk_prop2>'], ['prop-until', '<clk_prop1>', '<clk_prop2>']),
+        ClkPropStrongUntilWith: (['clk-prop-strong-until-with', '<clk_prop1>', '<clk_prop2>'], ['prop-strong-until-with', '<clk_prop1>', '<clk_prop2>']),
+        ClkPropAcceptOn: (['clk-prop-accept-on', '<bool>', '<clk_prop>'], ['prop-accept-on', '<bool>', '<clk_prop>']),
+        ClkPropRejectOn: (['clk-prop-reject-on', '<bool>', '<clk_prop>'], ['prop-reject-on', '<bool>', '<clk_prop>']),
+
+        ClkSeqClocked: (['clk-seq-clocked', '<bool>', '<clk_seq>'], '<clk_seq>'),
+        ClkPropClocked: (['clk-prop-clocked', '<bool>', '<clk_prop>'], '<clk_prop>'),
+
+        ClkPropProp: (['clk-prop-prop', '<prop>'], '<prop>'),
+        ClkSeqSeq: (['clk-seq-seq', '<seq>'], '<seq>')
+
+    }
+
+    output_container: IrContainer = construct_rewritten_container(input_container, rewrite_rules, type_classes_to_copy = [Bool, Sequence, Property])
+
+    return output_container
+
+
+
+
+
+
 # NNF
 
 
@@ -1641,10 +1914,6 @@ def nnf_process_node(
         nodes_in_call_stack.remove((repr_id, True))
 
         return added_node_impl.node_id
-
-# TODO this should be checked in the clocked to simple rewriting pass instead for the clocked versions
-#    elif isinstance(current_node, PropSeq) or isinstance(current_node, PropBool):
-#            raise ValueError(f'Encountered sequence property without weak or strong qualifier at node {current_node}')
 
 
     # add current node to recursion stack

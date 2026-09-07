@@ -8,8 +8,8 @@ from tests.input_data import raw_sexpr1, raw_sexpr2, raw_sexpr3, raw_sexpr4, raw
 from tests.input_data import raw_sexpr6_declare, raw_sexpr6_declare_rec, raw_sexpr5_declare_rec, raw_sexpr7_declare_rec
 from tests.input_data import raw_sexpr_signal_redeclaration_local, raw_sexpr_signal_redeclaration_global1, raw_sexpr_signal_redeclaration_global2
 from tests.input_data import uninst_node_exprs, merge_with_type_conflict, merge_without_type_conflict
-from sexpr.base import Bool, BoundedRange, IntOrUnbounded, NodeId, Property, PropertyDirective, PropertyIrNode, Range, Sequence, RootTestDirective
-from sexpr.primitives import And, Not, Or, PropAlwaysRanged, SeqBool, SeqConcat, SeqRepeat, PropWeak
+from sexpr.base import Bool, BoundedRange, IntOrUnbounded, NodeId, Property, PropertyIrNode, Range, Sequence, RootTestDirective
+from sexpr.primitives import And, Not, Or, SeqBool, ClkSeqBool, SeqConcat, SeqRepeat, ClkPropWeak, ClkPropAlwaysRanged
 from tests.helpers import wrap_in_document, wrap_multiple_expr_in_document, wrap_statement_in_document, wrap_multiple_statements_in_document
 from tests.helpers import apply_roundtrip
 
@@ -131,12 +131,12 @@ def test_parse_expr3(container):
     root_node_id = parse_expression(expr=raw_sexpr3, expected_type=None, local_nodes=container.global_nodes, ir_container=container)
     assert isinstance(root_node_id, NodeId)
     root_node: PropertyIrNode = container[root_node_id]
-    assert isinstance(root_node, PropAlwaysRanged)
+    assert isinstance(root_node, ClkPropAlwaysRanged)
     assert root_node.child1 == Range(4, IntOrUnbounded('$'))
     child2 = container[root_node.child2]
-    assert isinstance(child2, PropWeak)
+    assert isinstance(child2, ClkPropWeak)
     child2_child = container[child2.child]
-    assert isinstance(child2_child, SeqBool)
+    assert isinstance(child2_child, ClkSeqBool)
     child2_child_child = container[child2_child.child]
     assert isinstance(child2_child_child, Not)
     assert isinstance(container[child2_child_child.child], Signal)

@@ -312,10 +312,10 @@ def test_nnf_property_unchanged_positive():
     input_statement1: RawSExprList = ['declare-rec',
                 ['declare', 'prop1', ['prop-and',
                     ['prop-weak', ['seq-bool', 'a']],
-                    ['prop-non-overlapped-implication', ['seq-bool', ['constant', 'true']], 'prop2']]],
+                    ['prop-overlapped-implication', ['seq-bool', ['constant', 'true']], 'prop2']]],
                 ['declare', 'prop2', ['prop-and',
                     ['prop-weak', ['seq-bool', 'a']],
-                    ['prop-non-overlapped-implication', ['seq-bool', ['constant', 'true']], 'prop1']]],
+                    ['prop-overlapped-implication', ['seq-bool', ['constant', 'true']], 'prop1']]],
                 ]
     root_statement1: RawSExprList = ['parse-sexpr', 'prop1']
     root_statement2: RawSExprList = ['parse-sexpr', 'prop2']

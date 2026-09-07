@@ -248,22 +248,22 @@ def parsable_boolean(declared_signals: list[str]) -> st.SearchStrategy:
     )
 
 def parsable_sequence(declared_signals: list[str]) -> st.SearchStrategy:
-    base = parsable_boolean(declared_signals).map(lambda elem: ['seq-bool', elem])
+    base = parsable_boolean(declared_signals).map(lambda elem: ['clk-seq-bool', elem])
 
     return st.recursive(base=base, extend=lambda children:
-            st.lists(children, min_size=1, max_size=4).map(lambda lst: ['seq-concat'] + lst) |
-            st.builds(lambda rng, seq: ['seq-repeat', rng, seq],  constant_range(), children),
+            st.lists(children, min_size=1, max_size=4).map(lambda lst: ['clk-seq-concat'] + lst) |
+            st.builds(lambda rng, seq: ['clk-seq-repeat', rng, seq],  constant_range(), children),
             max_leaves=2
     )
 
 def parsable_property(declared_signals: list[str]) -> st.SearchStrategy:
-    base = parsable_sequence(declared_signals).map(lambda elem: ['prop-weak', elem])
+    base = parsable_sequence(declared_signals).map(lambda elem: ['clk-prop-weak', elem])
 
     return st.recursive(base=base, extend=lambda children:
-            children.map(lambda elem: ['prop-always', elem]) |
-            st.builds(lambda rng, prop: ['prop-always-ranged', rng, prop], constant_range(), children) |
-            st.builds(lambda seq, prop: ['prop-non-overlapped-implication', seq, prop], parsable_sequence(declared_signals), children) |
-            st.lists(children, min_size=1, max_size=4).map(lambda lst: ['prop-and'] + lst),
+            children.map(lambda elem: ['clk-prop-always', elem]) |
+            st.builds(lambda rng, prop: ['clk-prop-always-ranged', rng, prop], constant_range(), children) |
+            st.builds(lambda seq, prop: ['clk-prop-non-overlapped-implication', seq, prop], parsable_sequence(declared_signals), children) |
+            st.lists(children, min_size=1, max_size=4).map(lambda lst: ['clk-prop-and'] + lst),
             max_leaves=2)
 
 
