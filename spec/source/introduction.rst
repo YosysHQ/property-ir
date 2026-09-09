@@ -242,4 +242,3 @@ intermediate results representable as Property IR.
 
     The MLIR dialect for RTLIL will be extended to represent Property IR in order
     to ensure interoperability with CIRCT.
-

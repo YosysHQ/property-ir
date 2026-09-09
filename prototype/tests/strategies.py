@@ -1,16 +1,30 @@
-from typing import Optional, Callable, get_origin, get_args, Any
-from collections import defaultdict
-from hypothesis import strategies as st
 import logging
 import string
+from collections import defaultdict
+from collections.abc import Callable
+from typing import Any, get_args, get_origin
 
-from sexpr.base import ClockedProperty, ClockedSequence, RawSExpr, RawSExprList, PropertyIrNode, IrContainer, RootTestDirective
-from sexpr.base import Property, Sequence, Bool, Range, BoundedRange, IntOrUnbounded, Signal
-from sexpr.base import Directive, RootTestDirective
+from hypothesis import strategies as st
+from sexpr.base import (
+    Bool,
+    BoundedRange,
+    ClockedProperty,
+    ClockedSequence,
+    Directive,
+    IrContainer,
+    Property,
+    PropertyIrNode,
+    Range,
+    RawSExpr,
+    RawSExprList,
+    RootTestDirective,
+    Sequence,
+    Signal,
+)
 from sexpr.parsing import parse_document, parse_raw_sexpr
 from sexpr.primitives import ClkSeqNoMatch, SeqNoMatch
-from tests.helpers import wrap_signals_and_expr_in_document
 
+from tests.helpers import wrap_signals_and_expr_in_document
 
 logger = logging.getLogger(__name__)
 
@@ -19,8 +33,7 @@ logger = logging.getLogger(__name__)
 type IrGeneratingType = tuple[str, type[PropertyIrNode], list[type], list[int]]
 
 
-forbidden_primitives_filter: Callable[[type[PropertyIrNode]], bool] = lambda node_type: False if \
-    (issubclass(node_type, ClkSeqNoMatch) or issubclass(node_type, SeqNoMatch)) else True;
+forbidden_primitives_filter: Callable[[type[PropertyIrNode]], bool] = lambda node_type: not (issubclass(node_type, ClkSeqNoMatch) or issubclass(node_type, SeqNoMatch));
 
 
 def random_ir_clocked(
@@ -28,7 +41,7 @@ def random_ir_clocked(
     primitive_filter: Callable[[type[PropertyIrNode]], bool] = lambda node_type: True,
     directive: type[Directive] = RootTestDirective,
     **lists_params) -> st.SearchStrategy[str]:
-    only_clocked_filter : Callable[[type[PropertyIrNode]], bool] = lambda node_type: False if (issubclass(node_type, Property) or issubclass(node_type, Sequence)) else True
+    only_clocked_filter : Callable[[type[PropertyIrNode]], bool] = lambda node_type: not (issubclass(node_type, Property) or issubclass(node_type, Sequence))
     adjusted_filter: Callable[[type[PropertyIrNode]], bool] = lambda node_type: only_clocked_filter(node_type) and primitive_filter(node_type) and forbidden_primitives_filter(node_type)
     return random_ir(final_node_type=final_node_type, primitive_filter=adjusted_filter, directive=directive, **lists_params)
 
@@ -39,7 +52,7 @@ def random_ir_simple(
     final_node_type: type[PropertyIrNode],
     primitive_filter: Callable[[type[PropertyIrNode]], bool] = lambda node_type: True,
     **lists_params) -> st.SearchStrategy[str]:
-    only_simple_filter : Callable[[type[PropertyIrNode]], bool] = lambda node_type: False if (issubclass(node_type, ClockedProperty) or issubclass(node_type, ClockedSequence)) else True
+    only_simple_filter : Callable[[type[PropertyIrNode]], bool] = lambda node_type: not (issubclass(node_type, ClockedProperty) or issubclass(node_type, ClockedSequence))
     adjusted_filter: Callable[[type[PropertyIrNode]], bool] = lambda node_type: only_simple_filter(node_type) and primitive_filter(node_type) and forbidden_primitives_filter(node_type)
     return random_ir(final_node_type=final_node_type, primitive_filter=adjusted_filter, **lists_params)
 
@@ -178,7 +191,7 @@ def build_ir_from_random_data(strategy_drawn_data: tuple[list[IrGeneratingType],
                     candidates_default += [f'(clk-prop-strong-bool {signal})' for signal in signal_list]
 
                 # choose candidates to select an argument from (prefer unused nodes over used ones and default values)
-                if random_num % 10 in range(0, 9) and len(candidates_unused_preceding_nodes) > 0:
+                if random_num % 10 in range(9) and len(candidates_unused_preceding_nodes) > 0:
                     candidates = candidates_unused_preceding_nodes
                 else:
                     candidates = candidates_preceding_nodes
@@ -275,7 +288,7 @@ def parsable_let_rec_boolean(draw, declared_signals: list[str]) -> RawSExprList:
     all_identifiers = declared_signals + let_identifiers
     let_rec_expr = []
     for (i, idf) in enumerate(let_identifiers):
-        expr: RawSExprList = draw(parsable_boolean(all_identifiers).filter(lambda x: x not in (let_identifiers+[None])[i:-1]))
+        expr: RawSExprList = draw(parsable_boolean(all_identifiers).filter(lambda x, i=i: x not in (let_identifiers+[None])[i:-1]))
         let_rec_expr.append([idf, expr])
     permuted_let_rec_expr = draw(st.permutations(let_rec_expr))
     return_value = draw(st.sampled_from(let_identifiers))
@@ -286,21 +299,20 @@ def parsable_let_rec_boolean(draw, declared_signals: list[str]) -> RawSExprList:
 def parsable_let_rec_boolean_nested(draw, declared_names: list[str], inner=False) -> RawSExprList:
     let_identifiers = draw(st.lists(elements=identifier().filter(lambda x: x not in declared_names), min_size=1, max_size=3, unique=True))
     all_identifiers = declared_names + let_identifiers
-    inner_let_rec: Optional[RawSExprList] = None
-    nested_idf: Optional[str] = None
+    inner_let_rec: RawSExprList | None = None
+    nested_idf: str | None = None
     if not inner:
         inner_let_rec = draw(parsable_let_rec_boolean_nested(declared_names=all_identifiers, inner=True))
         nested_idf = draw(st.sampled_from(let_identifiers))
     let_rec_expr = []
     for (i, idf) in enumerate(let_identifiers):
-        if not inner:
-            if idf == nested_idf:
-                let_rec_expr.append([idf, inner_let_rec])
-                continue
+        if not inner and idf == nested_idf:
+            let_rec_expr.append([idf, inner_let_rec])
+            continue
         if inner:
-            expr: RawSExprList = draw(parsable_boolean(all_identifiers).filter(lambda x: x not in declared_names and x not in (let_identifiers+[None])[i:-1]))
+            expr: RawSExprList = draw(parsable_boolean(all_identifiers).filter(lambda x, i=i: x not in declared_names and x not in (let_identifiers+[None])[i:-1]))
         else:
-            expr: RawSExprList = draw(parsable_boolean(all_identifiers).filter(lambda x: x not in (let_identifiers+[None])[i:-1]))
+            expr: RawSExprList = draw(parsable_boolean(all_identifiers).filter(lambda x, i=i: x not in (let_identifiers+[None])[i:-1]))
         let_rec_expr.append([idf, expr])
     permuted_let_rec_expr = draw(st.permutations(let_rec_expr))
     return_value = draw(st.sampled_from(let_identifiers))
@@ -320,7 +332,7 @@ def parsable_declare_rec_boolean_document(draw) -> RawSExpr:
 
     declare_rec_expr1 = []
     for (i, idf) in enumerate(identifiers1):
-        expr: RawSExprList = draw(parsable_boolean(usable_identifiers1).filter(lambda x: x not in (identifiers1+[None])[i:-1]))
+        expr: RawSExprList = draw(parsable_boolean(usable_identifiers1).filter(lambda x, i=i: x not in (identifiers1+[None])[i:-1]))
         if idf in declare_identifiers1:
             declare_rec_expr1.append(['declare', idf, expr])
         else:
@@ -329,7 +341,7 @@ def parsable_declare_rec_boolean_document(draw) -> RawSExpr:
 
     declare_rec_expr2 = []
     for (i, idf) in enumerate(identifiers2):
-        expr: RawSExprList = draw(parsable_boolean(usable_identifiers2).filter(lambda x: x not in (identifiers2+[None])[i:-1]))
+        expr: RawSExprList = draw(parsable_boolean(usable_identifiers2).filter(lambda x, i=i: x not in (identifiers2+[None])[i:-1]))
         if idf in declare_identifiers2:
             declare_rec_expr2.append(['declare', idf, expr])
         else:

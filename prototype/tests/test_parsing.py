@@ -1,18 +1,65 @@
 import logging
-from pathlib import Path
+
 import pytest
-
-from sexpr import parse_expression, parse_literal, RawSExprList, IrContainer, Signal, parse_document
+from sexpr import (
+    IrContainer,
+    RawSExprList,
+    Signal,
+    parse_document,
+    parse_expression,
+    parse_literal,
+)
+from sexpr.base import (
+    Bool,
+    BoundedRange,
+    IntOrUnbounded,
+    NodeId,
+    Property,
+    PropertyIrNode,
+    Range,
+    RootTestDirective,
+    Sequence,
+)
 from sexpr.parsing import parse_raw_sexpr
-from tests.input_data import raw_sexpr1, raw_sexpr2, raw_sexpr3, raw_sexpr4, raw_sexpr5, raw_sexpr6, raw_sexpr7, raw_sexpr8
-from tests.input_data import raw_sexpr6_declare, raw_sexpr6_declare_rec, raw_sexpr5_declare_rec, raw_sexpr7_declare_rec
-from tests.input_data import raw_sexpr_signal_redeclaration_local, raw_sexpr_signal_redeclaration_global1, raw_sexpr_signal_redeclaration_global2
-from tests.input_data import uninst_node_exprs, merge_with_type_conflict, merge_without_type_conflict
-from sexpr.base import Bool, BoundedRange, IntOrUnbounded, NodeId, Property, PropertyIrNode, Range, Sequence, RootTestDirective
-from sexpr.primitives import And, Not, Or, SeqBool, ClkSeqBool, SeqConcat, SeqRepeat, ClkPropWeak, ClkPropAlwaysRanged
-from tests.helpers import wrap_in_document, wrap_multiple_expr_in_document, wrap_statement_in_document, wrap_multiple_statements_in_document
-from tests.helpers import apply_roundtrip
+from sexpr.primitives import (
+    And,
+    ClkPropAlwaysRanged,
+    ClkPropWeak,
+    ClkSeqBool,
+    Not,
+    Or,
+    SeqBool,
+    SeqConcat,
+    SeqRepeat,
+)
 
+from tests.helpers import (
+    apply_roundtrip,
+    wrap_in_document,
+    wrap_multiple_expr_in_document,
+    wrap_multiple_statements_in_document,
+    wrap_statement_in_document,
+)
+from tests.input_data import (
+    merge_with_type_conflict,
+    merge_without_type_conflict,
+    raw_sexpr1,
+    raw_sexpr2,
+    raw_sexpr3,
+    raw_sexpr4,
+    raw_sexpr5,
+    raw_sexpr5_declare_rec,
+    raw_sexpr6,
+    raw_sexpr6_declare,
+    raw_sexpr6_declare_rec,
+    raw_sexpr7,
+    raw_sexpr7_declare_rec,
+    raw_sexpr8,
+    raw_sexpr_signal_redeclaration_global1,
+    raw_sexpr_signal_redeclaration_global2,
+    raw_sexpr_signal_redeclaration_local,
+    uninst_node_exprs,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -200,7 +247,7 @@ def test_generate_raw_sexpr_node_defs_no_error(expr):
     }
     directive = container1.directives[0]
     assert isinstance(directive, RootTestDirective)
-    output_expr_list = container1.generate_raw_sexpr_node_defs(node_list=[directive.node_id], declared_nodes=declared_nodes, node_names_to_use=dict())
+    output_expr_list = container1.generate_raw_sexpr_node_defs(node_list=[directive.node_id], declared_nodes=declared_nodes, node_names_to_use={})
     output_expr2: RawSExprList | str = container1.generate_raw_sexpr_unnamed_root(node_id=container1.directives[0].node_id, declared_nodes=declared_nodes)
     logger.debug(output_expr_list)
     logger.debug(output_expr2)

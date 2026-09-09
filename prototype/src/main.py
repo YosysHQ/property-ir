@@ -1,10 +1,17 @@
 from __future__ import annotations
+
 import argparse
-from pathlib import Path
 import logging
+from pathlib import Path
 
-from sexpr import parse_raw_sexpr, IrContainer, RawSExprList, unparse_raw_sexpr, parse_document, nnf
-
+from sexpr import (
+    IrContainer,
+    RawSExprList,
+    nnf,
+    parse_document,
+    parse_raw_sexpr,
+    unparse_raw_sexpr,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +39,7 @@ def main():
 
     raw_sexpr: RawSExprList = parse_raw_sexpr(input_document)
     ir_container = IrContainer()
-    root_node_id = parse_document(raw_sexpr, ir_container)
+    parse_document(raw_sexpr, ir_container)
 
     if args.normalform:
         nnf_ir_container: IrContainer = nnf(ir_container)

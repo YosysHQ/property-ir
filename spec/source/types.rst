@@ -314,4 +314,3 @@ all primitives are replaced by their simple counterparts.
     V
 
     <prop>                                  ; simple/unclocked
-

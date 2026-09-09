@@ -1,13 +1,14 @@
-import pytest
 import logging
-from pathlib import Path
 
-from sexpr.parsing import parse_document, parse_raw_sexpr
-from tests.helpers import wrap_multiple_statements_in_document, wrap_statement_in_document
+import pytest
 from sexpr import IrContainer, nnf
 from sexpr.base import RawSExprList
-from tests.input_data import raw_sexpr6_declare_rec
+from sexpr.parsing import parse_document, parse_raw_sexpr
 
+from tests.helpers import (
+    wrap_multiple_statements_in_document,
+    wrap_statement_in_document,
+)
 
 logger = logging.getLogger(__name__)
 

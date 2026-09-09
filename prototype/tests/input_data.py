@@ -1,9 +1,4 @@
-
-
-
-
 from sexpr.base import RawSExprList
-
 
 expr1 =  '(or (and a b) (not (and (not a) c)) d)'
 

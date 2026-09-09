@@ -1,11 +1,13 @@
-import pytest
-from pathlib import Path
-
-from sexpr import IrContainer
-from sexpr import parse_document
+from sexpr import IrContainer, parse_document
 from sexpr.base import NodeId
-from tests.input_data import raw_sexpr1, raw_sexpr6_declare_rec, raw_sexpr7_declare_rec, raw_sexpr5
+
 from tests.helpers import wrap_in_document, wrap_multiple_statements_in_document
+from tests.input_data import (
+    raw_sexpr1,
+    raw_sexpr5,
+    raw_sexpr6_declare_rec,
+    raw_sexpr7_declare_rec,
+)
 
 
 def test_uniquify1(container):
@@ -101,5 +103,3 @@ def test_node_renaming2():
     assert container1.inner_nodes == container2.inner_nodes
 
     assert container1 == container2
-
-

@@ -354,6 +354,3 @@ Notes
 * In order to apply assertions to simple sequences or simple properties,
   use the primitives :sexpr:`clk-seq-seq` and :sexpr:`clk-prop-prop`, respectively,
   to convert them to the clocked variants first.
-
-
-

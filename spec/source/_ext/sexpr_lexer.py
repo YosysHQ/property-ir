@@ -1,12 +1,22 @@
 from pygments.lexer import RegexLexer
-from pygments.token import Keyword, Comment, Name, Punctuation, String, Number, Text, Whitespace, Operator
+from pygments.token import (
+    Comment,
+    Keyword,
+    Name,
+    Number,
+    Punctuation,
+    String,
+    Text,
+    Whitespace,
+)
+
 
 class SExprLexer(RegexLexer):
     name = "SExpr"
-    aliases = ["sexpr", "pir"]
-    filenames = ["*.sexpr", "*.pir"]
+    aliases = ["sexpr", "pir"] # noqa: RUF012
+    filenames = ["*.sexpr", "*.pir"] # noqa: RUF012
 
-    tokens = {
+    tokens = { # noqa: RUF012
         'root' : [
             (r'[()]', Punctuation),
             (r'[\[\]]', String),

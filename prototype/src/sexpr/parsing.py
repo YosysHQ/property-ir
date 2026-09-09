@@ -1,17 +1,37 @@
 from __future__ import annotations
-from itertools import batched
-from typing import Optional, Any, get_origin, get_args, Literal
-from typeguard import typechecked
-import re
+
 import logging
+import re
+from itertools import batched
+from typing import Any, Literal, get_args, get_origin
 
-from .base import Directive, PropertyDirective, EvaluationScope, PropertyType, RawSExpr, RawSExprList, LiteralType, NodeId, RootTestDirective, VacuityMode
-from .base import IrContainer, PropertyIrNode, PlaceholderNode
-from .base import Bool, Sequence, Property
-from .base import Range, BoundedRange, IntOrUnbounded
-from .base import NamedExpressionDeclaration, SignalDeclaration, NamedRecursiveDeclaration
+from typeguard import typechecked
+
+from .base import (
+    Bool,
+    BoundedRange,
+    Directive,
+    EvaluationScope,
+    IntOrUnbounded,
+    IrContainer,
+    LiteralType,
+    NamedExpressionDeclaration,
+    NamedRecursiveDeclaration,
+    NodeId,
+    PlaceholderNode,
+    Property,
+    PropertyDirective,
+    PropertyIrNode,
+    PropertyType,
+    Range,
+    RawSExpr,
+    RawSExprList,
+    RootTestDirective,
+    Sequence,
+    SignalDeclaration,
+    VacuityMode,
+)
 from .primitives import *
-
 
 logger = logging.getLogger(__name__)
 
@@ -19,7 +39,7 @@ logger = logging.getLogger(__name__)
 @typechecked
 def get_op_symbols() -> dict[str, type[PropertyIrNode]]:
     allowed_types = [Bool, Sequence, Property, ClockedSequence, ClockedProperty]
-    ops_to_cls: dict[str, type[PropertyIrNode]] = dict()
+    ops_to_cls: dict[str, type[PropertyIrNode]] = {}
 
     for node_type in allowed_types:
         for cls in node_type.__subclasses__():
@@ -28,7 +48,7 @@ def get_op_symbols() -> dict[str, type[PropertyIrNode]]:
     return ops_to_cls
 
 def get_directive_symbols() -> dict[str, type]:
-    name_to_cls: dict[str, type] = dict()
+    name_to_cls: dict[str, type] = {}
     for cls in PropertyDirective.__subclasses__():
         name_to_cls[cls.op_symbol()] = cls
     name_to_cls[RootTestDirective.op_symbol()] = RootTestDirective
@@ -50,9 +70,9 @@ def parse_raw_sexpr(expr: str) -> RawSExprList:
     tokens: list[str] = re.split(r'[\s]+|(?=[()])|(?<=[()])', expr)
     tokens = [t for t in tokens if t != '']
     if tokens.pop(0) != '(':
-            raise ValueError(f"Expression not starting with '('")
+            raise ValueError("Expression not starting with '('")
     if tokens.pop() != ')':
-            raise ValueError(f"Expression not ending in ')'")
+            raise ValueError("Expression not ending in ')'")
 
     logger.debug(tokens)
 
@@ -68,7 +88,7 @@ def parse_raw_sexpr(expr: str) -> RawSExprList:
         elif t == ")":
             finished_list = current_list
             if len(stack) == 0:
-                raise ValueError(f"Trying to pop from empty stack. Missing '('?")
+                raise ValueError("Trying to pop from empty stack. Missing '('?")
             current_list = stack.pop()
             current_list.append(finished_list)
         else:
@@ -142,7 +162,7 @@ def parse_literal(literal_expr: RawSExpr, expected_type: type) -> LiteralType:
     elif issubclass(expected_type, int)  and isinstance(literal_expr, str):
         parsed_int = parse_int(literal_expr)
         if parsed_int == '$':
-            raise TypeError(f"Mismatch of expected type int and '$'")
+            raise TypeError("Mismatch of expected type int and '$'")
         else:
             return parsed_int
 
@@ -154,7 +174,7 @@ def parse_literal(literal_expr: RawSExpr, expected_type: type) -> LiteralType:
 
 
 def check_names_sexpr(expr: RawSExprList) -> list[tuple[str, RawSExpr]]:
-    named_subexpressions: list[tuple[str, RawSExpr]] = list()
+    named_subexpressions: list[tuple[str, RawSExpr]] = []
     if not isinstance(expr, list):
         raise ValueError(f"Expected list of named expressions instead of {expr}")
     for item in expr:
@@ -210,7 +230,7 @@ def process_named_subexpressions(local_nodes: dict[str, NodeId], named_subexpres
 @typechecked
 def parse_expression(
     expr: RawSExpr,
-    expected_type: Optional[type[PropertyIrNode]],
+    expected_type: type[PropertyIrNode] | None,
     local_nodes: dict[str, NodeId],
     ir_container: IrContainer) -> NodeId:
 
@@ -306,9 +326,9 @@ def parse_declare_rec(expression_list: list[RawSExprList], ir_container: IrConta
     local_nodes = ir_container.global_nodes
 
     new_global_names = []
-    new_global_nodes: dict[str, NodeId] = dict()
+    new_global_nodes: dict[str, NodeId] = {}
 
-    named_subexpressions: list[tuple[str, RawSExpr]] = list()
+    named_subexpressions: list[tuple[str, RawSExpr]] = []
 
     # collect all named expressions and keep track of new global names
     for expr in expression_list:
@@ -334,8 +354,8 @@ def parse_declare_rec(expression_list: list[RawSExprList], ir_container: IrConta
 def parse_directive(directive_str: str, expression: RawSExpr, parameter_list: list[RawSExpr], ir_container):
 
     directive_type: type[Directive] = name_to_directive[directive_str]
-    root_node_type: Optional[type] = directive_type.node_type()
-    kwargs: dict[str, Any] = dict()
+    root_node_type: type | None = directive_type.node_type()
+    kwargs: dict[str, Any] = {}
     root_node_id: NodeId = parse_expression(expr=expression, expected_type=root_node_type, local_nodes=ir_container.global_nodes, ir_container=ir_container)
     kwargs['node_id'] = root_node_id
 
@@ -406,6 +426,3 @@ def parse_document(document: RawSExprList, ir_container: IrContainer):
 
         case _:
             raise ValueError(f'Unexpected document form {document}')
-
-
-

@@ -1,19 +1,41 @@
-from re import L
-import pytest
-from hypothesis import given, settings, Verbosity, example
-
-from pathlib import Path
 import logging
-from typing import Callable
-from sexpr.base import Bool, ClockedSequence, IrContainer, PropertyIrNode, NodeId
-from sexpr.parsing import parse_document
-from sexpr.base import RawSExprList, ClockedProperty
-from sexpr.parsing import parse_raw_sexpr
-from sexpr.primitives import ClkPropEventually, FallingGclk, RisingGclk, And, ClkPropAlwaysRanged, ClkPropStrongEventuallyRanged, ClkSeqAnd
-from sexpr.rewriting import RewriteRuleGenerator, get_seq_and_rewrite_rule, replace_single_node, RewriteRule, apply_rules, get_ranged_rewrite_rule, reduce_primitives, prepare_primitive_rewrite_rule_dict
-from tests.strategies import random_ir_clocked, random_ir
-from tests.helpers import check_primitive_absence
+from collections.abc import Callable
+from pathlib import Path
 
+import pytest
+from hypothesis import Verbosity, example, given, settings
+from sexpr.base import (
+    Bool,
+    ClockedProperty,
+    ClockedSequence,
+    IrContainer,
+    NodeId,
+    PropertyIrNode,
+    RawSExprList,
+)
+from sexpr.parsing import parse_document, parse_raw_sexpr
+from sexpr.primitives import (
+    And,
+    ClkPropAlwaysRanged,
+    ClkPropEventually,
+    ClkPropStrongEventuallyRanged,
+    ClkSeqAnd,
+    FallingGclk,
+    RisingGclk,
+)
+from sexpr.rewriting import (
+    RewriteRule,
+    RewriteRuleGenerator,
+    apply_rules,
+    get_ranged_rewrite_rule,
+    get_seq_and_rewrite_rule,
+    prepare_primitive_rewrite_rule_dict,
+    reduce_primitives,
+    replace_single_node,
+)
+
+from tests.helpers import check_primitive_absence
+from tests.strategies import random_ir, random_ir_clocked
 
 logger = logging.getLogger(__name__)
 
@@ -321,19 +343,17 @@ def check_reduce_primitives(doc):
     check_primitive_absence(container1, forbidden_primitives)
 
 @settings(verbosity=Verbosity.verbose, max_examples=50, deadline=500)
-@given((random_ir(final_node_type=Bool, primitive_filter=lambda node_type: False if not issubclass(node_type, Bool) else True)))
+@given(random_ir(final_node_type=Bool, primitive_filter=lambda node_type: bool(issubclass(node_type, Bool))))
 def test_reduce_primitives_bool(doc):
     check_reduce_primitives(doc)
 
 @settings(verbosity=Verbosity.verbose, max_examples=50, deadline=500)
-@given((random_ir_clocked(final_node_type=ClockedSequence, primitive_filter=lambda node_type: False if issubclass(node_type, ClockedProperty) else True)))
+@given(random_ir_clocked(final_node_type=ClockedSequence, primitive_filter=lambda node_type: not issubclass(node_type, ClockedProperty)))
 @example("""(document (declare-input 0) (parse-sexpr (let-rec (step0 (clk-seq-throughout (true) (clk-seq-bool 0))) step0)))""")
 def test_reduce_primitives_seq(doc):
     check_reduce_primitives(doc)
 
 @settings(verbosity=Verbosity.verbose, max_examples=50, deadline=500)
-@given((random_ir_clocked(final_node_type=ClockedProperty)))
+@given(random_ir_clocked(final_node_type=ClockedProperty))
 def test_reduce_primitives_prop(doc):
     check_reduce_primitives(doc)
-
-

@@ -4,8 +4,8 @@
 # https://www.sphinx-doc.org/en/master/usage/configuration.html
 
 
-import sys
 import os
+import sys
 
 sys.path.insert(0, os.path.abspath('./_ext'))
 
@@ -34,4 +34,3 @@ exclude_patterns = []
 html_theme = 'furo-ys'
 html_css_files = ['custom.css']
 html_static_path = ['_static']
-

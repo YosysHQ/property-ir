@@ -1,16 +1,21 @@
-from hypothesis import settings, Verbosity, given, example
 import logging
-import pytest
 from pathlib import Path
 
-from sexpr.rewriting import add_weak_strong, nnf
+from hypothesis import Verbosity, example, given, settings
 from sexpr.base import AssertProperty, CoverProperty, IrContainer, RawSExprList
-from sexpr.parsing import parse_raw_sexpr, parse_document
-from sexpr.rewriting import rewrite_clocks, remove_empty_matches, reduce_primitives, rewrite_nexttime_primitives, clocked_to_simple_pass
+from sexpr.parsing import parse_document, parse_raw_sexpr
 from sexpr.primitives import ClkPropClocked
+from sexpr.rewriting import (
+    add_weak_strong,
+    clocked_to_simple_pass,
+    nnf,
+    reduce_primitives,
+    remove_empty_matches,
+    rewrite_clocks,
+    rewrite_nexttime_primitives,
+)
+
 from tests.strategies import random_ir_clocked
-
-
 
 logger = logging.getLogger(__name__)
 
@@ -195,7 +200,7 @@ def check_add_weak_strong_no_error(doc):
 
 
 @settings(verbosity=Verbosity.verbose, max_examples=50, deadline=500)
-@given((random_ir_clocked(final_node_type=ClkPropClocked, directive=CoverProperty)))
+@given(random_ir_clocked(final_node_type=ClkPropClocked, directive=CoverProperty))
 @example("""(document (declare-input l) (declare-input K) (declare-input k)
     (cover-property (let-rec
         (step0 (constant false))
@@ -206,7 +211,7 @@ def test_add_weak_strong_random_no_error_cover(doc):
     check_add_weak_strong_no_error(doc)
 
 @settings(verbosity=Verbosity.verbose, max_examples=50, deadline=500)
-@given((random_ir_clocked(final_node_type=ClkPropClocked, directive=AssertProperty)))
+@given(random_ir_clocked(final_node_type=ClkPropClocked, directive=AssertProperty))
 def test_add_weak_strong_random_no_error(doc):
     check_add_weak_strong_no_error(doc)
 
@@ -374,7 +379,7 @@ def check_clocked_to_simple_no_error(doc):
             (step1 (clk-prop-clocked (true) step0))
             step1)))""")
 @settings(verbosity=Verbosity.verbose, max_examples=30, deadline=1000)
-@given((random_ir_clocked(final_node_type=ClkPropClocked, directive=CoverProperty)))
+@given(random_ir_clocked(final_node_type=ClkPropClocked, directive=CoverProperty))
 def test_clocked_to_simple_random_no_error_cover(doc):
     check_clocked_to_simple_no_error(doc)
 
@@ -385,6 +390,6 @@ def test_clocked_to_simple_random_no_error_cover(doc):
         (step1 (clk-prop-clocked (true) step0))
         step1)))""")
 @settings(verbosity=Verbosity.verbose, max_examples=30, deadline=1000)
-@given((random_ir_clocked(final_node_type=ClkPropClocked, directive=AssertProperty)))
+@given(random_ir_clocked(final_node_type=ClkPropClocked, directive=AssertProperty))
 def test_clocked_to_simple_random_no_error(doc):
     check_clocked_to_simple_no_error(doc)

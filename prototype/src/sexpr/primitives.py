@@ -1,10 +1,19 @@
 from __future__ import annotations
+
 from dataclasses import dataclass
+
 from typeguard import typechecked
 
-from .base import NodeId, Bool, Sequence, Property, Range, BoundedRange, ClockedProperty, ClockedSequence
-
-
+from .base import (
+    Bool,
+    BoundedRange,
+    ClockedProperty,
+    ClockedSequence,
+    NodeId,
+    Property,
+    Range,
+    Sequence,
+)
 
 # Bool primitives
 

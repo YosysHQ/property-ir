@@ -1,17 +1,25 @@
 from __future__ import annotations
+
+import logging
+import re
 from abc import ABC, abstractmethod
 from collections import deque
-from dataclasses import dataclass, fields, Field, field
+from collections.abc import Callable
+from dataclasses import Field, dataclass, field, fields
 from enum import Enum
-import logging
-from typing import Literal, Optional, Any, get_origin, get_args, get_type_hints, get_args, Callable
-from typeguard import typechecked
-from graphviz import Digraph, escape
 from pathlib import Path
-import re
+from typing import (
+    Any,
+    Literal,
+    get_args,
+    get_origin,
+    get_type_hints,
+)
+
+from graphviz import Digraph, escape
+from typeguard import typechecked
 
 from .utils import UnionFind
-
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +35,7 @@ class IntOrUnbounded:
 
 @typechecked
 @dataclass
-class Range():
+class Range:
     lower_bound: int
     upper_bound: IntOrUnbounded
 
@@ -36,7 +44,7 @@ class Range():
 
 @typechecked
 @dataclass
-class BoundedRange():
+class BoundedRange:
     lower_bound: int
     upper_bound: int
 
@@ -95,18 +103,21 @@ class PropertyIrNode(ABC):
 
     @classmethod
     def type_class(cls) -> type[PropertyIrNode]:
-        while cls.__base__ is not PropertyIrNode:
-            cls = cls.__base__
-            if cls is None:
+        current_cls: type = cls
+        next_cls: type | None = cls.__base__
+        while next_cls is not PropertyIrNode:
+            if next_cls is None:
                 raise NotImplementedError("type_class called on non-derived class")
-        return cls
+            current_cls = next_cls
+            next_cls = current_cls.__base__
+        return current_cls
 
     @classmethod
     def get_child_fields(cls) -> list[Field[Any]]:
         children = []
-        for field in fields(cls):
-            if field.name not in ['ir_container', 'node_id', 'signature']:
-                children.append(field)
+        for fld in fields(cls):
+            if fld.name not in ['ir_container', 'node_id', 'signature']:
+                children.append(fld)
         return children
 
 
@@ -114,8 +125,8 @@ class PropertyIrNode(ABC):
     def signature(cls) -> list[type]:
         signature = []
 
-        for field in cls.get_child_fields():
-            field_type = get_type_hints(cls)[field.name]
+        for fld in cls.get_child_fields():
+            field_type = get_type_hints(cls)[fld.name]
             signature.append(forward_node_id_types(field_type))
 
         return signature
@@ -134,14 +145,14 @@ class PropertyIrNode(ABC):
     def get_child_ids(self) -> list[NodeId]:
         child_ids = []
         signature = type(self).signature()
-        for index, field in enumerate(self.get_child_fields()):
+        for index, fld in enumerate(self.get_child_fields()):
             field_type: type = signature[index]
             if get_origin(field_type) is list:
-                list_elems = getattr(self, field.name)
+                list_elems = getattr(self, fld.name)
                 for child_id in list_elems:
                     child_ids.append(self.ir_container[child_id].node_id)
             elif issubclass(field_type, PropertyIrNode):
-                child_id = getattr(self, field.name)
+                child_id = getattr(self, fld.name)
                 child_ids.append(self.ir_container[child_id].node_id)
             elif issubclass(field_type, LiteralType.__value__):
                 continue
@@ -234,12 +245,11 @@ class Directive[T: PropertyIrNode](ABC):
     node_id: NodeId[T]
 
     @classmethod
-    def node_type(cls) -> Optional[type]:
+    def node_type(cls) -> type | None:
         bases = getattr(cls, '__orig_bases__', ())
-        if len(bases) > 0:
-            if get_origin(bases[0]) is PropertyDirective:
-                args = get_args(bases[0])
-                return args[0]
+        if len(bases) > 0 and get_origin(bases[0]) is PropertyDirective:
+            args = get_args(bases[0])
+            return args[0]
         return None
 
     @classmethod
@@ -256,14 +266,14 @@ class Directive[T: PropertyIrNode](ABC):
         if isinstance(self, RootTestDirective):
             output_container.add_directive(RootTestDirective(renamed_id(node_id_repr, id_renaming)))
         elif isinstance(self, PropertyDirective):
-            new_disable_iff: Optional[NodeId[Bool]] = None if self.disable_iff is None else renamed_id(input_container.merged_nodes.find(self.disable_iff), id_renaming)
-            new_enable: Optional[NodeId[Bool]] = None if self.enable is None else renamed_id(input_container.merged_nodes.find(self.enable), id_renaming)
-            new_reset_iff: Optional[NodeId[Bool]] = None if self.reset_iff is None else renamed_id(input_container.merged_nodes.find(self.reset_iff), id_renaming)
-            if isinstance(self, AssertProperty) or isinstance(self, AssumeProperty) or isinstance(self, RestrictProperty) or isinstance(self, TriggerSequence):
+            new_disable_iff: NodeId[Bool] | None = None if self.disable_iff is None else renamed_id(input_container.merged_nodes.find(self.disable_iff), id_renaming)
+            new_enable: NodeId[Bool] | None = None if self.enable is None else renamed_id(input_container.merged_nodes.find(self.enable), id_renaming)
+            new_reset_iff: NodeId[Bool] | None = None if self.reset_iff is None else renamed_id(input_container.merged_nodes.find(self.reset_iff), id_renaming)
+            if isinstance(self, (AssertProperty, AssumeProperty, RestrictProperty, TriggerSequence)):
                 directive_type: type[PropertyDirective] = type(self)
                 output_container.add_directive(directive_type(node_id = renamed_id(node_id_repr, id_renaming), property_type = self.property_type, evaluation_scope = self.evaluation_scope, \
                     disable_iff = new_disable_iff, enable = new_enable, reset_iff = new_reset_iff, negated = self.negated))
-            elif isinstance(self, CoverProperty) or isinstance(self, CoverSequence):
+            elif isinstance(self, (CoverProperty, CoverSequence)):
                 directive_type: type[PropertyDirective] = type(self)
                 output_container.add_directive(directive_type(node_id = renamed_id(node_id_repr, id_renaming), property_type = self.property_type, evaluation_scope = self.evaluation_scope, \
                     disable_iff = new_disable_iff, enable = new_enable, reset_iff = new_reset_iff, negated = self.negated, vacuity_mode=self.vacuity_mode))
@@ -284,14 +294,14 @@ class RootTestDirective[T: PropertyIrNode](Directive):
 class PropertyDirective[T: PropertyIrNode](Directive):
 
     # public interface
-    property_type: Optional[PropertyType] = None
+    property_type: PropertyType | None = None
     evaluation_scope: EvaluationScope = EvaluationScope.ALWAYS
 
-    disable_iff: Optional[NodeId[Bool]] = None
-    enable: Optional[NodeId[Bool]] = None
+    disable_iff: NodeId[Bool] | None = None
+    enable: NodeId[Bool] | None = None
 
     # internal use
-    reset_iff: Optional[NodeId[Bool]] = None
+    reset_iff: NodeId[Bool] | None = None
     negated: bool = False
 
     @classmethod
@@ -336,7 +346,7 @@ class TriggerSequence(PropertyDirective[ClockedSequence]):
 # END Assertion Statements
 
 
-class Declaration():
+class Declaration:
     @abstractmethod
     def __init__(self):
         pass
@@ -379,15 +389,15 @@ class IrContainer:
     next_raw_node_id: int
 
     def __init__(self):
-        self.nodes =  dict()
-        self.node_names = dict()
-        self.global_nodes = dict()
-        self.directives = list()
+        self.nodes =  {}
+        self.node_names = {}
+        self.global_nodes = {}
+        self.directives = []
         self.merged_nodes = UnionFind()
-        self.source_nodes = dict()
-        self.inner_nodes = dict()
+        self.source_nodes = {}
+        self.inner_nodes = {}
         self.next_raw_node_id = 1
-        self.admits_empty_sink_nodes = dict()
+        self.admits_empty_sink_nodes = {}
 
     def __eq__(self, other):
         """Two containers are only considered equivalent if they have the same types of nodes with the same node ids
@@ -439,7 +449,6 @@ class IrContainer:
             return str(literal)
         elif isinstance(literal, Range | BoundedRange | IntOrUnbounded):
             return literal.get_raw_sexpr_repr()
-        raise TypeError(f'Unexpected type {type(literal)} of literal {literal} while generating s-expression of container {self}')
 
     def output_container(self) -> RawSExprList:
         """Output the complete contents of the container as a property ir document s-expression.
@@ -479,7 +488,7 @@ class IrContainer:
             if directive.evaluation_scope is not None:
                 output_expr.extend([':evaluation-scope', directive.evaluation_scope.value])
 
-            if isinstance(directive, CoverProperty) or isinstance(directive, CoverSequence):
+            if isinstance(directive, (CoverProperty, CoverSequence)):
                 if directive.vacuity_mode is not None:
                     output_expr.extend([':vacuity-mode', directive.vacuity_mode.value])
 
@@ -566,7 +575,7 @@ class IrContainer:
         # give new node names to all nodes
         # there can be no name clashes within the newly generated names
         # because they all have a different node id and uniquify can only append _{number}
-        id_to_node_name: dict[NodeId, str] = dict()
+        id_to_node_name: dict[NodeId, str] = {}
         for node_id in self.nodes:
             id_to_node_name[node_id] = self.uniquify('_node_id_' + str(node_id.raw))
         # overwrite chosen names by those used in declared_nodes and in node_names_to_use
@@ -579,7 +588,7 @@ class IrContainer:
                 raise ValueError(f'Declared nodes and node names to use must be disjoint, node with id {repr_id} and name {name} occuring in both')
             id_to_node_name[repr_id] = name
 
-        node_expr_dict: dict[str, RawSExprList] = dict()
+        node_expr_dict: dict[str, RawSExprList] = {}
         visited_nodes: set[NodeId] = set()
 
         # search through reachable nodes and generate expr for each node visited, skip if already visited or declared
@@ -605,14 +614,14 @@ class IrContainer:
             current_node_expr: RawSExprList = [current_node.op_symbol()]
             signature = type(current_node).signature()
 
-            collected_children: list[NodeId | LiteralType] = list()
+            collected_children: list[NodeId | LiteralType] = []
 
-            for index, field in enumerate(current_node.get_child_fields()):
+            for index, fld in enumerate(current_node.get_child_fields()):
                 field_type: type = signature[index]
                 if get_origin(field_type) is list:
-                    collected_children += getattr(current_node, field.name)
+                    collected_children += getattr(current_node, fld.name)
                 else:
-                    collected_children.append(getattr(current_node, field.name))
+                    collected_children.append(getattr(current_node, fld.name))
 
             for child_elem in collected_children:
                 if isinstance(child_elem, NodeId):
@@ -668,7 +677,7 @@ class IrContainer:
 
         self.bypass_placeholders()
 
-        id_mapping: dict[NodeId, NodeId] = dict()
+        id_mapping: dict[NodeId, NodeId] = {}
         next_raw_id: int = 1
 
         visit_next: deque[NodeId] = deque(self.source_nodes.values())
@@ -695,25 +704,25 @@ class IrContainer:
 
             current_node = self.nodes[current_id]
             signature = type(current_node).signature()
-            collected_children: list[NodeId | LiteralType] = list()
-            for index, field in enumerate(current_node.get_child_fields()):
+            collected_children: list[NodeId | LiteralType] = []
+            for index, fld in enumerate(current_node.get_child_fields()):
                 field_type: type = signature[index]
                 if get_origin(field_type) is list:
-                    collected_children += getattr(current_node, field.name)
+                    collected_children += getattr(current_node, fld.name)
                 else:
-                    collected_children.append(getattr(current_node, field.name))
+                    collected_children.append(getattr(current_node, fld.name))
             for child_elem in reversed(collected_children): # to achieve depth-first order
                 if isinstance(child_elem, NodeId) and child_elem not in visited:
                         visit_next.appendleft(child_elem)
 
         logger.debug('id_mapping %s', id_mapping)
 
-        new_nodes: dict[NodeId, PropertyIrNode] = dict()
-        new_node_names: dict[str, NodeId] = dict()
-        new_global_nodes: dict[str, NodeId] = dict()
-        new_source_nodes: dict[str, NodeId] = dict()
-        new_inner_nodes: dict[str, NodeId] = dict()
-        new_admits_empty_sink_nodes: dict[NodeId, bool] = dict()
+        new_nodes: dict[NodeId, PropertyIrNode] = {}
+        new_node_names: dict[str, NodeId] = {}
+        new_global_nodes: dict[str, NodeId] = {}
+        new_source_nodes: dict[str, NodeId] = {}
+        new_inner_nodes: dict[str, NodeId] = {}
+        new_admits_empty_sink_nodes: dict[NodeId, bool] = {}
 
         for old_id, new_id in id_mapping.items():
             new_nodes[new_id] = self.nodes[old_id]
@@ -740,15 +749,15 @@ class IrContainer:
         for node in self.nodes.values():
             node.node_id = id_mapping[node.node_id]
             signature = type(node).signature()
-            for index, field in enumerate(node.get_child_fields()):
+            for index, fld in enumerate(node.get_child_fields()):
                 child_type: type = signature[index]
                 if get_origin(child_type) is list:
-                    children_list = getattr(node, field.name)
-                    setattr(node, field.name, [id_mapping[old_id] for old_id in children_list.copy()])
+                    children_list = getattr(node, fld.name)
+                    setattr(node, fld.name, [id_mapping[old_id] for old_id in children_list.copy()])
                 else:
-                    child_node_id = getattr(node, field.name)
+                    child_node_id = getattr(node, fld.name)
                     if isinstance(child_node_id, NodeId):
-                        setattr(node, field.name, id_mapping[child_node_id])
+                        setattr(node, fld.name, id_mapping[child_node_id])
 
 
 
@@ -781,7 +790,7 @@ class IrContainer:
         self.nodes[new_node_id] = new_node
         return new_node
 
-    def add_placeholder_node(self, name: Optional[str] = None, expected_type: Optional[type] = None) -> PlaceholderNode:
+    def add_placeholder_node(self, name: str | None = None, expected_type: type | None = None) -> PlaceholderNode:
         new_node_id = self._get_next_node_id()
         new_node = PlaceholderNode(ir_container=self, node_id=new_node_id, expected_type=expected_type)
         self.nodes[new_node_id] = new_node
@@ -792,7 +801,7 @@ class IrContainer:
     def add_signal_node(self, signal_name: str) -> PropertyIrNode:
         if signal_name in self.global_nodes:
             raise ValueError(f'Attempting to add signal with name {signal_name}, but the name is already in use')
-        signal_node = self.add_node_by_kwargs(Signal, dict(signal_name=signal_name))
+        signal_node = self.add_node_by_kwargs(Signal, {'signal_name': signal_name})
         return signal_node
 
     def add_declaration(self, declaration: Declaration):
@@ -847,7 +856,7 @@ class IrContainer:
         """Rename all node ids of directives of this container using the provided dict."""
 
         directives: list[Directive] = self.directives
-        self.directives = list()
+        self.directives = []
         for directive in directives:
             directive.copy_to_container(self, self, id_renaming)
 
@@ -855,7 +864,7 @@ class IrContainer:
         """Returns the list of sink nodes. These are all nodes that are directly used in directives,
         including those used in disable-iff etc. May contain duplicates."""
 
-        sink_nodes: list[NodeId] = list()
+        sink_nodes: list[NodeId] = []
         for directive in self.directives:
             sink_nodes.append(directive.node_id)
             if isinstance(directive, PropertyDirective):
@@ -945,12 +954,12 @@ class IrContainer:
 
             signature = type(node).signature()
 
-            for index, field in enumerate(node.get_child_fields()):
+            for index, fld in enumerate(node.get_child_fields()):
 
                 child_type: type = signature[index]
                 if get_origin(child_type) is list:
 
-                    children_list = getattr(node, field.name)
+                    children_list = getattr(node, fld.name)
                     for child_list_index, child_node_id in enumerate(children_list):
                         if isinstance(child_node_id, LiteralType.__value__): # skip literal type
                             continue
@@ -962,7 +971,7 @@ class IrContainer:
                             children_list[child_list_index] = child_representative_id
 
                 else: # if child type is not list
-                    child_node_id = getattr(node, field.name)
+                    child_node_id = getattr(node, fld.name)
                     if isinstance(child_node_id, LiteralType.__value__): # skip literal type
                         continue
 
@@ -971,7 +980,7 @@ class IrContainer:
 
                     child_representative_id: NodeId = child_node_representative.node_id
                     if child_representative_id != child_node_id:
-                        setattr(node, field.name, child_representative_id)
+                        setattr(node, fld.name, child_representative_id)
 
         for placeholder_id in placeholder_ids_to_remove:
             del self.nodes[placeholder_id]
@@ -1029,12 +1038,3 @@ def operation_to_class_str(input: str) -> str:
     split: list[str] = input.split('-')
     capitalized : list[str] = [str.capitalize(s) for s in split]
     return(''.join(capitalized))
-
-
-
-
-
-
-
-
-

@@ -1,12 +1,25 @@
 import pytest
-
 from sexpr import parse_raw_sexpr
-
-from tests.input_data import expr1, expr2, expr3, expr4, expr5, expr6, expr7, expr8
-from tests.input_data import raw_sexpr1, raw_sexpr2, raw_sexpr3, raw_sexpr4, raw_sexpr5, raw_sexpr6, raw_sexpr7, raw_sexpr8
 from sexpr.parsing import unparse_raw_sexpr
 
-
+from tests.input_data import (
+    expr1,
+    expr2,
+    expr3,
+    expr4,
+    expr5,
+    expr6,
+    expr7,
+    expr8,
+    raw_sexpr1,
+    raw_sexpr2,
+    raw_sexpr3,
+    raw_sexpr4,
+    raw_sexpr5,
+    raw_sexpr6,
+    raw_sexpr7,
+    raw_sexpr8,
+)
 
 str_raw_sexpr_pairs = [(expr1, raw_sexpr1),
     (expr2, raw_sexpr2),
@@ -75,4 +88,3 @@ def test_parse_raw_sexpr_roundtrip(raw_sexpr_input):
     str_expr = unparse_raw_sexpr(raw_sexpr_input)
     nested_list_expr = parse_raw_sexpr(str_expr)
     assert raw_sexpr_input == nested_list_expr
-

@@ -1,7 +1,6 @@
 from __future__ import annotations
+
 from typeguard import typechecked
-
-
 
 
 @typechecked
@@ -12,7 +11,7 @@ class UnionFind[T]:
     parents: dict[T, T]
 
     def __init__(self):
-        self.parents =  dict()
+        self.parents =  {}
 
     def find(self, elem: T) -> T:
 
@@ -46,5 +45,3 @@ class UnionFind[T]:
             return
         self.parents[current_repr] = elem
         self.parents[elem] = elem
-
-

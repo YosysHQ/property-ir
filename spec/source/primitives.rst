@@ -900,6 +900,3 @@ negation normal form.
 ..    (prop-sync-accept-on <bool> <prop>)
 ..
 ..    (prop-sync-reject-on <bool> <prop>)
-
-
-

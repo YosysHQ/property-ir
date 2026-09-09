@@ -1,10 +1,8 @@
 import logging
 from pathlib import Path
 
-from sexpr import RawSExprList
-from sexpr import parse_document
-from sexpr.base import PropertyIrNode, IrContainer
-
+from sexpr import RawSExprList, parse_document
+from sexpr.base import IrContainer, PropertyIrNode
 
 logger = logging.getLogger(__name__)
 
