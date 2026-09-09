@@ -17,6 +17,10 @@ dependencies = [
 include = ["prototype/src", "prototype/tests"]
 extraPaths = ["prototype/src"]
 
+# ignore rule combining nested if (SIM102) and rule preferring TypeErrors when type is checked (TRY004)
+[tool.ruff.lint]
+ignore = ["SIM102", "TRY004"]
+
 [tool.pytest.ini_options]
 testpaths = ["prototype/tests"]
 pythonpath = ["prototype/src"]
@@ -26,6 +30,7 @@ furo-ys = { git = "https://github.com/YosysHQ/furo-ys.git" }
 
 [dependency-groups]
 dev = [
+    "pre-commit>=4.6.2",
     "pytest-cov>=7.0.0",
     "pytest-xdist>=3.8.0",
 ]
