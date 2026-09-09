@@ -490,6 +490,70 @@ def test_clock_rewriting_root_node_already_finished():
 
 
 
+def test_clock_rewriting_sync_reject_bug():
+    input_document: str = """(document
+    (declare-input G)
+    (declare-input n)
+    (declare-input hoh)
+    (assert-property
+        (let-rec
+        (step0 (xor (true) (true)))
+        (step2 (clk-prop-clk-seq (clk-seq-clocked step0 (clk-seq-bool n))))
+        (step11 (clk-prop-sync-reject-on n step2))
+        (step14 (clk-prop-clocked (true) step11))
+        step14)))"""
+
+    output_document: str = """(document
+    (declare-input G)
+    (declare-input n)
+    (declare-input hoh)
+    (declare gclk (true))
+    (assert-property
+        (let-rec
+        (step0 (xor (true) (true)))
+        (step2 (clk-prop-clk-seq (clk-seq-clocked gclk
+            (clk-seq-concat (clk-seq-repeat (range 0 $) (clk-seq-bool (not step0))) (clk-seq-bool (and step0 n)) )
+        )))
+        (step11 (clk-prop-reject-on n step2))
+        (step14 (clk-prop-clocked gclk step11))
+        step14)))"""
+
+    check_clock_rewriting(input_document, output_document, visualize=False)
+
+
+def test_clock_rewriting_sync_accept_bug():
+    input_document: str = """(document
+    (declare-input G)
+    (declare-input n)
+    (declare-input hoh)
+    (assert-property
+        (let-rec
+        (step0 (xor (true) (true)))
+        (step2 (clk-prop-clk-seq (clk-seq-clocked step0 (clk-seq-bool n))))
+        (step11 (clk-prop-sync-accept-on n step2))
+        (step14 (clk-prop-clocked (true) step11))
+        step14)))"""
+
+    output_document: str = """(document
+    (declare-input G)
+    (declare-input n)
+    (declare-input hoh)
+    (declare gclk (true))
+    (assert-property
+        (let-rec
+        (step0 (xor (true) (true)))
+        (step2 (clk-prop-clk-seq (clk-seq-clocked gclk
+            (clk-seq-concat (clk-seq-repeat (range 0 $) (clk-seq-bool (not step0))) (clk-seq-bool (and step0 n)) )
+        )))
+        (step11 (clk-prop-accept-on n step2))
+        (step14 (clk-prop-clocked gclk step11))
+        step14)))"""
+
+    check_clock_rewriting(input_document, output_document, visualize=False)
+
+
+
+
 def check_clock_rewriting_no_error(doc):
     doc_raw_sexpr: RawSExprList = parse_raw_sexpr(doc)
     container1: IrContainer = IrContainer()

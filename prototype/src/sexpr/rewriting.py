@@ -8,7 +8,8 @@ from typeguard import typechecked
 from sexpr.base import ClockedSequence, ClockedProperty, CoverProperty, PropertyDirective, PropertyIrNode, PlaceholderNode
 from sexpr.base import IrContainer, RawSExpr, NodeId, RawSExprList, Signal, LiteralType, Property, Sequence, Bool, Range
 from sexpr.base import BoundedRange, IntOrUnbounded, Directive
-from sexpr.primitives import And, ClkPropAlwaysRanged, ClkPropClocked, ClkPropEventually, ClkPropOverlappedFollowedBy, ClkPropOverlappedImplication, ClkPropClkSeq, ClkPropStrong, ClkPropStrongEventuallyRanged, ClkPropTrue, ClkPropWeak, ClkSeqNoMatch, ClkSeqSeq, PropFalse
+from sexpr.primitives import And, ClkPropAlwaysRanged, ClkPropClocked, ClkPropEventually, ClkPropOverlappedFollowedBy, ClkPropOverlappedImplication
+from sexpr.primitives import ClkPropClkSeq, ClkPropStrong, ClkPropStrongEventuallyRanged, ClkPropSyncAcceptOn, ClkPropTrue, ClkPropWeak, ClkSeqNoMatch, ClkSeqSeq, PropFalse, ClkPropSyncRejectOn
 from sexpr.primitives import ClkSeqClocked, ClkSeqConcat, ClkSeqFirstMatch, ClkSeqIntersect, ClkSeqRepeat, Constant, FutureGclk
 from sexpr.primitives import Not, Or, Initial, PropAcceptOn, PropNexttime, PropAnd, PropNot, PropOr, PropStrong, PropWeak, PropWeakBool, PropStrongBool
 from sexpr.primitives import PropOverlappedFollowedBy, PropOverlappedImplication, PropRejectOn, PropStrongNexttime, PropUntil, PropStrongUntilWith, PropRefuted
@@ -560,6 +561,12 @@ clock_sync_accept_on_rule: RewriteRule = (['clk-prop-sync-accept-on', '<bool>', 
 
 clock_sync_reject_on_rule: RewriteRule = (['clk-prop-sync-reject-on', '<bool>', '<clk_prop>'], ['clk-prop-reject-on', ['and', '<bool>', '<clock>'], '<clk_prop>'])
 
+
+# the following two rules are used to replace the synchronous variants by the asynchronous variant if the clock is already the global clock
+already_gclk_clock_sync_accept_on_rule: RewriteRule = (['clk-prop-sync-accept-on', '<bool>', '<clk_prop>'], ['clk-prop-accept-on', '<bool>', '<clk_prop>'])
+
+already_gclk_clock_sync_reject_on_rule: RewriteRule = (['clk-prop-sync-reject-on', '<bool>', '<clk_prop>'], ['clk-prop-reject-on', '<bool>', '<clk_prop>'])
+
 # for nexttime and s_nexttime clock rewriting, the int parameter must already be 1
 # (this condition is not checked by the rule, but must be established beforehand)
 clock_nexttime: RewriteRule = (['clk-prop-nexttime', '<int=1>', '<clk_prop>'],
@@ -578,8 +585,10 @@ clock_until: RewriteRule = (['clk-prop-until', '<clk_prop1>', '<clk_prop2>'],
     ['clk-prop-until', ['clk-prop-not', ['clk-prop-and', ['clk-prop-bool', '<clock>'], ['clk-prop-not', '<clk_prop1>']]],
         ['clk-prop-and', ['clk-prop-bool', '<clock>'], '<clk_prop2>']])
 
+# NOTE here clk-prop-strong-until-with and clk-prop-strong-until are both correct on the RHS
+# but clk-prop-strong-until-with was chosen because it is available as a simple primitive
 clock_strong_until_with: RewriteRule = (['clk-prop-strong-until-with', '<clk_prop1>', '<clk_prop2>'], ['clk-prop-and',
-    ['clk-prop-strong-until',
+    ['clk-prop-strong-until-with',
         ['clk-prop-not', ['clk-prop-and', ['clk-prop-bool', '<clock>'], ['clk-prop-not', '<clk_prop1>']]],
         ['clk-prop-and', ['clk-prop-bool', '<clock>'], '<clk_prop1>', '<clk_prop2>']]])
 
@@ -766,9 +775,14 @@ def rewrite_clocks_process_node(
 
     # default case
 
-    # find which rule to apply if any - if the clock is already (true), no rewriting takes place
+    # find which rule to apply if any - if the clock is already (true), no rewriting takes place (except for sync-accept/reject-on)
     rewrite_rule: Optional[RewriteRule] = clock_rewrite_rule_dict[type(current_node)] if (type(current_node) in clock_rewrite_rule_dict) else None
-    if clock == NodeId(0):
+
+    if clock == NodeId(0) and isinstance(current_node, ClkPropSyncAcceptOn):
+        rewrite_rule = already_gclk_clock_sync_accept_on_rule
+    elif clock == NodeId(0) and isinstance(current_node, ClkPropSyncRejectOn):
+        rewrite_rule = already_gclk_clock_sync_reject_on_rule
+    elif clock == NodeId(0):
         rewrite_rule = None
 
     logger.debug('Apply rewriting rule %s', rewrite_rule)

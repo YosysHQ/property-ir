@@ -347,44 +347,44 @@ def check_clocked_to_simple_no_error(doc):
 
 
 
-#@example("""(document (declare-input G)
-#    (declare-input n)
-#    (declare-input hoh)
-#    (assert-property
-#        (let-rec (step0 (xor (true) (true)))
-#        (step1 (xor step0 (false)))
-#        (step2 (clk-seq-clocked step0 (clk-seq-bool n)))
-#        (step3 (clk-prop-strong-eventually-ranged (range 1 7) (clk-prop-weak-bool G)))
-#        (step4 (clk-seq-within step2 (clk-seq-bool G)))
-#        (step5 (clk-prop-implies step3 (clk-prop-weak-bool n)))
-#        (step6 (clk-seq-seq (seq-bool n)))
-#        (step7 (clk-seq-first-match step6))
-#        (step8 (clk-prop-strong-always (bounded-range 2 6) step5))
-#        (step9 (clk-seq-nonconsecutive-repeat (range 2 6) step1))
-#        (step10 (clk-seq-delay (range 2 $) step4))
-#        (step11 (clk-prop-sync-reject-on n step8))
-#        (step12 (xor step1 n))
-#        (step13 (clk-seq-seq (seq-bool n)))
-#        (step14 (clk-prop-clocked (true) step11))
-#        step14)))""")
-#@example("""(document (declare-input 0)
-#    (cover-property
-#        (let-rec
-#            (step0 (clk-prop-strong-eventually (clk-prop-weak-bool 0)))
-#            (step1 (clk-prop-clocked (true) step0))
-#            step1)))""")
-#@settings(verbosity=Verbosity.verbose, max_examples=2, deadline=500)
-#@given((random_ir_clocked(final_node_type=ClkPropClocked, directive=CoverProperty)))
-#def test_clocked_to_simple_random_no_error_cover(doc):
-#    check_clocked_to_simple_no_error(doc)
-#
-#@example("""(document
-#    (declare-input gM) (declare-input V)
-#    (assert-property (let-rec
-#        (step0 (clk-prop-strong-until-with (clk-prop-strong-bool V) (clk-prop-weak-bool gM)))
-#        (step1 (clk-prop-clocked (true) step0))
-#        step1)))""")
-#@settings(verbosity=Verbosity.verbose, max_examples=2, deadline=500)
-#@given((random_ir_clocked(final_node_type=ClkPropClocked, directive=AssertProperty)))
-#def test_clocked_to_simple_random_no_error(doc):
-#    check_clocked_to_simple_no_error(doc)
+@example("""(document (declare-input G)
+    (declare-input n)
+    (declare-input hoh)
+    (assert-property
+        (let-rec (step0 (xor (true) (true)))
+        (step1 (xor step0 (false)))
+        (step2 (clk-seq-clocked step0 (clk-seq-bool n)))
+        (step3 (clk-prop-strong-eventually-ranged (range 1 7) (clk-prop-weak-bool G)))
+        (step4 (clk-seq-within step2 (clk-seq-bool G)))
+        (step5 (clk-prop-implies step3 (clk-prop-weak-bool n)))
+        (step6 (clk-seq-seq (seq-bool n)))
+        (step7 (clk-seq-first-match step6))
+        (step8 (clk-prop-strong-always (bounded-range 2 6) step5))
+        (step9 (clk-seq-nonconsecutive-repeat (range 2 6) step1))
+        (step10 (clk-seq-delay (range 2 $) step4))
+        (step11 (clk-prop-sync-reject-on n step8))
+        (step12 (xor step1 n))
+        (step13 (clk-seq-seq (seq-bool n)))
+        (step14 (clk-prop-clocked (true) step11))
+        step14)))""")
+@example("""(document (declare-input 0)
+    (cover-property
+        (let-rec
+            (step0 (clk-prop-strong-eventually (clk-prop-weak-bool 0)))
+            (step1 (clk-prop-clocked (true) step0))
+            step1)))""")
+@settings(verbosity=Verbosity.verbose, max_examples=30, deadline=1000)
+@given((random_ir_clocked(final_node_type=ClkPropClocked, directive=CoverProperty)))
+def test_clocked_to_simple_random_no_error_cover(doc):
+    check_clocked_to_simple_no_error(doc)
+
+@example("""(document
+    (declare-input gM) (declare-input V)
+    (assert-property (let-rec
+        (step0 (clk-prop-strong-until-with (clk-prop-strong-bool V) (clk-prop-weak-bool gM)))
+        (step1 (clk-prop-clocked (true) step0))
+        step1)))""")
+@settings(verbosity=Verbosity.verbose, max_examples=30, deadline=1000)
+@given((random_ir_clocked(final_node_type=ClkPropClocked, directive=AssertProperty)))
+def test_clocked_to_simple_random_no_error(doc):
+    check_clocked_to_simple_no_error(doc)
