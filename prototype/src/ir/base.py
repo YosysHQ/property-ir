@@ -214,6 +214,16 @@ class ClockedProperty(PropertyIrNode):
     def __init__(self):
         pass
 
+class FiniteAutomaton(PropertyIrNode):
+    @abstractmethod
+    def __init__(self):
+        pass
+
+class OmegaAutomaton(PropertyIrNode):
+    @abstractmethod
+    def __init__(self):
+        pass
+
 
 
 @typechecked

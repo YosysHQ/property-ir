@@ -33,6 +33,7 @@ from .base import (
     SignalDeclaration,
     VacuityMode,
 )
+from .primitives.automata_primitives import *
 from .primitives.bool_primitives import *
 from .primitives.clocked_primitives import *
 from .primitives.simple_primitives import *
