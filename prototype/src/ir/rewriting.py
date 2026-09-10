@@ -29,8 +29,15 @@ from ir.base import (
     Signal,
 )
 from ir.parsing import get_op_symbols, parse_expression
-from ir.primitives import (
+from ir.primitives.bool_primitives import (
     And,
+    Constant,
+    FutureGclk,
+    Initial,
+    Not,
+    Or,
+)
+from ir.primitives.clocked_primitives import (
     ClkPropAcceptOn,
     ClkPropAlwaysRanged,
     ClkPropAnd,
@@ -68,11 +75,8 @@ from ir.primitives import (
     ClkSeqOr,
     ClkSeqRepeat,
     ClkSeqSeq,
-    Constant,
-    FutureGclk,
-    Initial,
-    Not,
-    Or,
+)
+from ir.primitives.simple_primitives import (
     PropAcceptOn,
     PropAnd,
     PropFalse,

@@ -21,13 +21,17 @@ from ir.base import (
     Sequence,
 )
 from ir.parsing import parse_raw_sexpr
-from ir.primitives import (
+from ir.primitives.bool_primitives import (
     And,
+    Not,
+    Or,
+)
+from ir.primitives.clocked_primitives import (
     ClkPropAlwaysRanged,
     ClkPropWeak,
     ClkSeqBool,
-    Not,
-    Or,
+)
+from ir.primitives.simple_primitives import (
     SeqBool,
     SeqConcat,
     SeqRepeat,

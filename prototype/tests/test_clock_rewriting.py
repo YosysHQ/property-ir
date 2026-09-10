@@ -4,7 +4,11 @@ import pytest
 from hypothesis import Verbosity, example, given, settings
 from ir.base import ClockedProperty, IrContainer, RawSExprList
 from ir.parsing import parse_document, parse_raw_sexpr, unparse_raw_sexpr
-from ir.primitives import ClkPropClkSeq, ClkPropClocked, ClkSeqClocked
+from ir.primitives.clocked_primitives import (
+    ClkPropClkSeq,
+    ClkPropClocked,
+    ClkSeqClocked,
+)
 from ir.rewriting import (
     reduce_primitives,
     rewrite_clocks,

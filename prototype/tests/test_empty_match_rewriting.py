@@ -4,7 +4,7 @@ from pathlib import Path
 from hypothesis import Verbosity, example, given, settings
 from ir.base import ClockedProperty, IrContainer, NodeId, RawSExprList
 from ir.parsing import parse_document, parse_raw_sexpr
-from ir.primitives import (
+from ir.primitives.clocked_primitives import (
     ClkPropClocked,
     ClkSeqBool,
     ClkSeqClocked,

@@ -14,14 +14,16 @@ from ir.base import (
     RawSExprList,
 )
 from ir.parsing import parse_document, parse_raw_sexpr
-from ir.primitives import (
+from ir.primitives.bool_primitives import (
     And,
+    FallingGclk,
+    RisingGclk,
+)
+from ir.primitives.clocked_primitives import (
     ClkPropAlwaysRanged,
     ClkPropEventually,
     ClkPropStrongEventuallyRanged,
     ClkSeqAnd,
-    FallingGclk,
-    RisingGclk,
 )
 from ir.rewriting import (
     RewriteRule,

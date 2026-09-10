@@ -22,7 +22,8 @@ from ir.base import (
     Signal,
 )
 from ir.parsing import parse_document, parse_raw_sexpr
-from ir.primitives import ClkSeqNoMatch, SeqNoMatch
+from ir.primitives.clocked_primitives import ClkSeqNoMatch
+from ir.primitives.simple_primitives import SeqNoMatch
 
 from tests.helpers import wrap_signals_and_expr_in_document
 

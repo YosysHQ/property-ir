@@ -10,6 +10,8 @@ from typeguard import typechecked
 from .base import (
     Bool,
     BoundedRange,
+    ClockedProperty,
+    ClockedSequence,
     Directive,
     EvaluationScope,
     IntOrUnbounded,
@@ -31,7 +33,9 @@ from .base import (
     SignalDeclaration,
     VacuityMode,
 )
-from .primitives import *
+from .primitives.bool_primitives import *
+from .primitives.clocked_primitives import *
+from .primitives.simple_primitives import *
 
 logger = logging.getLogger(__name__)
 
