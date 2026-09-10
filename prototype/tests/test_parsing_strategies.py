@@ -1,9 +1,9 @@
 from hypothesis import Verbosity, example, given, settings
-from sexpr import (
+from ir import (
     RawSExprList,
     parse_raw_sexpr,
 )
-from sexpr.base import Bool, ClockedProperty, ClockedSequence, Property, Sequence
+from ir.base import Bool, ClockedProperty, ClockedSequence, Property, Sequence
 
 from tests.helpers import (
     apply_roundtrip,

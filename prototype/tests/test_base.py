@@ -1,5 +1,5 @@
-from sexpr import IrContainer, parse_document
-from sexpr.base import NodeId
+from ir import IrContainer, parse_document
+from ir.base import NodeId
 
 from tests.helpers import wrap_in_document, wrap_multiple_statements_in_document
 from tests.input_data import (

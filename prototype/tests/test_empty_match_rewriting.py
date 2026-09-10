@@ -2,16 +2,16 @@ import logging
 from pathlib import Path
 
 from hypothesis import Verbosity, example, given, settings
-from sexpr.base import ClockedProperty, IrContainer, NodeId, RawSExprList
-from sexpr.parsing import parse_document, parse_raw_sexpr
-from sexpr.primitives import (
+from ir.base import ClockedProperty, IrContainer, NodeId, RawSExprList
+from ir.parsing import parse_document, parse_raw_sexpr
+from ir.primitives import (
     ClkPropClocked,
     ClkSeqBool,
     ClkSeqClocked,
     ClkSeqOr,
     ClkSeqRepeat,
 )
-from sexpr.rewriting import (
+from ir.rewriting import (
     precompute_node_info,
     reduce_primitives,
     remove_empty_matches,

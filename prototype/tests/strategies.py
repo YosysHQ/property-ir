@@ -5,7 +5,7 @@ from collections.abc import Callable
 from typing import Any, get_args, get_origin
 
 from hypothesis import strategies as st
-from sexpr.base import (
+from ir.base import (
     Bool,
     BoundedRange,
     ClockedProperty,
@@ -21,8 +21,8 @@ from sexpr.base import (
     Sequence,
     Signal,
 )
-from sexpr.parsing import parse_document, parse_raw_sexpr
-from sexpr.primitives import ClkSeqNoMatch, SeqNoMatch
+from ir.parsing import parse_document, parse_raw_sexpr
+from ir.primitives import ClkSeqNoMatch, SeqNoMatch
 
 from tests.helpers import wrap_signals_and_expr_in_document
 

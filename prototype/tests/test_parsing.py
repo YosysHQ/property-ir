@@ -1,7 +1,7 @@
 import logging
 
 import pytest
-from sexpr import (
+from ir import (
     IrContainer,
     RawSExprList,
     Signal,
@@ -9,7 +9,7 @@ from sexpr import (
     parse_expression,
     parse_literal,
 )
-from sexpr.base import (
+from ir.base import (
     Bool,
     BoundedRange,
     IntOrUnbounded,
@@ -20,8 +20,8 @@ from sexpr.base import (
     RootTestDirective,
     Sequence,
 )
-from sexpr.parsing import parse_raw_sexpr
-from sexpr.primitives import (
+from ir.parsing import parse_raw_sexpr
+from ir.primitives import (
     And,
     ClkPropAlwaysRanged,
     ClkPropWeak,

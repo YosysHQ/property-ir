@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 from hypothesis import Verbosity, example, given, settings
-from sexpr.base import (
+from ir.base import (
     Bool,
     ClockedProperty,
     ClockedSequence,
@@ -13,8 +13,8 @@ from sexpr.base import (
     PropertyIrNode,
     RawSExprList,
 )
-from sexpr.parsing import parse_document, parse_raw_sexpr
-from sexpr.primitives import (
+from ir.parsing import parse_document, parse_raw_sexpr
+from ir.primitives import (
     And,
     ClkPropAlwaysRanged,
     ClkPropEventually,
@@ -23,7 +23,7 @@ from sexpr.primitives import (
     FallingGclk,
     RisingGclk,
 )
-from sexpr.rewriting import (
+from ir.rewriting import (
     RewriteRule,
     RewriteRuleGenerator,
     apply_rules,

@@ -1,6 +1,6 @@
 import pytest
-from sexpr import IrContainer
-from sexpr.base import SignalDeclaration
+from ir import IrContainer
+from ir.base import SignalDeclaration
 
 
 @pytest.fixture

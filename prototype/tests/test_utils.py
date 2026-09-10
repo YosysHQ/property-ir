@@ -1,4 +1,4 @@
-from sexpr import UnionFind
+from ir import UnionFind
 
 
 def test_union_find():

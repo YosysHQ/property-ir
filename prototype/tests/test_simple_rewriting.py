@@ -2,10 +2,10 @@ import logging
 from pathlib import Path
 
 from hypothesis import Verbosity, example, given, settings
-from sexpr.base import AssertProperty, CoverProperty, IrContainer, RawSExprList
-from sexpr.parsing import parse_document, parse_raw_sexpr
-from sexpr.primitives import ClkPropClocked
-from sexpr.rewriting import (
+from ir.base import AssertProperty, CoverProperty, IrContainer, RawSExprList
+from ir.parsing import parse_document, parse_raw_sexpr
+from ir.primitives import ClkPropClocked
+from ir.rewriting import (
     add_weak_strong,
     clocked_to_simple_pass,
     nnf,

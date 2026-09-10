@@ -4,7 +4,7 @@ import argparse
 import logging
 from pathlib import Path
 
-from sexpr import (
+from ir import (
     IrContainer,
     RawSExprList,
     nnf,

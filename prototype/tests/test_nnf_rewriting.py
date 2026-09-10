@@ -1,9 +1,9 @@
 import logging
 
 import pytest
-from sexpr import IrContainer, nnf
-from sexpr.base import RawSExprList
-from sexpr.parsing import parse_document, parse_raw_sexpr
+from ir import IrContainer, nnf
+from ir.base import RawSExprList
+from ir.parsing import parse_document, parse_raw_sexpr
 
 from tests.helpers import (
     wrap_multiple_statements_in_document,

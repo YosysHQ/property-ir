@@ -7,7 +7,7 @@ from typing import Any, Literal, get_origin
 
 from typeguard import typechecked
 
-from sexpr.base import (
+from ir.base import (
     Bool,
     BoundedRange,
     ClockedProperty,
@@ -28,8 +28,8 @@ from sexpr.base import (
     Sequence,
     Signal,
 )
-from sexpr.parsing import get_op_symbols, parse_expression
-from sexpr.primitives import (
+from ir.parsing import get_op_symbols, parse_expression
+from ir.primitives import (
     And,
     ClkPropAcceptOn,
     ClkPropAlwaysRanged,

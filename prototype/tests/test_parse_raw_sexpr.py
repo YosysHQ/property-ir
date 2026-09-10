@@ -1,6 +1,6 @@
 import pytest
-from sexpr import parse_raw_sexpr
-from sexpr.parsing import unparse_raw_sexpr
+from ir import parse_raw_sexpr
+from ir.parsing import unparse_raw_sexpr
 
 from tests.input_data import (
     expr1,
