@@ -200,6 +200,16 @@ strong_always_rule: RewriteRule = (['clk-prop-strong-always', '<bounded_range>',
 
 # -------------
 
+# derived primitives that are removed before clock rewriting
+# although they also exist as simple property primitives (might get reintroduced by nnf pass)
+
+strong_nexttime_rule: RewriteRule = (['clk-prop-strong-nexttime', '<int>', '<clk_prop>'],
+    ['clk-prop-not', ['clk-prop-nexttime', '<int>', ['clk-prop-not', '<clk_prop>']]])
+
+strong_until_with_rule: RewriteRule = (['clk-prop-strong-until-with', '<clk_prop1>', '<clk_prop2>'],
+    ['clk-prop-strong-until', '<clk_prop1>', ['clk-prop-and', '<clk_prop1>', '<clk_prop2>']])
+
+# -------------
 
 
 def get_ranged_rewrite_rule(container: IrContainer, node_id: NodeId) -> RewriteRule:
@@ -287,7 +297,7 @@ def prepare_primitive_rewrite_rule_dict() -> dict[type[PropertyIrNode], RewriteR
     rewrite_rules: list[RewriteRule] = [xor_rule, eq_rule, rising_gclk_rule, falling_gclk_rule, changing_gclk, delay_rule, goto_repeat_rule,
         nonconsecutive_repeat_rule, throughout_rule, within_rule, if_rule, if_else_rule, non_overlapped_implication_rule,
         implies_rule, iff_rule, non_overlapped_followed_by_rule, strong_until_rule, until_with_rule, always_rule, strong_eventually_rule,
-        strong_always_rule]
+        strong_always_rule, strong_nexttime_rule, strong_until_with_rule]
 
     for rule in rewrite_rules:
         primitive_name: str = rule[0][0] # type: ignore
@@ -647,31 +657,9 @@ clock_nexttime: RewriteRule = (['clk-prop-nexttime', '<int=1>', '<clk_prop>'],
         ['clk-prop-and', ['clk-prop-bool', '<clock>'], ['clk-prop-nexttime', '1',
             ['clk-prop-until', ['clk-prop-bool', ['not', '<clock>']], ['clk-prop-and', ['clk-prop-bool', '<clock>'], '<clk_prop>']]]]])
 
-clock_strong_nexttime: RewriteRule = (['clk-prop-strong-nexttime', '<int=1>', '<clk_prop>'],
-    ['clk-prop-strong-until',
-        ['clk-prop-bool', ['not', '<clock>']],
-        ['clk-prop-and', ['clk-prop-bool', '<clock>'], ['clk-prop-strong-nexttime', '1',
-            ['clk-prop-strong-until', ['clk-prop-bool', ['not', '<clock>']], ['clk-prop-and', ['clk-prop-bool', '<clock>'], '<clk_prop>']]]]])
-
 clock_until: RewriteRule = (['clk-prop-until', '<clk_prop1>', '<clk_prop2>'],
     ['clk-prop-until', ['clk-prop-not', ['clk-prop-and', ['clk-prop-bool', '<clock>'], ['clk-prop-not', '<clk_prop1>']]],
         ['clk-prop-and', ['clk-prop-bool', '<clock>'], '<clk_prop2>']])
-
-# NOTE here clk-prop-strong-until-with and clk-prop-strong-until are both correct on the RHS
-# but clk-prop-strong-until-with was chosen because it is available as a simple primitive
-clock_strong_until_with: RewriteRule = (['clk-prop-strong-until-with', '<clk_prop1>', '<clk_prop2>'], ['clk-prop-and',
-    ['clk-prop-strong-until-with',
-        ['clk-prop-not', ['clk-prop-and', ['clk-prop-bool', '<clock>'], ['clk-prop-not', '<clk_prop1>']]],
-        ['clk-prop-and', ['clk-prop-bool', '<clock>'], '<clk_prop1>', '<clk_prop2>']]])
-
-clock_until_with: RewriteRule = (['clk-prop-until-with', '<clk_prop1>', '<clk_prop2>'],
-    ['clk-prop-until', ['clk-prop-not', ['clk-prop-and', ['clk-prop-bool', '<clock>'], ['clk-prop-not', '<clk_prop1>']]],
-        ['clk-prop-and', ['clk-prop-bool', '<clock>'], '<clk_prop1>', '<clk_prop2>']])
-
-clock_strong_until: RewriteRule = (['clk-prop-strong-until', '<clk_prop1>', '<clk_prop2>'],
-    ['clk-prop-strong-until', ['clk-prop-not', ['clk-prop-and', ['clk-prop-bool', '<clock>'], ['clk-prop-not', '<clk_prop1>']]],
-        ['clk-prop-and', ['clk-prop-bool', '<clock>'], '<clk_prop2>']])
-
 
 
 
@@ -691,13 +679,44 @@ clock_seq_clocked: RewriteRule = (['clk-seq-clocked', '<bool>', '<clk_seq>'], ['
 
 
 
+# NOTE the following rules are not applied in clock rewriting because the primitive rewriting removes them before clock rewriting
+# to follow exactly the SVA specification and avoid changing semantics when weak/strong gets added later
+
+#clock_strong_nexttime: RewriteRule = (['clk-prop-strong-nexttime', '<int=1>', '<clk_prop>'],
+#    ['clk-prop-strong-until',
+#        ['clk-prop-bool', ['not', '<clock>']],
+#        ['clk-prop-and', ['clk-prop-bool', '<clock>'], ['clk-prop-strong-nexttime', '1',
+#            ['clk-prop-strong-until', ['clk-prop-bool', ['not', '<clock>']], ['clk-prop-and', ['clk-prop-bool', '<clock>'], '<clk_prop>']]]]])
+
+# NOTE here clk-prop-strong-until-with and clk-prop-strong-until are both correct on the RHS
+# but clk-prop-strong-until-with was chosen because it is available as a simple primitive
+#clock_strong_until_with: RewriteRule = (['clk-prop-strong-until-with', '<clk_prop1>', '<clk_prop2>'], ['clk-prop-and',
+#    ['clk-prop-strong-until-with',
+#        ['clk-prop-not', ['clk-prop-and', ['clk-prop-bool', '<clock>'], ['clk-prop-not', '<clk_prop1>']]],
+#        ['clk-prop-and', ['clk-prop-bool', '<clock>'], '<clk_prop1>', '<clk_prop2>']]])
+#
+## this primitive is not simple
+#clock_until_with: RewriteRule = (['clk-prop-until-with', '<clk_prop1>', '<clk_prop2>'],
+#    ['clk-prop-until', ['clk-prop-not', ['clk-prop-and', ['clk-prop-bool', '<clock>'], ['clk-prop-not', '<clk_prop1>']]],
+#        ['clk-prop-and', ['clk-prop-bool', '<clock>'], '<clk_prop1>', '<clk_prop2>']])
+#
+## this primitive is not simple
+#clock_strong_until: RewriteRule = (['clk-prop-strong-until', '<clk_prop1>', '<clk_prop2>'],
+#    ['clk-prop-strong-until', ['clk-prop-not', ['clk-prop-and', ['clk-prop-bool', '<clock>'], ['clk-prop-not', '<clk_prop1>']]],
+#        ['clk-prop-and', ['clk-prop-bool', '<clock>'], '<clk_prop2>']])
+
+
+
+
+
+
 def prepare_clock_rewrite_rule_dict() -> dict[type[PropertyIrNode], RewriteRule]:
     """Returns the dict associating primitives with rewrite rules to apply in order to rewrite clocks."""
 
     rule_dict: dict[type[PropertyIrNode], RewriteRule] = {}
 
-    rewrite_rules: list[RewriteRule] = [clock_sync_accept_on_rule, clock_sync_reject_on_rule, clock_nexttime, clock_strong_nexttime,
-    clock_until, clock_strong_until_with, clock_seq_bool, clock_prop_bool, clock_prop_strong_bool, clock_prop_weak_bool]
+    rewrite_rules: list[RewriteRule] = [clock_sync_accept_on_rule, clock_sync_reject_on_rule, clock_nexttime,
+    clock_until, clock_seq_bool, clock_prop_bool, clock_prop_strong_bool, clock_prop_weak_bool]
 
     for rule in rewrite_rules:
         primitive_name: str = rule[0][0] # type: ignore

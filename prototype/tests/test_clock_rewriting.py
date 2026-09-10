@@ -3,9 +3,13 @@ from pathlib import Path
 import pytest
 from hypothesis import Verbosity, example, given, settings
 from sexpr.base import ClockedProperty, IrContainer, RawSExprList
-from sexpr.parsing import parse_document, parse_raw_sexpr
+from sexpr.parsing import parse_document, parse_raw_sexpr, unparse_raw_sexpr
 from sexpr.primitives import ClkPropClkSeq, ClkPropClocked, ClkSeqClocked
-from sexpr.rewriting import rewrite_clocks, rewrite_nexttime_primitives
+from sexpr.rewriting import (
+    reduce_primitives,
+    rewrite_clocks,
+    rewrite_nexttime_primitives,
+)
 
 from tests.strategies import random_ir_clocked
 
@@ -323,9 +327,15 @@ def test_clock_rewriting_strong_nexttime_0():
         (declare gclk (true))
         (declare seq_true (clk-seq-concat (clk-seq-repeat (range 0 $) (clk-seq-bool (not clk)) ) (clk-seq-bool (and clk (true)) ) ))
         (declare prop_a (clk-prop-clk-seq (clk-seq-concat (clk-seq-repeat (range 0 $) (clk-seq-bool (not clk)) ) (clk-seq-bool (and clk a) ) )))
-        (parse-sexpr (clk-prop-clocked gclk (clk-prop-overlapped-followed-by seq_true prop_a) ) ))"""
+        (parse-sexpr (clk-prop-clocked gclk (clk-prop-not (clk-prop-overlapped-implication seq_true (clk-prop-not prop_a)) )) ))"""
 
-    check_clock_rewriting(input_document, output_document)
+    container1: IrContainer = IrContainer()
+    parse_document(parse_raw_sexpr(input_document), container1)
+    reduce_primitives(container1)
+    input_doc_reduced: str = unparse_raw_sexpr(container1.output_container())
+
+    check_clock_rewriting(input_doc_reduced, output_document)
+
 
 
 def test_clock_rewriting_strong_nexttime_1():
@@ -340,13 +350,19 @@ def test_clock_rewriting_strong_nexttime_1():
         (declare gclk (true))
         (declare prop_a (clk-prop-clk-seq (clk-seq-concat (clk-seq-repeat (range 0 $) (clk-seq-bool (not clk)) ) (clk-seq-bool (and clk a) ) )))
         (parse-sexpr (clk-prop-clocked gclk
-            (clk-prop-strong-until (clk-prop-bool (not clk))
+            (clk-prop-not
+            (clk-prop-until (clk-prop-bool (not clk))
                 (clk-prop-and (clk-prop-bool clk)
-                (clk-prop-strong-nexttime 1
-                    (clk-prop-strong-until  (clk-prop-bool (not clk))  (clk-prop-and (clk-prop-bool clk) prop_a)    ))))
+                (clk-prop-nexttime 1
+                    (clk-prop-until  (clk-prop-bool (not clk))  (clk-prop-and (clk-prop-bool clk) (clk-prop-not prop_a))    )))))
         )))"""
 
-    check_clock_rewriting(input_document, output_document)
+    container1: IrContainer = IrContainer()
+    parse_document(parse_raw_sexpr(input_document), container1)
+    reduce_primitives(container1)
+    input_doc_reduced: str = unparse_raw_sexpr(container1.output_container())
+
+    check_clock_rewriting(input_doc_reduced, output_document)
 
 
 def test_clock_rewriting_strong_nexttime_2():
@@ -362,23 +378,32 @@ def test_clock_rewriting_strong_nexttime_2():
         (declare prop_a (clk-prop-clk-seq (clk-seq-concat (clk-seq-repeat (range 0 $) (clk-seq-bool (not clk)) ) (clk-seq-bool (and clk a) ) )))
         (parse-sexpr (clk-prop-clocked gclk
 
-            (clk-prop-strong-until (clk-prop-bool (not clk))
-                (clk-prop-and (clk-prop-bool clk)
-                (clk-prop-strong-nexttime 1
-                    (clk-prop-strong-until  (clk-prop-bool (not clk))  (clk-prop-and (clk-prop-bool clk)
+            (clk-prop-not
 
-                        (clk-prop-strong-until (clk-prop-bool (not clk))
+            (clk-prop-until (clk-prop-bool (not clk))
+                (clk-prop-and (clk-prop-bool clk)
+                (clk-prop-nexttime 1
+                    (clk-prop-until  (clk-prop-bool (not clk))  (clk-prop-and (clk-prop-bool clk)
+
+                        (clk-prop-until (clk-prop-bool (not clk))
                             (clk-prop-and (clk-prop-bool clk)
-                            (clk-prop-strong-nexttime 1
-                                (clk-prop-strong-until  (clk-prop-bool (not clk))  (clk-prop-and (clk-prop-bool clk) prop_a
+                            (clk-prop-nexttime 1
+                                (clk-prop-until  (clk-prop-bool (not clk))  (clk-prop-and (clk-prop-bool clk) (clk-prop-not prop_a)
 
                         )))))
 
             )))))
 
+            )
+
         )))"""
 
-    check_clock_rewriting(input_document, output_document)
+    container1: IrContainer = IrContainer()
+    parse_document(parse_raw_sexpr(input_document), container1)
+    reduce_primitives(container1)
+    input_doc_reduced: str = unparse_raw_sexpr(container1.output_container())
+
+    check_clock_rewriting(input_doc_reduced, output_document)
 
 
 def test_clock_rewriting_same_child_twice():
@@ -559,6 +584,9 @@ def check_clock_rewriting_no_error(doc):
     doc_raw_sexpr: RawSExprList = parse_raw_sexpr(doc)
     container1: IrContainer = IrContainer()
     parse_document(doc_raw_sexpr, container1)
+    rewrite_nexttime_primitives(container1)
+    reduce_primitives(container1)
+
     container2: IrContainer = rewrite_clocks(container1)
     #output_directory: Path = Path('./output')
     #container1.show_graph(output_directory / 'check_clock_rewriting_input.png')

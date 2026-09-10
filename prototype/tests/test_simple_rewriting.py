@@ -343,7 +343,6 @@ def check_clocked_to_simple_no_error(doc):
     rewrite_nexttime_primitives(container1)
     reduce_primitives(container1)
     container2 = rewrite_clocks(container1)
-    reduce_primitives(container2)
     container3 = remove_empty_matches(container2)
     container4 = add_weak_strong(container3)
     container5 = clocked_to_simple_pass(container4)
