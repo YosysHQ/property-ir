@@ -43,7 +43,7 @@ logger = logging.getLogger(__name__)
 
 @typechecked
 def get_op_symbols() -> dict[str, type[PropertyIrNode]]:
-    allowed_types = [Bool, Sequence, Property, ClockedSequence, ClockedProperty]
+    allowed_types = [Bool, Sequence, Property, ClockedSequence, ClockedProperty, FiniteAutomaton, OmegaAutomaton]
     ops_to_cls: dict[str, type[PropertyIrNode]] = {}
 
     for node_type in allowed_types:
