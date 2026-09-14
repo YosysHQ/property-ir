@@ -9,23 +9,32 @@ from ir.base import (
     BoundedRange,
     ClockedProperty,
     ClockedSequence,
+    FiniteAutomaton,
     NodeId,
+    OmegaAutomaton,
     Property,
     Range,
     Sequence,
 )
 
+#-------------------------------+
+#  Clocked Sequence primitives  |
+#-------------------------------+
 
+@typechecked
+@dataclass
+class ClkSeqAut(ClockedSequence):
+    """Type conversion primitive from FiniteAutomaton to ClockedSequence.
+    Not part of the public interface."""
+    child: NodeId[FiniteAutomaton]
 
-# Clocked Sequence primitives
-
-# this primitive is a clocked sequence with no matches, not even the top symbol is matched
-# shorthand for intersection of conflictings sequence lengths
-# used for empty sequence match removal
 @typechecked
 @dataclass
 class ClkSeqNoMatch(ClockedSequence):
-    pass
+    """Clocked sequence with no matches. Not even the top symbol is matched.
+    Shorthand for intersection of conflictings sequence lengths.
+    Used for empty sequence match removal.
+    Not part of the public interface."""
 
 @typechecked
 @dataclass
@@ -110,21 +119,30 @@ class ClkSeqWithin(ClockedSequence):
     child2: NodeId[ClockedSequence]
 
 
-# Clocked Property primitives
+#-------------------------------+
+#  Clocked Property primitives  |
+#-------------------------------+
 
-# this property will become a false-sink in the automaton representation
-# used as a default RHS for overlapped implication/followed-by where the LHS is a no-match sequence
+@typechecked
+@dataclass
+class ClkPropOmega(ClockedProperty):
+    """Type conversion primitive from OmegaAutomaton to ClockedProperty.
+    Not part of the public interface."""
+    child: NodeId[OmegaAutomaton]
+
 @typechecked
 @dataclass
 class ClkPropFalse(ClockedProperty):
-    pass
+    """This property will become a false-sink in the automaton representation.
+    Used as a default RHS for overlapped implication/followed-by where the LHS is a no-match sequence.
+    Not part of the public interface."""
 
-# this property will become a true-sink in the automaton representation
-# used as a default RHS for overlapped implication/followed-by where the LHS is a no-match sequence
 @typechecked
 @dataclass
 class ClkPropTrue(ClockedProperty):
-    pass
+    """This property will become a true-sink in the automaton representation.
+    Used as a default RHS for overlapped implication/followed-by where the LHS is a no-match sequence.
+    Not part of the public interface."""
 
 @typechecked
 @dataclass

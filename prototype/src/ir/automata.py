@@ -1,16 +1,15 @@
 
 from typing import Literal
 
-from .base import IrContainer, PropertyIrNode, RawSExprList
+from .base import IrContainer, PropertyIrNode, RawSExpr, RawSExprList
 from .primitives.automata_primitives import *
 from .primitives.simple_primitives import *
 from .rewriting import (
-    apply_rules,
-    construct_rewritten_container,
     RewriteRule,
     RewriteRuleGenerator,
+    apply_rules,
+    construct_rewritten_container,
 )
-
 
 
 def get_split_seq_repeat_rewrite_rule(container: IrContainer, node_id: NodeId) -> RewriteRule:
@@ -42,18 +41,28 @@ def get_split_seq_repeat_rewrite_rule(container: IrContainer, node_id: NodeId) -
     return (['seq-repeat', '<range>', '<seq>'], rhs)
 
 
-def split_seq_repeat(container: IrContainer):
-    """Breaks seq-repeat primitives up into a concatenation of two seq-repeat
+def prepare_container_for_automaton_translation(container: IrContainer):
+    """Prepare container for simple property to automaton transformation.
+    Splits prop-weak-bool and prop-strong-bool into prop-weak/strong + seq-bool.
+    Breaks seq-repeat primitives up into a concatenation of two seq-repeat
     primitives as a preparation for the simple_to_automaton pass.
     Rewrite in-place in the input_container."""
 
-    apply_rules(container, {SeqRepeat: get_split_seq_repeat_rewrite_rule})
+    rewrite_dict: dict[type[PropertyIrNode], RewriteRule | RewriteRuleGenerator] = {
+        SeqRepeat: get_split_seq_repeat_rewrite_rule,
+        PropWeakBool: (['prop-weak-bool', '<bool>'],
+            ['prop-weak', ['seq-bool', '<bool>']]),
+        PropStrongBool: (['prop-weak-bool', '<bool>'],
+            ['prop-strong', ['seq-bool', '<bool>']])
+    }
+
+    apply_rules(container, rewrite_dict)
 
 
 def get_seq_repeat_to_aut_rewrite_rule(container: IrContainer, node_id: NodeId) -> RewriteRule:
     """Get the rewrite rule for the seq-repeat primitive with node_id to transform it
     into an automaton. For this, seq-repeat primitives must have been preprocessed
-    with split_seq_repeat."""
+    with prepare_container_for_automaton_translation."""
 
     # NOTE both could be done in one step to improve efficiency by directly constructing
     # the automaton rule for the split seq-repeat
@@ -89,13 +98,76 @@ def get_seq_repeat_to_aut_rewrite_rule(container: IrContainer, node_id: NodeId) 
     return (['seq-repeat', '<range>', '<seq>'], rhs)
 
 
+def get_seq_concat_rewrite_rule(container: IrContainer, node_id: NodeId) -> RewriteRule:
+    """Get the automaton translation rewrite rule for seq-concat, which can have
+    any non-zero number of children."""
+
+    # version with 2 children
+    # SeqConcat: (['seq-concat', '<seq1>', '<seq2>'],
+    #    ['aut-call-ex', '<seq1>', ['aut-consume', ['true'], '<seq2>', ['aut-false']]]),
+
+    node: PropertyIrNode = container[node_id]
+
+    if not isinstance(node, SeqConcat):
+        raise TypeError(f'Cannot generate seq-concat rewrite rule for node {node} with wrong node type')
+
+    children: list[NodeId] = node.children
+    children_identifiers: list[str] = ['seq' + str(i) for i in range(len(children))]
+
+    lhs: RawSExpr = ['seq-concat']
+    lhs += children_identifiers
+
+    return (lhs, seq_concat_rule_rhs(children_identifiers))
+
+def seq_concat_rule_rhs(children_identifiers: list[str]) -> RawSExpr:
+    """Construct the RHS of the automaton translation rewrite rule for seq-concat."""
+
+    if len(children_identifiers) == 0:
+        raise ValueError('Cannot construct rewrite rule for seq-concat with empty list of arguments.')
+    elif len(children_identifiers) == 1:
+        return children_identifiers[0]
+    else:
+        return ['aut-call-ex', children_identifiers[0], ['aut-consume', ['true'], seq_concat_rule_rhs(children_identifiers[1:]), ['aut-false']]]
+
+
+def get_seq_fusion_rewrite_rule(container: IrContainer, node_id: NodeId) -> RewriteRule:
+    """Get the automaton translation rewrite rule for seq-fusion, which can have
+    any non-zero number of children."""
+
+    # version with 2 children
+    # SeqFusion: (['seq-fusion', '<seq1>', '<seq2>'],
+    #    ['aut-call-ex', '<seq1>', '<seq2>']),
+
+    node: PropertyIrNode = container[node_id]
+
+    if not isinstance(node, SeqFusion):
+        raise TypeError(f'Cannot generate seq-fusion rewrite rule for node {node} with wrong node type')
+
+    children: list[NodeId] = node.children
+    children_identifiers: list[str] = ['clk_seq' + str(i) for i in range(len(children))]
+
+    lhs: RawSExpr = ['seq-fusion']
+    lhs += children_identifiers
+
+    return (lhs, seq_fusion_rule_rhs(children_identifiers))
+
+def seq_fusion_rule_rhs(children_identifiers: list[str]) -> RawSExpr:
+    """Construct the RHS of the automaton translation rewrite rule for seq-fusion."""
+
+    if len(children_identifiers) == 0:
+        raise ValueError('Cannot construct rewrite rule for seq-fusion with empty list of arguments.')
+    elif len(children_identifiers) == 1:
+        return children_identifiers[0]
+    else:
+        return ['aut-call-ex', children_identifiers[0], seq_concat_rule_rhs(children_identifiers[1:])]
 
 
 def simple_to_automaton(input_container: IrContainer) -> IrContainer:
     """Converts the simple properties/sequence in the container into their
     automata counterparts finite automata and omega automata.
     For this, the negation normal form (nnf) must have been established and
-    seq-repeat primitives must have been preprocessed with split_seq_repeat."""
+    seq-repeat and prop-weak-bool/prop-strong-bool primitives must have been
+    preprocessed with prepare_container_for_automaton_transformation."""
 
     rewrite_rules: dict[type[PropertyIrNode], RewriteRule | RewriteRuleGenerator] = {
 
@@ -103,17 +175,15 @@ def simple_to_automaton(input_container: IrContainer) -> IrContainer:
 
         SeqBool: (['seq-bool', '<bool>'],
             ['aut-read', '<bool>', ['aut-acc', ['aut-false']], ['aut-false']]),
-        SeqConcat: (['seq-concat', '<seq1>', '<seq2>'],
-            ['aut-call-ex', '<seq1>', ['aut-consume', ['true'], '<seq2>', ['aut-false']]]),
-        SeqFusion: (['seq-fusion', '<seq1>', '<seq2>'],
-            ['aut-call-ex', '<seq1>', '<seq2>']),
 
+        SeqConcat: get_seq_concat_rewrite_rule,
+        SeqFusion: get_seq_fusion_rewrite_rule,
         SeqRepeat: get_seq_repeat_to_aut_rewrite_rule,
 
         SeqOr: (['seq-or', '<seq_list>'],
             ['aut-or', '<seq_list>']),
         SeqIntersect: (['seq-intersect', '<seq_list>'],
-            ['aut-call-ex', ['aut-and', '<seq_list>'], ['aut-acc', 'aut-false']]),
+            ['aut-call-ex', ['aut-and', '<seq_list>'], ['aut-acc', ['aut-false']]]),
         SeqFirstMatch: (['seq-first-match', '<seq>'],
             ['aut-call-first', '<seq>', ['aut-acc', ['aut-false']]]),
 
@@ -130,6 +200,15 @@ def simple_to_automaton(input_container: IrContainer) -> IrContainer:
         PropWeak: (['prop-weak', '<seq>'],
             ['omega-call-ex-weak', '<seq>', ['omega-true']]),
 
+        PropStrongBool: (['prop-strong-bool', '<bool>'],
+            ['omega-call-ex-strong',
+            ['aut-read', '<bool>', ['aut-acc', ['aut-false']], ['aut-false']],
+            ['omega-true']]),
+        PropWeakBool: (['prop-weak', '<seq>'],
+            ['omega-call-ex-weak',
+            ['aut-read', '<bool>', ['aut-acc', ['aut-false']], ['aut-false']],
+            ['omega-true']]),
+
         PropAnd: (['prop-and', '<prop_list>'],
             ['omega-and', '<prop_list>']),
         PropOr: (['prop-or', '<prop_list>'],
@@ -137,9 +216,9 @@ def simple_to_automaton(input_container: IrContainer) -> IrContainer:
 
         # prop-nexttime and prop-strong-nexttime are already unrolled at this point
         PropNexttime: (['prop-nexttime', '<int=1>', '<prop>'],
-            ['omega-weak-consume', ['true'], '<prop>']),
+            ['omega-weak-consume', ['true'], '<prop>', ['omega-false']]),
         PropStrongNexttime: (['prop-strong-nexttime', '<int=1>', '<prop>'],
-            ['omega-strong-consume', ['true'], '<prop>']),
+            ['omega-strong-consume', ['true'], '<prop>', ['omega-false']]),
 
         PropOverlappedImplication: (['prop-overlapped-implication', '<seq>', '<prop>'],
             ['omega-call-all', '<seq>', '<prop>']),
@@ -149,15 +228,15 @@ def simple_to_automaton(input_container: IrContainer) -> IrContainer:
         PropUntil: (['prop-until', '<prop1>', '<prop2>'],
             ['let-rec',
                 ['start',
-                    ['prop-or', '<prop2>',
-                        ['prop-and', '<prop1>',
+                    ['omega-or', '<prop2>',
+                        ['omega-and', '<prop1>',
                             ['omega-weak-consume-acc', ['true'], 'start', ['omega-false']]]]],
                 'start']),
         PropStrongUntilWith: (['prop-strong-until-with', '<prop1>', '<prop2>'],
             ['let-rec',
                 ['start',
-                    ['prop-and', '<prop1>',
-                        ['prop-or', '<prop2>',
+                    ['omega-and', '<prop1>',
+                        ['omega-or', '<prop2>',
                             ['omega-strong-consume', ['true'], 'start', ['omega-false']]]]],
                 'start']),
 
@@ -167,9 +246,10 @@ def simple_to_automaton(input_container: IrContainer) -> IrContainer:
         PropRejectOn: (['prop-reject-on', '<bool>', '<prop>'],
             ['omega-reject-on', '<bool>', '<prop>']),
 
-    }
+        PropFalse: (['prop-false'], ['omega-false']),
+        PropTrue: (['prop-true'], ['omega-true']),
 
-    # TODO handle outermost primitive for type conversion
+    }
 
     output_container: IrContainer = construct_rewritten_container(input_container, rewrite_rules, type_classes_to_copy = [Bool, FiniteAutomaton, OmegaAutomaton])
 

@@ -14,10 +14,12 @@ from ir.base import (
     ClockedSequence,
     CoverProperty,
     Directive,
+    FiniteAutomaton,
     IntOrUnbounded,
     IrContainer,
     LiteralType,
     NodeId,
+    OmegaAutomaton,
     PlaceholderNode,
     Property,
     PropertyDirective,
@@ -48,6 +50,7 @@ from ir.primitives.clocked_primitives import (
     ClkPropFalse,
     ClkPropNexttime,
     ClkPropNot,
+    ClkPropOmega,
     ClkPropOr,
     ClkPropOverlappedFollowedBy,
     ClkPropOverlappedImplication,
@@ -65,6 +68,7 @@ from ir.primitives.clocked_primitives import (
     ClkPropWeak,
     ClkPropWeakBool,
     ClkSeqAnd,
+    ClkSeqAut,
     ClkSeqBool,
     ClkSeqClocked,
     ClkSeqConcat,
@@ -1824,7 +1828,10 @@ def construct_rewritten_container(
             new_node: PropertyIrNode = output_container.add_node_by_kwargs(ClkSeqSeq, {'child': output_root_id})
         elif output_root_node.type_class() is Property:
             new_node: PropertyIrNode = output_container.add_node_by_kwargs(ClkPropProp, {'child': output_root_id})
-        # TODO add other node types for other passes
+        elif output_root_node.type_class() is FiniteAutomaton:
+            new_node: PropertyIrNode = output_container.add_node_by_kwargs(ClkSeqAut, {'child': output_root_id})
+        elif output_root_node.type_class() is OmegaAutomaton:
+            new_node: PropertyIrNode = output_container.add_node_by_kwargs(ClkPropOmega, {'child': output_root_id})
         else:
             raise ValueError(f'Unexpected root node type {output_root_node.type_class()}')
 

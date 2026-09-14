@@ -22,7 +22,7 @@ from ir.base import (
     Signal,
 )
 from ir.parsing import parse_document, parse_raw_sexpr
-from ir.primitives.clocked_primitives import ClkSeqNoMatch
+from ir.primitives.clocked_primitives import ClkPropOmega, ClkSeqAut, ClkSeqNoMatch
 from ir.primitives.simple_primitives import SeqNoMatch
 
 from tests.helpers import wrap_signals_and_expr_in_document
@@ -34,7 +34,7 @@ logger = logging.getLogger(__name__)
 type IrGeneratingType = tuple[str, type[PropertyIrNode], list[type], list[int]]
 
 
-forbidden_primitives_filter: Callable[[type[PropertyIrNode]], bool] = lambda node_type: not (issubclass(node_type, ClkSeqNoMatch) or issubclass(node_type, SeqNoMatch));
+forbidden_primitives_filter: Callable[[type[PropertyIrNode]], bool] = lambda node_type: not issubclass(node_type, (ClkSeqNoMatch, SeqNoMatch, ClkSeqAut, ClkPropOmega))
 
 
 def random_ir_clocked(
