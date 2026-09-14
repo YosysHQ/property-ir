@@ -136,6 +136,11 @@ def test_empty_match_removal_no_change_4():
     output_document: str = input_document
     check_empty_match_removal(input_document, output_document, visualize=False)
 
+def test_empty_match_removal_no_change_5():
+    input_document: str = """(document
+        (parse-sexpr (clk-prop-clocked (true) (clk-prop-weak (clk-seq-no-match)))) )"""
+    output_document: str = input_document
+    check_empty_match_removal(input_document, output_document, visualize=False)
 
 
 def test_empty_match_removal_or():

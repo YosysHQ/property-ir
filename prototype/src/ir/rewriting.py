@@ -1142,7 +1142,7 @@ def remove_empty_matches_process_node(
 
 
     # leave the node for these types as-is and perform subcall for children
-    elif isinstance(current_node, (Bool, Sequence, Property, ClockedProperty, ClkSeqBool, ClkSeqSeq, ClkSeqFirstMatch, ClkSeqClocked)):
+    elif isinstance(current_node, (Bool, Sequence, Property, ClockedProperty, ClkSeqBool, ClkSeqSeq, ClkSeqFirstMatch, ClkSeqClocked, ClkSeqNoMatch)):
 
         # unless it is a sequence type root node that admits no nonempty match
         # removing ClkSeqClocked in that case is not problematic because the clock gets rewritten beforehand
@@ -1351,6 +1351,11 @@ def precompute_node_info_process_node(
             admits_only_empty[current_id_repr] = False
             no_match[current_id_repr] = False
             return
+
+        elif isinstance(current_node, ClkSeqNoMatch):
+            admits_empty[current_id_repr] = False
+            admits_only_empty[current_id_repr] = False # it does have no non-empty match
+            no_match[current_id_repr] = True
 
         elif isinstance(current_node, ClkSeqClocked):
             child_id = current_node.child2
