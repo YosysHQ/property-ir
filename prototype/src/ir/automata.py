@@ -3,6 +3,7 @@ from typing import Literal
 
 from .base import IrContainer, PropertyIrNode, RawSExpr, RawSExprList
 from .primitives.automata_primitives import *
+from .primitives.clocked_primitives import ClkPropProp, ClkSeqSeq
 from .primitives.simple_primitives import *
 from .rewriting import (
     RewriteRule,
@@ -26,7 +27,7 @@ def get_split_seq_repeat_rewrite_rule(container: IrContainer, node_id: NodeId) -
     lower_bound: int = repeat_range.lower_bound
     upper_bound: int | Literal['$'] = repeat_range.upper_bound.value
 
-    if lower_bound == 1:
+    if lower_bound == 1 or lower_bound == upper_bound:
         return ([], []) # nothing to do
 
     if type(upper_bound) is int:
@@ -187,9 +188,13 @@ def simple_to_automaton(input_container: IrContainer) -> IrContainer:
         SeqFirstMatch: (['seq-first-match', '<seq>'],
             ['aut-call-first', '<seq>', ['aut-acc', ['aut-false']]]),
 
-        # TODO fix this primitive and its handling in nnf rewriting
+        # NOTE
+        # it might make sense to change the prop-refuted primitive into seq-refuted
+        # and wrap it into prop-strong in the nnf rewriting
+
         # aut-refuted applies an automaton transformaton that happens later
-        #SeqRefuted: (['seq-refuted', '<seq>'], ['aut-refuted', '<seq>']),
+        PropRefuted: (['prop-refuted', '<seq>'],
+            ['omega-call-ex-strong', ['aut-refuted', '<seq>'], ['omega-true']]),
 
         SeqNoMatch: (['seq-no-match'], ['aut-false']),
 
@@ -248,6 +253,10 @@ def simple_to_automaton(input_container: IrContainer) -> IrContainer:
 
         PropFalse: (['prop-false'], ['omega-false']),
         PropTrue: (['prop-true'], ['omega-true']),
+
+        # remove outermost type conversion primitives
+        ClkSeqSeq: (['clk-seq-seq', '<seq>'], '<seq>'),
+        ClkPropProp: (['clk-prop-prop', '<prop>'], '<prop>'),
 
     }
 
