@@ -7,10 +7,9 @@ from typing import Literal
 
 from ir.base import (
     Bool,
-    FiniteAutomaton,
     IrContainer,
     NodeId,
-    OmegaAutomaton,
+    Property,
     PropertyIrNode,
     Range,
     Sequence,
@@ -30,6 +29,24 @@ from ir.primitives.bool_primitives import (
     Xor,
 )
 from ir.primitives.simple_primitives import (
+    PropAcceptOn,
+    PropAnd,
+    PropFalse,
+    PropNexttime,
+    PropNot,
+    PropOr,
+    PropOverlappedFollowedBy,
+    PropOverlappedImplication,
+    PropRefuted,
+    PropRejectOn,
+    PropStrong,
+    PropStrongBool,
+    PropStrongNexttime,
+    PropStrongUntilWith,
+    PropTrue,
+    PropUntil,
+    PropWeak,
+    PropWeakBool,
     SeqBool,
     SeqConcat,
     SeqFirstMatch,
@@ -104,13 +121,49 @@ class Trace:
 
         return Trace(finite_part_bar, suffix_bar)
 
+    def remove_first_symbols(self, num: int) -> Trace:
+        """Remove the first n symbols from the finite part of the Trace."""
+
+        return Trace(self.finite_part[num:], self.suffix)
+
+    def replace_from(self, pos: FencepostPosition, suffix: Literal['top_omega', 'bot_omega']) -> Trace:
+        """Starting from the given FencepostPosition, replace the following
+        symbols by either top_omega or bot_omega. If the position is the
+        position marking the end of the finite part, the suffix is replaced.
+        If the position is within_finite_suffix, the suffix will become a
+        mixed top_star_bot_omega or bot_star_top_omega."""
+
+        replace_within_suffix: bool = False
+        if isinstance(pos.value, tuple):
+            if pos.value[1] <= len(self.finite_part):
+                return Trace(finite_part=self.finite_part[:pos.value[1]], suffix=suffix)
+            else:
+                replace_within_suffix = True
+
+        if pos == FencepostPosition('within_infinite_suffix') or replace_within_suffix:
+            if self.suffix in ['top_omega', 'end'] and suffix == 'top_omega':
+                return Trace(finite_part=self.finite_part, suffix='top_omega')
+            elif self.suffix in ['bot_omega', 'end'] and suffix == 'bot_omega':
+                return Trace(finite_part=self.finite_part, suffix='bot_omega')
+            elif self.suffix == 'top_omega' and suffix == 'bot_omega':
+                return Trace(finite_part=self.finite_part, suffix='top_star_bot_omega')
+            elif self.suffix == 'bot_omega' and suffix == 'top_omega':
+                return Trace(finite_part=self.finite_part, suffix='bot_star_top_omega')
+            elif self.suffix in ['bot_star_top_omega', 'top_star_bot_omega']:
+                raise ValueError('Cannot replace suffix of trace %s within mixed suffix', self)
+
+        if pos == FencepostPosition('unknown'):
+            raise ValueError('Cannot replace suffix of trace %s at unknown position', self)
+
+        raise ValueError('Cannot replace suffix of trace %s at %s', self, pos)
+
 
 
 @dataclass(frozen=True)
 @total_ordering
 class FencepostPosition:
-    """Fencepost position inside a Trace.
-    The last fencepost position at the end of the finite part of a trace should
+    """Fencepost position inside a Trace. When interpreted as a sequence match,
+    the last fencepost position at the end of the finite part of a trace should
     be represented as ('at', pos) and NOT as 'within_infinite_suffix'."""
 
     value: tuple[Literal['at'], int] | Literal['within_infinite_suffix', 'unknown']
@@ -193,7 +246,7 @@ def evaluate_bool(node_id: NodeId[Bool], container: IrContainer, trace: Trace, p
 
 
     if isinstance(node, Constant):
-            return node.value
+        return node.value
 
     if isinstance(node, Signal):
         return node.signal_name in trace.finite_part[pos.value[1]]
@@ -205,15 +258,12 @@ def evaluate_bool(node_id: NodeId[Bool], container: IrContainer, trace: Trace, p
         return not child_value
 
     elif isinstance(node, And):
-        unknown_seen: bool = False
         for child_id in node.children:
             child_value: MaybeBool = evaluate_bool(child_id, container, trace, pos)
             if child_value == False:
                 return False
             elif child_value == 'unknown':
-                unknown_seen = True
-        if unknown_seen:
-            return 'unknown'
+                return 'unknown'
         return True
 
     elif isinstance(node, Or):
@@ -276,7 +326,7 @@ def evaluate_bool(node_id: NodeId[Bool], container: IrContainer, trace: Trace, p
 
 
 #--------------------+
-#  SIMPLE PROPERTIES |
+#  SIMPLE SEQUENCES  |
 #--------------------+
 
 
@@ -392,14 +442,10 @@ def sequence_matches(node_id: NodeId[Sequence], container: IrContainer, trace: T
     # where the first match could happen are considered)
     # if there is any match 'unknown', only 'unknown' will be returned
     elif isinstance(node, SeqFirstMatch):
-        logger.debug('trace %s', trace)
-        logger.debug('trace.bar() %s', trace.bar())
         child_matches: set[FencepostPosition] = set(sequence_matches(node.child, container, trace, pos))
         if FencepostPosition('unknown') in child_matches:
             return frozenset([FencepostPosition('unknown')])
-        logger.debug('seq-first-match child_matches: %s', child_matches)
         bar_matches: set[FencepostPosition] = set(sequence_matches(node.child, container, trace.bar(), pos))
-        logger.debug('seq-first-match bar_matches: %s', bar_matches)
         result_matches: set[FencepostPosition] = set()
         for child_match in child_matches:
             smaller_bar_matches: set[FencepostPosition] = {match for match in bar_matches if match < child_match}
@@ -414,27 +460,256 @@ def sequence_matches(node_id: NodeId[Sequence], container: IrContainer, trace: T
     return frozenset([FencepostPosition('unknown')])
 
 
-def evaluate_property(node_id: NodeId[Bool], container: IrContainer, trace: Trace) -> MaybeBool:
+
+
+
+#--------------------+
+#  SIMPLE PROPERTIES |
+#--------------------+
+
+
+
+
+def evaluate_accept_reject_on(node: PropertyIrNode, container: IrContainer, trace: Trace) -> tuple[MaybeBool, MaybeBool | None, MaybeBool | None]:
+    """Evaluate a property on the necessary traces to determine the result of a
+    prop-accept-on or prop-reject-on primitive. The resulting MaybeBool values,
+    if they exist, are the results of the evaluation of the property on the input
+    trace, on the trace with replaced suffix at the earliest position where the
+    bool holds, and on the trace with a replaced suffix at an earlier unknown
+    position."""
+
+    if isinstance(node, PropAcceptOn):
+        trace_for_bool: Trace = trace
+        suffix: Literal['top_omega', 'bot_omega'] = 'top_omega'
+    elif isinstance(node, PropRejectOn):
+        trace_for_bool: Trace = trace.bar()
+        suffix: Literal['top_omega', 'bot_omega'] = 'bot_omega'
+    else:
+        raise TypeError('Wrong node type in evaluate_accept_reject_on on node %s', node)
+
+    p_result: MaybeBool = evaluate_property(node.child2, container, trace)
+    earliest_bool_result: MaybeBool | None = None
+    unknown_bool_result: MaybeBool | None = None
+
+    earliest_bool: int | None = None
+    earliest_unknown: int | None = None
+    for index in range(len(trace.finite_part) + 1):
+        bool_result: MaybeBool = evaluate_bool(node.child1, container, trace_for_bool, FencepostPosition(('at', index)))
+        if bool_result == True:
+            earliest_bool = index
+            break
+        elif bool_result == 'unknown' and earliest_unknown is None:
+            earliest_unknown = index
+    if earliest_bool is not None:
+        earliest_bool_result = evaluate_property(node.child2, container, trace.replace_from(FencepostPosition(('at', earliest_bool)), suffix))
+
+    earlier_unknown = False
+    if earliest_unknown is not None and earliest_bool is None:
+        earlier_unknown = True
+    elif earliest_unknown is not None and earliest_bool is not None:
+        if earliest_unknown < earliest_bool:
+            earlier_unknown = True
+    if earlier_unknown:
+        assert earliest_unknown is not None
+        unknown_bool_result = evaluate_property(node.child2, container, trace.replace_from(FencepostPosition(('at', earliest_unknown)), suffix))
+
+    return (p_result, earliest_bool_result, unknown_bool_result)
+
+
+
+
+def evaluate_strong(node: PropertyIrNode, container: IrContainer, trace: Trace):
+    """Evaluate the child sequence of the given node as though it is strong.
+    This is used to implement PropStrong and PropWeak, where the trace gets
+    modified before this method is called."""
+
+    assert isinstance(node, (PropStrong, PropWeak))
+
+    child_matches: frozenset[FencepostPosition] = sequence_matches(node.child, container, trace, FencepostPosition(('at', 0)))
+    for match in child_matches:
+        if isinstance(match.value, tuple) or (match.value == 'within_infinite_suffix' and trace.suffix in ['top_omega', 'top_star_bot_omega']):
+            return True
+    if 'unknown' in child_matches:
+        return 'unknown'
+    return False
+
+
+
+
+def evaluate_property(node_id: NodeId[Property], container: IrContainer, trace: Trace) -> MaybeBool:
+
+    node: PropertyIrNode = container[node_id]
+    assert(isinstance(node, Property))
+
+    logger.debug('Evaluate property %s', node)
+
+
+    if isinstance(node, PropFalse):
+        return False
+    elif isinstance(node, PropTrue):
+        return True
+
+    elif isinstance(node, PropStrongBool):
+        if len(trace.finite_part) == 0 and trace.suffix == 'end':
+            return False
+        return evaluate_bool(node.child, container, trace, pos=FencepostPosition(('at', 0)))
+
+    elif isinstance(node, PropStrong):
+        evaluate_strong(node, container, trace)
+
+    elif isinstance(node, PropWeakBool):
+        modified_trace: Trace = trace.replace_from(FencepostPosition('within_infinite_suffix'), 'top_omega')
+        return evaluate_bool(node.child, container, trace, pos=FencepostPosition(('at', 0)))
+
+    elif isinstance(node, PropWeak):
+        modified_trace: Trace = trace.replace_from(FencepostPosition('within_infinite_suffix'), 'top_omega')
+        return evaluate_strong(node, container, modified_trace)
+
+    elif isinstance(node, PropNot):
+        child_result = evaluate_property(node.child, container, trace.bar())
+        if child_result == 'unknown':
+            return 'unknown'
+        return not child_result
+
+    elif isinstance(node, PropAnd):
+        for child_id in node.children:
+            child_value: MaybeBool = evaluate_property(child_id, container, trace)
+            if child_value == False:
+                return False
+            elif child_value == 'unknown':
+                return 'unknown'
+        return True
+
+    elif isinstance(node, PropOr):
+        unknown_seen: bool = False
+        for child_id in node.children:
+            child_value: MaybeBool = evaluate_property(child_id, container, trace)
+            if child_value == True:
+                return True
+            elif child_value == 'unknown':
+                unknown_seen = True
+        if unknown_seen:
+            return 'unknown'
+        return False
+
+    elif isinstance(node, PropNexttime):
+        shortened_trace: Trace = trace.remove_first_symbols(num=node.child1)
+        if len(shortened_trace.finite_part) == 0 and shortened_trace.suffix == 'end':
+            return True
+        return evaluate_property(node.child2, container, shortened_trace)
+
+
+    elif isinstance(node, PropStrongNexttime):
+        shortened_trace: Trace = trace.remove_first_symbols(num=node.child1)
+        if len(shortened_trace.finite_part) == 0 and shortened_trace.suffix == 'end':
+            return False
+        return evaluate_property(node.child2, container, shortened_trace)
+
+    # TODO improve unknown result behavior
+    elif isinstance(node, PropOverlappedImplication):
+        bar_matches: frozenset[FencepostPosition] = sequence_matches(node.child1, container, trace.bar(), FencepostPosition(('at', 0)))
+        unknown_result: bool = False
+        if 'unknown' in bar_matches:
+            unknown_result = True
+        for match in bar_matches:
+            if isinstance(match.value, tuple) or match == FencepostPosition('within_infinite_suffix'):
+                if isinstance(match.value, tuple):
+                    result: MaybeBool = evaluate_property(node.child2, container, trace.remove_first_symbols(num=match.value[1]))
+                else:
+                    result: MaybeBool = evaluate_property(node.child2, container, trace.remove_first_symbols(num=len(trace.finite_part)))
+                if result == 'unknown':
+                    unknown_result = True
+                elif result == False:
+                    return False
+        if unknown_result:
+            return 'unknown'
+        return True
+
+    elif isinstance(node, PropOverlappedFollowedBy):
+
+        # TODO
+
+        #matches: frozenset[FencepostPosition] = sequence_matches(node.child1, container, trace, FencepostPosition(('at', 0)))
+        #unknown_result: bool = False
+        #for match in matches:
+        #    if isinstance(match.value, tuple):
+        #        result: MaybeBool = evaluate_property(node.child2, container, trace.remove_first_symbols(num=match.value[1]))
+        #        if result == True:
+        #            return True
+        #        if result == 'unknown':
+        #            unknown_result = True
+
+        return 'unknown'
+
+
+
+
+
+    elif isinstance(node, PropUntil):
+
+        # TODO
+
+        #next_trace: Trace = trace
+
+        #while len(next_trace.finite_part) > 0:
+
+        #    p2_result: MaybeBool = evaluate_property(node.child2, container, next_trace)
+        #    if p2_result == True:
+        #        return True
+        #    if p2_result == 'unknown':
+        #        p2_unknown = True
+
+        #    p1_result: MaybeBool = evaluate_property(node.child1, container, next_trace)
+        #    if p1_result == False:
+        #        if p2_unknown:
+        #            return 'unknown'
+        #        else:
+        #            return False
+        #    if p1_result == 'unknown':
+        #        return 'unknown'
+
+        #    next_trace = next_trace.remove_first_symbols(num=1)
+
+        #if next_trace.suffix == 'end':
+        #    if p2_unknown:
+        #        return 'unknown'
+        #    return True
+        #else:
+        #    p1_result: MaybeBool = evaluate_property(node.child1, container, next_trace)
+        #    p2_result: MaybeBool = evaluate_property(node.child2, container, next_trace)
+        #    if p2_result == True:
+        #        if p2_unknown == 'unknown':
+        #            return 'unknown'
+
+        return 'unknown'
+
+    elif isinstance(node, PropStrongUntilWith):
+
+        # TODO
+
+        return 'unknown'
+
+    elif isinstance(node, PropAcceptOn):
+        (p_result, earliest_bool_result, earliest_unknown) = evaluate_accept_reject_on(node, container, trace)
+        if p_result == True or earliest_bool_result == True:
+            return True
+        elif p_result == 'unknown' or earliest_bool_result == 'unknown' or earliest_unknown in [True, 'unknown']:
+            return 'unknown'
+        return False
+
+
+    elif isinstance(node, PropRejectOn):
+        (p_result, earliest_bool_result, earliest_unknown) = evaluate_accept_reject_on(node, container, trace)
+        if p_result == False or earliest_bool_result == False:
+            return False
+        elif p_result == 'unknown' or earliest_bool_result == 'unknown' or earliest_unknown in [False, 'unknown']:
+            return 'unknown'
+        return True
+
+
+
+    elif isinstance(node, PropRefuted):
+        return 'unknown'
+
 
     return 'unknown'
-
-
-
-
-
-
-
-#------------+
-#  AUTOMATA  |
-#------------+
-
-
-def evaluate_finite_automaton(node_id: NodeId[FiniteAutomaton], container: IrContainer, trace: Trace) -> frozenset[FencepostPosition]:
-    return frozenset([FencepostPosition('unknown')])
-
-
-
-
-
-def evaluate_omega_automaton(node_id: NodeId[OmegaAutomaton], container: IrContainer, trace: Trace) -> frozenset[FencepostPosition]:
-    return frozenset([FencepostPosition('unknown')])
