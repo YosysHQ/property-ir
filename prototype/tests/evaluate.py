@@ -230,12 +230,12 @@ def evaluate_bool(node_id: NodeId[Bool], container: IrContainer, trace: Trace, p
 
     if pos.value == 'within_infinite_suffix':
         match(trace.suffix):
-            case('end' | 'bot_star_top_omega' | 'top_star_bot_omega'):
-                return 'unknown'
             case('top_omega'):
                 return True
-            case('bot_omega'):
+            case('bot_omega' | 'bot_star_top_omega' | 'end'):
                 return False
+            case('top_star_bot_omega'):
+                return 'unknown'
     elif pos.value == 'unknown':
         return 'unknown'
 
@@ -525,11 +525,15 @@ def evaluate_strong(node: PropertyIrNode, container: IrContainer, trace: Trace):
 
     assert isinstance(node, (PropStrong, PropWeak))
 
+    if trace.suffix == 'end':
+        trace = trace.replace_from(FencepostPosition('within_infinite_suffix'), 'bot_omega')
+
     child_matches: frozenset[FencepostPosition] = sequence_matches(node.child, container, trace, FencepostPosition(('at', 0)))
+    logger.debug('child_matches with trace %s in evaluate_strong %s', trace, child_matches)
     for match in child_matches:
-        if isinstance(match.value, tuple) or (match.value == 'within_infinite_suffix' and trace.suffix in ['top_omega', 'top_star_bot_omega']):
+        if isinstance(match.value, tuple) or (match.value == 'within_infinite_suffix' and trace.suffix in ['top_omega']):
             return True
-    if 'unknown' in child_matches:
+    if FencepostPosition('unknown') in child_matches:
         return 'unknown'
     return False
 
@@ -541,7 +545,7 @@ def evaluate_property(node_id: NodeId[Property], container: IrContainer, trace: 
     node: PropertyIrNode = container[node_id]
     assert(isinstance(node, Property))
 
-    logger.debug('Evaluate property %s', node)
+    logger.debug('Evaluate property %s on trace %s', node, trace)
 
 
     if isinstance(node, PropFalse):
@@ -555,11 +559,21 @@ def evaluate_property(node_id: NodeId[Property], container: IrContainer, trace: 
         return evaluate_bool(node.child, container, trace, pos=FencepostPosition(('at', 0)))
 
     elif isinstance(node, PropStrong):
-        evaluate_strong(node, container, trace)
+        return evaluate_strong(node, container, trace)
 
     elif isinstance(node, PropWeakBool):
+
+        if len(trace.finite_part) == 0:
+            match(trace.suffix):
+                case('end' | 'top_omega'):
+                    return True
+                case('bot_omega'):
+                    return False
+                case('bot_star_top_omega' | 'top_star_bot_omega'):
+                    return 'unknown'
+
         modified_trace: Trace = trace.replace_from(FencepostPosition('within_infinite_suffix'), 'top_omega')
-        return evaluate_bool(node.child, container, trace, pos=FencepostPosition(('at', 0)))
+        return evaluate_bool(node.child, container, modified_trace, pos=FencepostPosition(('at', 0)))
 
     elif isinstance(node, PropWeak):
         modified_trace: Trace = trace.replace_from(FencepostPosition('within_infinite_suffix'), 'top_omega')
@@ -572,12 +586,15 @@ def evaluate_property(node_id: NodeId[Property], container: IrContainer, trace: 
         return not child_result
 
     elif isinstance(node, PropAnd):
+        unknown_seen: bool = False
         for child_id in node.children:
             child_value: MaybeBool = evaluate_property(child_id, container, trace)
             if child_value == False:
                 return False
             elif child_value == 'unknown':
-                return 'unknown'
+                unknown_seen = True
+        if unknown_seen:
+            return 'unknown'
         return True
 
     elif isinstance(node, PropOr):
@@ -607,20 +624,24 @@ def evaluate_property(node_id: NodeId[Property], container: IrContainer, trace: 
 
     # TODO improve unknown result behavior
     elif isinstance(node, PropOverlappedImplication):
-        bar_matches: frozenset[FencepostPosition] = sequence_matches(node.child1, container, trace.bar(), FencepostPosition(('at', 0)))
+        all_bar_matches: set[FencepostPosition] = set()
+        for start_pos in range(len(trace.finite_part)+1):
+            bar_matches: frozenset[FencepostPosition] = sequence_matches(node.child1, container, trace.bar(), FencepostPosition(('at', start_pos)))
+            all_bar_matches = all_bar_matches.union(bar_matches)
+        logger.debug('PropOverlappedImplication all_bar_matches: %s', all_bar_matches)
         unknown_result: bool = False
-        if 'unknown' in bar_matches:
-            unknown_result = True
-        for match in bar_matches:
-            if isinstance(match.value, tuple) or match == FencepostPosition('within_infinite_suffix'):
+        for match in all_bar_matches:
+            if isinstance(match.value, tuple) or match.value == 'within_infinite_suffix':
                 if isinstance(match.value, tuple):
-                    result: MaybeBool = evaluate_property(node.child2, container, trace.remove_first_symbols(num=match.value[1]))
+                    result: MaybeBool = evaluate_property(node.child2, container, trace.remove_first_symbols(num=match.value[1]-1))
                 else:
                     result: MaybeBool = evaluate_property(node.child2, container, trace.remove_first_symbols(num=len(trace.finite_part)))
                 if result == 'unknown':
                     unknown_result = True
                 elif result == False:
                     return False
+            else:
+                unknown_result = True
         if unknown_result:
             return 'unknown'
         return True
