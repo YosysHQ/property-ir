@@ -615,7 +615,6 @@ def evaluate_property(node_id: NodeId[Property], container: IrContainer, trace: 
             return True
         return evaluate_property(node.child2, container, shortened_trace)
 
-
     elif isinstance(node, PropStrongNexttime):
         shortened_trace: Trace = trace.remove_first_symbols(num=node.child1)
         if len(shortened_trace.finite_part) == 0 and shortened_trace.suffix == 'end':
@@ -624,10 +623,7 @@ def evaluate_property(node_id: NodeId[Property], container: IrContainer, trace: 
 
     # TODO improve unknown result behavior
     elif isinstance(node, PropOverlappedImplication):
-        all_bar_matches: set[FencepostPosition] = set()
-        for start_pos in range(len(trace.finite_part)+1):
-            bar_matches: frozenset[FencepostPosition] = sequence_matches(node.child1, container, trace.bar(), FencepostPosition(('at', start_pos)))
-            all_bar_matches = all_bar_matches.union(bar_matches)
+        all_bar_matches: frozenset[FencepostPosition] = sequence_matches(node.child1, container, trace.bar(), FencepostPosition(('at', 0)))
         logger.debug('PropOverlappedImplication all_bar_matches: %s', all_bar_matches)
         unknown_result: bool = False
         for match in all_bar_matches:
@@ -647,68 +643,92 @@ def evaluate_property(node_id: NodeId[Property], container: IrContainer, trace: 
         return True
 
     elif isinstance(node, PropOverlappedFollowedBy):
-
-        # TODO
-
-        #matches: frozenset[FencepostPosition] = sequence_matches(node.child1, container, trace, FencepostPosition(('at', 0)))
-        #unknown_result: bool = False
-        #for match in matches:
-        #    if isinstance(match.value, tuple):
-        #        result: MaybeBool = evaluate_property(node.child2, container, trace.remove_first_symbols(num=match.value[1]))
-        #        if result == True:
-        #            return True
-        #        if result == 'unknown':
-        #            unknown_result = True
-
-        return 'unknown'
-
-
-
-
+        all_matches: frozenset[FencepostPosition] = sequence_matches(node.child1, container, trace, FencepostPosition(('at', 0)))
+        logger.debug('PropOverlappedFollowedBy all_matches: %s', all_matches)
+        unknown_result: bool = False
+        for match in all_matches:
+            if isinstance(match.value, tuple) or match.value == 'within_infinite_suffix':
+                if isinstance(match.value, tuple):
+                    result: MaybeBool = evaluate_property(node.child2, container, trace.remove_first_symbols(num=match.value[1]-1))
+                else:
+                    result: MaybeBool = evaluate_property(node.child2, container, trace.remove_first_symbols(num=len(trace.finite_part)))
+                if result == 'unknown':
+                    unknown_result = True
+                elif result == True:
+                    return True
+            else:
+                unknown_result = True
+        if unknown_result:
+            return 'unknown'
+        return False
 
     elif isinstance(node, PropUntil):
+        next_trace: Trace = trace
+        p2_unknown: bool = False
+        p1_unknown: bool = False
+        for _ in range(len(trace.finite_part)+1):
 
-        # TODO
+            if len(next_trace.finite_part) == 0 and next_trace.suffix == 'end':
+                break
 
-        #next_trace: Trace = trace
+            p1_result: MaybeBool = evaluate_property(node.child1, container, next_trace)
+            p2_result: MaybeBool = evaluate_property(node.child2, container, next_trace)
 
-        #while len(next_trace.finite_part) > 0:
+            if p2_result == True and p1_unknown:
+                return 'unknown'
+            elif p2_result == True and not p1_unknown:
+                return True
+            elif p2_result == 'unknown':
+                p2_unknown = True
 
-        #    p2_result: MaybeBool = evaluate_property(node.child2, container, next_trace)
-        #    if p2_result == True:
-        #        return True
-        #    if p2_result == 'unknown':
-        #        p2_unknown = True
+            if p1_result == False and p2_unknown:
+                return 'unknown'
+            elif p1_result == False and not p2_unknown:
+                return False
+            elif p1_result == 'unknown':
+                p1_unknown = True
 
-        #    p1_result: MaybeBool = evaluate_property(node.child1, container, next_trace)
-        #    if p1_result == False:
-        #        if p2_unknown:
-        #            return 'unknown'
-        #        else:
-        #            return False
-        #    if p1_result == 'unknown':
-        #        return 'unknown'
+            next_trace = next_trace.remove_first_symbols(num=1)
 
-        #    next_trace = next_trace.remove_first_symbols(num=1)
+        if p1_unknown:
+            return 'unknown'
 
-        #if next_trace.suffix == 'end':
-        #    if p2_unknown:
-        #        return 'unknown'
-        #    return True
-        #else:
-        #    p1_result: MaybeBool = evaluate_property(node.child1, container, next_trace)
-        #    p2_result: MaybeBool = evaluate_property(node.child2, container, next_trace)
-        #    if p2_result == True:
-        #        if p2_unknown == 'unknown':
-        #            return 'unknown'
-
-        return 'unknown'
+        return True
 
     elif isinstance(node, PropStrongUntilWith):
+        next_trace: Trace = trace
+        p1_unknown: bool = False
+        p1_p2_unknown: bool = False
+        for _ in range(len(trace.finite_part)+1):
 
-        # TODO
+            if len(next_trace.finite_part) == 0 and next_trace.suffix == 'end':
+                break
 
-        return 'unknown'
+            p1_result: MaybeBool = evaluate_property(node.child1, container, next_trace)
+            p2_result: MaybeBool = evaluate_property(node.child2, container, next_trace)
+
+            if p1_result == True and p2_result == True:
+                if p1_unknown:
+                    return 'unknown'
+                return True
+            elif p1_result == False or p2_result == False:
+                pass
+            else:
+                p1_p2_unknown = True
+
+            if p1_result == False and p1_p2_unknown:
+                return 'unknown'
+            elif p1_result == False and not p1_p2_unknown:
+                return False
+            elif p1_result == 'unknown':
+                p1_unknown = True
+
+            next_trace = next_trace.remove_first_symbols(num=1)
+
+        if p1_p2_unknown:
+            return 'unknown'
+
+        return False
 
     elif isinstance(node, PropAcceptOn):
         (p_result, earliest_bool_result, earliest_unknown) = evaluate_accept_reject_on(node, container, trace)
@@ -718,7 +738,6 @@ def evaluate_property(node_id: NodeId[Property], container: IrContainer, trace: 
             return 'unknown'
         return False
 
-
     elif isinstance(node, PropRejectOn):
         (p_result, earliest_bool_result, earliest_unknown) = evaluate_accept_reject_on(node, container, trace)
         if p_result == False or earliest_bool_result == False:
@@ -726,7 +745,6 @@ def evaluate_property(node_id: NodeId[Property], container: IrContainer, trace: 
         elif p_result == 'unknown' or earliest_bool_result == 'unknown' or earliest_unknown in [False, 'unknown']:
             return 'unknown'
         return True
-
 
 
     elif isinstance(node, PropRefuted):

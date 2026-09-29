@@ -469,12 +469,6 @@ def test_evaluate_prop_strong_weak():
     assert evaluate_property(prop5_w, container, trace2) == 'unknown'
 
 
-
-
-def test_evaluate_prop_not():
-    pass
-
-
 def test_evaluate_prop_and_or():
 
     doc_str: str = """(document
@@ -521,7 +515,6 @@ def test_evaluate_prop_and_or():
     assert evaluate_property(prop_or_2, container, trace1) == True
     assert evaluate_property(prop_and_3, container, trace1) == False
     assert evaluate_property(prop_or_3, container, trace1) == 'unknown'
-
 
 
 def test_evaluate_prop_nexttime_strong_nexttime():
@@ -596,7 +589,6 @@ def test_evaluate_prop_nexttime_strong_nexttime():
     assert evaluate_property(prop_sn1, container, trace3) == False
 
 
-
 def test_evaluate_prop_accept_reject_on():
 
     doc_str: str = """(document
@@ -659,10 +651,26 @@ def test_evaluate_prop_overlapped_implication():
         (declare-input b)
         (declare-input c)
 
-        (declare prop0 (prop-overlapped-implication (seq-bool c) (prop-weak-bool c) ))
-        (declare prop1 (prop-overlapped-implication (seq-bool c) (prop-nexttime 1 (prop-weak-bool a)) ))
-        (declare prop2 (prop-overlapped-implication (seq-bool c) (prop-nexttime 1 (prop-weak-bool b)) ))
+        (declare seq_rep (seq-repeat (range 1 $) (seq-bool (true)) ))
 
+        (declare prop0 (prop-overlapped-implication (seq-concat seq_rep (seq-bool c)) (prop-weak-bool c) ))
+        (declare prop1 (prop-overlapped-implication (seq-concat seq_rep (seq-bool c)) (prop-nexttime 1 (prop-weak-bool a)) ))
+        (declare prop2 (prop-overlapped-implication (seq-concat seq_rep (seq-bool c)) (prop-nexttime 1 (prop-weak-bool b)) ))
+
+        (declare seq1 (seq-repeat (range 1 $) (seq-concat (seq-bool a) (seq-bool b)) ))
+        (declare seq2 (seq-repeat (range 1 $) (seq-concat (seq-bool a) (seq-bool b) (seq-bool a)) ))
+        (declare seq_unknown (seq-intersect seq1 seq2))
+
+        (declare prop_unknown (prop-overlapped-implication seq_unknown (prop-nexttime 1 (prop-weak-bool a))))
+
+
+        (declare prop3 (prop-overlapped-implication seq_rep (prop-weak-bool (true)) ))
+        (declare prop4 (prop-overlapped-implication seq_rep (prop-weak-bool a) ))
+
+        (declare prop5 (prop-overlapped-implication
+            (seq-concat (seq-bool a) (seq-bool b))
+            (prop-weak (seq-concat (seq-bool b) (seq-bool a) (seq-bool a) (seq-bool c)))
+        ))
 
     )"""
 
@@ -672,6 +680,10 @@ def test_evaluate_prop_overlapped_implication():
     prop0: NodeId = container.get_node_id_by_name('prop0')
     prop1: NodeId = container.get_node_id_by_name('prop1')
     prop2: NodeId = container.get_node_id_by_name('prop2')
+    prop_unknown: NodeId = container.get_node_id_by_name('prop_unknown')
+    prop3: NodeId = container.get_node_id_by_name('prop3')
+    prop4: NodeId = container.get_node_id_by_name('prop4')
+    prop5: NodeId = container.get_node_id_by_name('prop5')
 
     trace1: Trace = Trace(finite_part=(
         frozenset(['a', 'b']),
@@ -680,18 +692,413 @@ def test_evaluate_prop_overlapped_implication():
         frozenset(['a', 'b', 'c']),
     ), suffix='end')
 
+    trace2: Trace = Trace(finite_part=(
+        frozenset(['a', 'b']),
+        frozenset(['b', 'c']),
+        frozenset(['a']),
+        frozenset(['a', 'b', 'c']),
+    ), suffix='top_omega')
+
+    trace3: Trace = Trace(finite_part=(
+        frozenset(['a', 'b']),
+        frozenset(['b', 'c']),
+        frozenset(['a']),
+        frozenset(['a', 'b', 'c']),
+    ), suffix='bot_omega')
+
     assert evaluate_property(prop0, container, trace1) == True
     assert evaluate_property(prop1, container, trace1) == True
     assert evaluate_property(prop2, container, trace1) == False
 
+    assert evaluate_property(prop_unknown, container, trace1) == True
+    assert evaluate_property(prop_unknown, container, trace2) == True
+    assert evaluate_property(prop_unknown, container, trace3) == 'unknown'
+
+    assert evaluate_property(prop0, container, trace2) == True
+    assert evaluate_property(prop1, container, trace2) == True
+    assert evaluate_property(prop2, container, trace2) == False
+
+    assert evaluate_property(prop0, container, trace3) == False
+    assert evaluate_property(prop1, container, trace3) == False
+    assert evaluate_property(prop2, container, trace3) == False
+
+    assert evaluate_property(prop3, container, trace1) == True
+    assert evaluate_property(prop3, container, trace2) == True
+    assert evaluate_property(prop3, container, trace3) == False
+
+    assert evaluate_property(prop4, container, trace1) == False
+    assert evaluate_property(prop4, container, trace2) == False
+    assert evaluate_property(prop4, container, trace3) == False
+
+    assert evaluate_property(prop5, container, trace1) == True
+    assert evaluate_property(prop5, container, trace2) == True
+    assert evaluate_property(prop5, container, trace3) == False
+
 
 def test_evaluate_prop_overlapped_followed_by():
-    pass
+
+    doc_str: str = """(document
+        (declare-input a)
+        (declare-input b)
+        (declare-input c)
+
+        (declare seq_rep (seq-repeat (range 1 $) (seq-bool (true)) ))
+
+        (declare prop0 (prop-overlapped-followed-by (seq-concat seq_rep (seq-bool c)) (prop-weak-bool c) ))
+        (declare prop1 (prop-overlapped-followed-by (seq-concat seq_rep (seq-bool c)) (prop-nexttime 1 (prop-weak-bool a)) ))
+        (declare prop2 (prop-overlapped-followed-by (seq-concat seq_rep (seq-bool c)) (prop-nexttime 1 (prop-weak-bool b)) ))
+
+        (declare seq1 (seq-repeat (range 1 $) (seq-concat (seq-bool a) (seq-bool b)) ))
+        (declare seq2 (seq-repeat (range 1 $) (seq-concat (seq-bool a) (seq-bool b) (seq-bool a)) ))
+        (declare seq_unknown (seq-intersect seq1 seq2))
+
+        (declare prop_unknown (prop-overlapped-followed-by seq_unknown (prop-nexttime 1 (prop-weak-bool a))))
+
+
+        (declare prop3 (prop-overlapped-followed-by seq_rep (prop-weak-bool (true)) ))
+        (declare prop4 (prop-overlapped-followed-by seq_rep (prop-weak-bool a) ))
+
+        (declare prop5 (prop-overlapped-followed-by
+            (seq-concat (seq-bool a) (seq-bool b))
+            (prop-weak (seq-concat (seq-bool b) (seq-bool a) (seq-bool a) (seq-bool c)))
+        ))
+
+    )"""
+
+    container: IrContainer = IrContainer()
+    parse_document(parse_raw_sexpr(doc_str), container)
+
+    prop0: NodeId = container.get_node_id_by_name('prop0')
+    prop1: NodeId = container.get_node_id_by_name('prop1')
+    prop2: NodeId = container.get_node_id_by_name('prop2')
+    prop_unknown: NodeId = container.get_node_id_by_name('prop_unknown')
+    prop3: NodeId = container.get_node_id_by_name('prop3')
+    prop4: NodeId = container.get_node_id_by_name('prop4')
+    prop5: NodeId = container.get_node_id_by_name('prop5')
+
+    trace1: Trace = Trace(finite_part=(
+        frozenset(['a', 'b']),
+        frozenset(['b', 'c']),
+        frozenset(['a']),
+        frozenset(['a', 'b', 'c']),
+    ), suffix='end')
+
+    trace2: Trace = Trace(finite_part=(
+        frozenset(['a', 'b']),
+        frozenset(['b', 'c']),
+        frozenset(['a']),
+        frozenset(['a', 'b', 'c']),
+    ), suffix='top_omega')
+
+    trace3: Trace = Trace(finite_part=(
+        frozenset(['a', 'b']),
+        frozenset(['b', 'c']),
+        frozenset(['a']),
+        frozenset(['a', 'b', 'c']),
+    ), suffix='bot_omega')
+
+    assert evaluate_property(prop0, container, trace1) == True
+    assert evaluate_property(prop0, container, trace2) == True
+    assert evaluate_property(prop0, container, trace3) == True
+
+    assert evaluate_property(prop_unknown, container, trace1) == False
+    assert evaluate_property(prop_unknown, container, trace2) == 'unknown'
+    assert evaluate_property(prop_unknown, container, trace3) == False
+
+    assert evaluate_property(prop1, container, trace1) == True
+    assert evaluate_property(prop1, container, trace2) == True
+    assert evaluate_property(prop1, container, trace3) == True
+
+    assert evaluate_property(prop2, container, trace1) == True
+    assert evaluate_property(prop2, container, trace2) == True
+    assert evaluate_property(prop2, container, trace3) == False
+
+    assert evaluate_property(prop3, container, trace1) == True
+    assert evaluate_property(prop3, container, trace2) == True
+    assert evaluate_property(prop3, container, trace3) == True
+
+    assert evaluate_property(prop4, container, trace1) == True
+    assert evaluate_property(prop4, container, trace2) == True
+    assert evaluate_property(prop4, container, trace3) == True
+
+    assert evaluate_property(prop5, container, trace1) == True
+    assert evaluate_property(prop5, container, trace2) == True
+    assert evaluate_property(prop5, container, trace3) == False
+
+
+def test_evaluate_weak_unknown():
+
+    doc_str: str = """(document
+        (declare-input a)
+        (declare-input b)
+        (declare-input c)
+
+        (declare seq_rep (seq-repeat (range 1 $) (seq-bool (true)) ))
+
+        (declare seq1 (seq-repeat (range 1 $) (seq-concat (seq-bool a) (seq-bool b)) ))
+        (declare seq2 (seq-repeat (range 1 $) (seq-concat (seq-bool a) (seq-bool b) (seq-bool a)) ))
+        (declare prop_unknown (prop-weak (seq-intersect seq1 seq2)))
+
+        (declare prop1 (prop-weak seq_rep))
+
+    )
+    """
+
+    container: IrContainer = IrContainer()
+    parse_document(parse_raw_sexpr(doc_str), container)
+
+    prop1: NodeId = container.get_node_id_by_name('prop1')
+    prop_unknown: NodeId = container.get_node_id_by_name('prop_unknown')
+
+    trace1: Trace = Trace(finite_part=(
+        frozenset(['a', 'b']),
+        frozenset(['b', 'c']),
+        frozenset(['a']),
+        frozenset(['a', 'b', 'c']),
+    ), suffix='end')
+
+    trace2: Trace = Trace(finite_part=(
+        frozenset(['b', 'c']),
+        frozenset(['a']),
+        frozenset(['a', 'b', 'c']),
+    ), suffix='end')
+
+    trace3: Trace = Trace(finite_part=(
+        frozenset(['a']),
+        frozenset(['a', 'b', 'c']),
+    ), suffix='end')
+
+    trace4: Trace = Trace(finite_part=(
+    ), suffix='end')
+
+    assert evaluate_property(prop1, container, trace1) == True
+    assert evaluate_property(prop1, container, trace4) == True
+    assert evaluate_property(prop_unknown, container, trace1) == 'unknown'
+    assert evaluate_property(prop_unknown, container, trace2) == False
+    assert evaluate_property(prop_unknown, container, trace3) == 'unknown'
+    assert evaluate_property(prop_unknown, container, trace4) == 'unknown'
 
 
 def test_evaluate_prop_until():
-    pass
+
+    doc_str: str = """(document
+        (declare-input a)
+        (declare-input b)
+        (declare-input c)
+
+        (declare seq_rep (seq-repeat (range 1 $) (seq-bool (true)) ))
+
+        (declare prop1 (prop-until (prop-weak-bool a) (prop-weak-bool c)))
+        (declare prop2 (prop-until (prop-weak-bool a) (prop-weak-bool (not b))))
+        (declare prop3 (prop-until (prop-weak seq_rep) (prop-weak-bool (and c a (not b)) ) ))
+
+        (declare seq1 (seq-repeat (range 1 $) (seq-concat (seq-bool a) (seq-bool b)) ))
+        (declare seq2 (seq-repeat (range 1 $) (seq-concat (seq-bool a) (seq-bool b) (seq-bool a)) ))
+        (declare prop_unknown (prop-weak (seq-intersect seq1 seq2)))
+
+        (declare prop4 (prop-until prop_unknown (prop-weak-bool (and c a (not b))) ))
+        (declare prop5 (prop-until (prop-weak seq_rep) prop_unknown))
+        (declare prop6 (prop-until prop_unknown (prop-weak seq_rep)))
+
+    )"""
+
+    container: IrContainer = IrContainer()
+    parse_document(parse_raw_sexpr(doc_str), container)
+
+    prop1: NodeId = container.get_node_id_by_name('prop1')
+    prop2: NodeId = container.get_node_id_by_name('prop2')
+    prop3: NodeId = container.get_node_id_by_name('prop3')
+    prop4: NodeId = container.get_node_id_by_name('prop4')
+    prop5: NodeId = container.get_node_id_by_name('prop5')
+    prop6: NodeId = container.get_node_id_by_name('prop6')
+
+    trace1: Trace = Trace(finite_part=(
+        frozenset(['a', 'b']),
+        frozenset(['b', 'c']),
+        frozenset(['a']),
+        frozenset(['a', 'b', 'c']),
+    ), suffix='end')
+
+    trace2: Trace = Trace(finite_part=(
+        frozenset(['a', 'b']),
+        frozenset(['b', 'c']),
+        frozenset(['a']),
+        frozenset(['a', 'b', 'c']),
+    ), suffix='top_omega')
+
+    trace3: Trace = Trace(finite_part=(
+        frozenset(['a', 'b']),
+        frozenset(['b', 'c']),
+        frozenset(['a']),
+        frozenset(['a', 'b', 'c']),
+    ), suffix='bot_omega')
+
+    trace4: Trace = Trace(finite_part=(
+        frozenset(['a', 'b']),
+    ), suffix='top_omega')
+
+    assert evaluate_property(prop1, container, trace1) == True
+    assert evaluate_property(prop1, container, trace2) == True
+    assert evaluate_property(prop1, container, trace3) == True
+
+    assert evaluate_property(prop2, container, trace1) == False
+    assert evaluate_property(prop2, container, trace2) == False
+    assert evaluate_property(prop2, container, trace3) == False
+
+    assert evaluate_property(prop3, container, trace1) == True
+    assert evaluate_property(prop3, container, trace2) == True
+    assert evaluate_property(prop3, container, trace3) == False
+
+    assert evaluate_property(prop4, container, trace1) == False
+    assert evaluate_property(prop4, container, trace2) == False
+    assert evaluate_property(prop4, container, trace3) == False
+    assert evaluate_property(prop4, container, trace4) == 'unknown'
+
+    assert evaluate_property(prop5, container, trace1) == True
+    assert evaluate_property(prop5, container, trace2) == True
+    assert evaluate_property(prop5, container, trace3) == False
+    assert evaluate_property(prop5, container, trace4) == True
+
+    assert evaluate_property(prop6, container, trace1) == True
+    assert evaluate_property(prop6, container, trace2) == True
+    assert evaluate_property(prop6, container, trace3) == True
+    assert evaluate_property(prop6, container, trace4) == True
 
 
 def test_evaluate_prop_strong_until_with():
-    pass
+
+    doc_str: str = """(document
+        (declare-input a)
+        (declare-input b)
+        (declare-input c)
+
+        (declare seq_rep (seq-repeat (range 1 $) (seq-bool (true)) ))
+
+        (declare prop1 (prop-strong-until-with (prop-weak-bool b) (prop-weak-bool c)))
+        (declare prop2 (prop-strong-until-with (prop-weak-bool a) (prop-weak-bool (not b))))
+        (declare prop3 (prop-strong-until-with (prop-weak seq_rep) (prop-weak-bool (and c a (not b)) ) ))
+
+        (declare seq1 (seq-repeat (range 1 $) (seq-concat (seq-bool a) (seq-bool b)) ))
+        (declare seq2 (seq-repeat (range 1 $) (seq-concat (seq-bool a) (seq-bool b) (seq-bool a)) ))
+        (declare prop_unknown (prop-weak (seq-intersect seq1 seq2)))
+
+        (declare prop4 (prop-strong-until-with prop_unknown (prop-weak-bool (and c a (not b))) ))
+        (declare prop5 (prop-strong-until-with (prop-weak seq_rep) prop_unknown))
+        (declare prop6 (prop-strong-until-with prop_unknown (prop-weak seq_rep)))
+
+    )"""
+
+    container: IrContainer = IrContainer()
+    parse_document(parse_raw_sexpr(doc_str), container)
+
+    prop1: NodeId = container.get_node_id_by_name('prop1')
+    prop2: NodeId = container.get_node_id_by_name('prop2')
+    prop3: NodeId = container.get_node_id_by_name('prop3')
+    prop4: NodeId = container.get_node_id_by_name('prop4')
+    prop5: NodeId = container.get_node_id_by_name('prop5')
+    prop6: NodeId = container.get_node_id_by_name('prop6')
+
+    trace1: Trace = Trace(finite_part=(
+        frozenset(['a', 'b']),
+        frozenset(['b', 'c']),
+        frozenset(['a']),
+        frozenset(['a', 'b', 'c']),
+    ), suffix='end')
+
+    trace2: Trace = Trace(finite_part=(
+        frozenset(['a', 'b']),
+        frozenset(['b', 'c']),
+        frozenset(['a']),
+        frozenset(['a', 'b', 'c']),
+    ), suffix='top_omega')
+
+    trace3: Trace = Trace(finite_part=(
+        frozenset(['a', 'b']),
+        frozenset(['b', 'c']),
+        frozenset(['a']),
+        frozenset(['a', 'b', 'c']),
+    ), suffix='bot_omega')
+
+    trace4: Trace = Trace(finite_part=(
+        frozenset(['a', 'b']),
+    ), suffix='top_omega')
+
+    assert evaluate_property(prop1, container, trace1) == True
+    assert evaluate_property(prop1, container, trace2) == True
+    assert evaluate_property(prop1, container, trace3) == True
+    assert evaluate_property(prop1, container, trace4) == True
+
+    assert evaluate_property(prop2, container, trace1) == False
+    assert evaluate_property(prop2, container, trace2) == False
+    assert evaluate_property(prop2, container, trace3) == False
+    assert evaluate_property(prop2, container, trace4) == True
+
+    assert evaluate_property(prop3, container, trace1) == False
+    assert evaluate_property(prop3, container, trace2) == True
+    assert evaluate_property(prop3, container, trace3) == False
+    assert evaluate_property(prop3, container, trace4) == True
+
+    assert evaluate_property(prop4, container, trace1) == False
+    assert evaluate_property(prop4, container, trace2) == False
+    assert evaluate_property(prop4, container, trace3) == False
+    assert evaluate_property(prop4, container, trace4) == 'unknown'
+
+    assert evaluate_property(prop5, container, trace1) == 'unknown'
+    assert evaluate_property(prop5, container, trace2) == 'unknown'
+    assert evaluate_property(prop5, container, trace3) == False
+    assert evaluate_property(prop5, container, trace4) == 'unknown'
+
+    assert evaluate_property(prop6, container, trace1) == 'unknown'
+    assert evaluate_property(prop6, container, trace2) == 'unknown'
+    assert evaluate_property(prop6, container, trace3) == False
+    assert evaluate_property(prop6, container, trace4) == 'unknown'
+
+
+def test_evaluate_prop_not():
+
+    doc_str: str = """(document
+        (declare-input a)
+        (declare-input b)
+        (declare-input c)
+
+        (declare seq_rep (seq-repeat (range 2 $) (seq-bool (true)) ))
+
+        (declare prop1 (prop-not (prop-weak seq_rep)))
+        (declare prop2 (prop-not (prop-strong seq_rep)))
+
+        (declare seq1 (seq-repeat (range 1 $) (seq-concat (seq-bool a) (seq-bool b)) ))
+        (declare seq2 (seq-repeat (range 1 $) (seq-concat (seq-bool a) (seq-bool b) (seq-bool a)) ))
+        (declare prop_unknown (prop-not (prop-weak (seq-intersect seq1 seq2))))
+
+    )"""
+
+    container: IrContainer = IrContainer()
+    parse_document(parse_raw_sexpr(doc_str), container)
+
+    prop1: NodeId = container.get_node_id_by_name('prop1')
+    prop2: NodeId = container.get_node_id_by_name('prop2')
+    prop_unknown: NodeId = container.get_node_id_by_name('prop_unknown')
+
+    trace1: Trace = Trace(finite_part=(
+        frozenset(['a', 'b']),
+    ), suffix='end')
+
+    trace2: Trace = Trace(finite_part=(
+        frozenset(['a', 'b']),
+    ), suffix='top_omega')
+
+    trace3: Trace = Trace(finite_part=(
+        frozenset(['a', 'b']),
+    ), suffix='bot_omega')
+
+    assert evaluate_property(prop1, container, trace1) == False
+    assert evaluate_property(prop1, container, trace2) == True
+    assert evaluate_property(prop1, container, trace3) == False
+
+    assert evaluate_property(prop2, container, trace1) == True
+    assert evaluate_property(prop2, container, trace2) == True
+    assert evaluate_property(prop2, container, trace3) == False
+
+    assert evaluate_property(prop_unknown, container, trace1) == 'unknown'
+    assert evaluate_property(prop_unknown, container, trace2) == True
+    assert evaluate_property(prop_unknown, container, trace3) == 'unknown'
