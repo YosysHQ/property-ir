@@ -514,13 +514,21 @@ def check_empty_match_removal_no_error(doc):
     reduce_primitives(container1)
     #container1.show_graph(output_directory / 'check_empty_match_input3.png')
     container3 = rewrite_clocks(container1)
-    #output_directory: Path = Path('./output')
     #container3.show_graph(output_directory / 'check_empty_match_input4.png')
 
     container2: IrContainer = remove_empty_matches(container3)
     container2.canonical_id_renaming(remove_unreachable_declared_nodes=True)
     #container2.show_graph(output_directory / 'check_empty_match_output.png')
 
+@example("""(document
+    (declare-input 0)
+    (parse-sexpr (let-rec
+        (step0 (constant false))
+        (step1 (clk-seq-first-match (clk-seq-bool 0)))
+        (step2 (clk-seq-fusion step1 step1))
+        (step3 (clk-seq-or step2 step1))
+        (step4 (clk-seq-clocked step0 step3))
+        step4)))""")
 @example("""(document
     (declare-input 0)
     (parse-sexpr (let-rec (step0 (clk-seq-bool (true)))

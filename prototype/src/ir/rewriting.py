@@ -1188,10 +1188,6 @@ def remove_empty_matches_process_node(
     # because we will perform subcalls only on children that will not disappear
     elif isinstance(current_node, ClockedSequence):
 
-        # question: if a root sequence node has empty matches that might be relevant
-        # for the cover sequence statement
-        # keep track of root sequence node empty matches in container?
-
         # if the sequence is a root node, we may produce a no-match sequence
         # this will not happen for non-root sequence nodes
         # because subcalls are not performed for children with no nonempty part
@@ -1318,7 +1314,7 @@ def precompute_node_info_process_node(
                 no_match_set.add(no_match[child_id_repr])
 
             if isinstance(current_node, ClkSeqConcat):
-                admits_empty[current_id_repr] = any(admits_empty_set)
+                admits_empty[current_id_repr] = all(admits_empty_set)
                 admits_only_empty[current_id_repr] = all(admits_only_empty_set)
                 no_match[current_id_repr] = any(no_match_set)
                 # if a sequence cannot match at all later on, it should fail immediately
