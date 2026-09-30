@@ -82,18 +82,46 @@ The primitives :sexpr:`and` and :sexpr:`or` accept any non-zero number of argume
 These primitives correspond to the SVA operations ``==`` and ``!=`` used
 with purely Boolean arguments.
 
+.. code-block:: sexpr
+
+    (ite <bool1> <bool2> <bool3>)
+
+The if-then-else primitive :sexpr:`ite` corresponds to the conditional operator
+``?:`` of SystemVerilog. If the condition :sexpr:`<bool1>` evaluates to true, the result is
+the value of :sexpr:`<bool2>`, else the result is the value of :sexpr:`<bool3>`.
+
+
+
+Sequential primitive
+''''''''''''''''''''''
+
+.. code-block:: sexpr
+
+    (reg-gclk <bool1> <bool2>)
+
+In the first global time step, the :sexpr:`reg-gclk` primitive has initial value
+:sexpr:`<bool1>`, and in every other global time step, it has the value of
+:sexpr:`<bool2>` in the previous global time step.
+
+This primitive is primarily used for checker circuit construction.
+Note that the SVA operation ``$past_gclk`` does not have a parameter for the
+initial value and should, like other extended Booleans, be handled outside of
+Property IR.
+
+
+
 Global clocking future sampled value functions
 ''''''''''''''''''''''''''''''''''''''''''''''''
 
 .. code-block:: sexpr
-
-    (future-gclk <bool1> <bool2>)
 
     (changing-gclk <bool1> <bool2>)
 
     (rising-gclk <bool1> <bool2>)
 
     (falling-gclk <bool1> <bool2>)
+
+    (future-gclk <bool>)
 
 These primitives correspond to the respective global clocking future sampled
 value functions.
@@ -102,7 +130,6 @@ clock control inside Property IR.
 
 See the Table on :ref:`clock control <clock control>` for a reference of how to
 use these primitives to represent various clock expressions.
-
 
 :sexpr:`<bool1>` = ``clock_value``
     The first parameter  is the (edge-sensitive clock) input signal and should be set
@@ -115,10 +142,6 @@ use these primitives to represent various clock expressions.
     (also computed outside of Property IR), in order to exclude values ``x`` and ``z``.
 
 
-
-:sexpr:`future-gclk`
-    Evaluates to true iff the input signal is defined and true in the next global time step.
-
 :sexpr:`rising-gclk`
     Evaluates to true iff the input signal is false or undefined in the current time step
     and is defined and true in the next global time step.
@@ -130,6 +153,10 @@ use these primitives to represent various clock expressions.
 :sexpr:`changing-gclk`
     Evaluates to true iff the input signal or the clock defined value differ in the current
     and in the next global time step.
+
+:sexpr:`future-gclk`
+    The value of the input signal in the next global time step.
+
 
 If also changes between values ``x`` and ``z`` should be regarded by :sexpr:`changing-gclk`,
 this can be achieved by setting ``clock_value`` = ``(clk === 1'b1) || (clk === 1'bx)`` to encode the four input values:
@@ -162,8 +189,6 @@ are all derived from :sexpr:`future-gclk`.
     ; (changing-gclk clock_value clock_defined) is equivalent to:
     (or (xor clock_value (future-gclk clock_value))
         (xor clock_defined (future-gclk clock_defined)))
-
-
 
 
 
