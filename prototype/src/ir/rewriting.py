@@ -38,7 +38,7 @@ from ir.primitives.bool_primitives import (
     Initial,
     Not,
     Or,
-    Reg,
+    RegGclk,
 )
 from ir.primitives.clocked_primitives import (
     ClkPropAcceptOn,
@@ -1913,7 +1913,7 @@ dual_primitives: dict[type[PropertyIrNode], type[PropertyIrNode]] = {
     And: Or,
     Or: And,
     FutureGclk: FutureGclk, # child1 (bool) negated, child2 (bool) not negated
-    Reg: Reg,
+    RegGclk: RegGclk,
 
     PropOverlappedImplication: PropOverlappedFollowedBy, # child1 (seq) not negated
     PropOverlappedFollowedBy: PropOverlappedImplication, # child1 (seq) not negated

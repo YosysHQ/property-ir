@@ -94,8 +94,8 @@ class Ite(Bool):
 
 @typechecked
 @dataclass
-class Reg(Bool):
-    """In the first global time step, is has the initial value (child1),
+class RegGclk(Bool):
+    """In the first global time step, it has the initial value (child1),
     and in every other global time step, it has the value of child2 in the
     previous global time step."""
     child1: NodeId[Bool]

@@ -102,10 +102,10 @@ def test_nnf_boolean_future_gclk():
     expected_output_document = wrap_multiple_statements_in_document([expected_output_statement, root_node_statement])
     check_nnf_equivalence(input_document, expected_output_document)
 
-def test_nnf_boolean_reg():
-    input_statement: RawSExprList = ['declare', 'p', ['not', ['reg', 'a', ['and', 'a', 'b']]]]
+def test_nnf_boolean_reg_gclk():
+    input_statement: RawSExprList = ['declare', 'p', ['not', ['reg-gclk', 'a', ['and', 'a', 'b']]]]
     expected_output_statement: RawSExprList = ['declare-rec', ['not_a', ['not', 'a']],
-        ['declare', 'p', ['reg', 'not_a', ['or', 'not_a', ['not', 'b']]]]]
+        ['declare', 'p', ['reg-gclk', 'not_a', ['or', 'not_a', ['not', 'b']]]]]
     root_node_statement: RawSExprList = ['parse-sexpr', 'p']
 
     input_document = wrap_multiple_statements_in_document([input_statement, root_node_statement])
