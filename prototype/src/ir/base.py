@@ -677,8 +677,9 @@ class IrContainer:
 
     def canonical_id_renaming(self, remove_unreachable_declared_nodes: bool = False) -> None:
         """Gives each node a new NodeId by first bypassing placeholders and then searching from the root nodes contained
-        in source_nodes, inner_nodes, sink nodes (in this order) depth-first and numbering nodes in the order they are
-        encountered first. Note that the order in which expressions are added to the container influences this order.
+        in source_nodes, inner_nodes (only if remove_unreachable_declared_nodes = False), sink nodes (in this order)
+        depth-first and numbering nodes in the order they are encountered first.
+        Note that the order in which expressions are added to the container influences this order.
         References to and names of unreachable nodes are removed.
         By default, nodes with declared names (inner_nodes) stay in the graph.
         If remove_unreachable_declared_nodes is True, declared nodes (inner_nodes) that are not reachable from

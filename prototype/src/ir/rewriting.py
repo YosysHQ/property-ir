@@ -38,6 +38,7 @@ from ir.primitives.bool_primitives import (
     Initial,
     Not,
     Or,
+    Reg,
 )
 from ir.primitives.clocked_primitives import (
     ClkPropAcceptOn,
@@ -124,6 +125,9 @@ xor_rule: RewriteRule = (['xor', '<bool1>', '<bool2>'],
 
 eq_rule: RewriteRule = (['eq', '<bool1>', '<bool2>'],
     ['or', ['and', '<bool1>', '<bool2>'], ['and', ['not', '<bool1>'], ['not', '<bool2>']]])
+
+ite_rule: RewriteRule = (['ite', '<bool1>', '<bool2>', '<bool3>'],
+    ['or', ['and', '<bool1>', '<bool2>'], ['and', ['not', '<bool1>'], '<bool3>']])
 
 
 rising_gclk_rule: RewriteRule = (['rising-gclk', 'clock_value', 'clock_defined'],
@@ -302,7 +306,7 @@ def prepare_primitive_rewrite_rule_dict() -> dict[type[PropertyIrNode], RewriteR
 
     rule_dict: dict[type[PropertyIrNode], RewriteRule | RewriteRuleGenerator] = {}
 
-    rewrite_rules: list[RewriteRule] = [xor_rule, eq_rule, rising_gclk_rule, falling_gclk_rule, changing_gclk, delay_rule, goto_repeat_rule,
+    rewrite_rules: list[RewriteRule] = [xor_rule, eq_rule, ite_rule, rising_gclk_rule, falling_gclk_rule, changing_gclk, delay_rule, goto_repeat_rule,
         nonconsecutive_repeat_rule, throughout_rule, within_rule, if_rule, if_else_rule, non_overlapped_implication_rule,
         implies_rule, iff_rule, non_overlapped_followed_by_rule, strong_until_rule, until_with_rule, always_rule, strong_eventually_rule,
         strong_always_rule, strong_nexttime_rule, strong_until_with_rule]
@@ -1909,6 +1913,7 @@ dual_primitives: dict[type[PropertyIrNode], type[PropertyIrNode]] = {
     And: Or,
     Or: And,
     FutureGclk: FutureGclk, # child1 (bool) negated, child2 (bool) not negated
+    Reg: Reg,
 
     PropOverlappedImplication: PropOverlappedFollowedBy, # child1 (seq) not negated
     PropOverlappedFollowedBy: PropOverlappedImplication, # child1 (seq) not negated

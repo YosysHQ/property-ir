@@ -1,4 +1,5 @@
 import logging
+from pathlib import Path
 
 import pytest
 from ir import IrContainer, nnf
@@ -14,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 
 
-def check_nnf_equivalence(input_document: RawSExprList, expected_output_document: RawSExprList):
+def check_nnf_equivalence(input_document: RawSExprList, expected_output_document: RawSExprList, visualize: bool = False):
     container = IrContainer()
     parse_document(input_document, container)
 
@@ -26,21 +27,23 @@ def check_nnf_equivalence(input_document: RawSExprList, expected_output_document
     expected_output_container.bypass_placeholders()
     expected_output_container.canonical_id_renaming()
 
-    #output_directory: Path = Path('./output')
-    #container.show_graph(output_directory / 'check_nnf_equ_input.png')
-    #expected_output_container.show_graph(output_directory / 'check_nnf_equ_expected_output.png')
+    output_directory: Path = Path('./output')
+    if visualize:
+        container.show_graph(output_directory / 'check_nnf_equ_input.png')
+        expected_output_container.show_graph(output_directory / 'check_nnf_equ_expected_output.png')
 
     output_container = nnf(container)
 
-    #output_container.show_graph(output_directory / 'check_nnf_equ_output_before_renaming.png')
+    if visualize:
+        output_container.show_graph(output_directory / 'check_nnf_equ_output_before_renaming.png')
 
     output_container.bypass_placeholders()
     output_container.canonical_id_renaming()
 
-    #output_container.show_graph(output_directory / 'check_nnf_equ_output_after_renaming.png')
+    if visualize:
+        output_container.show_graph(output_directory / 'check_nnf_equ_output_after_renaming.png')
 
     assert output_container == expected_output_container
-
 
 
 
@@ -93,6 +96,16 @@ def test_nnf_boolean_initial_negative():
 def test_nnf_boolean_future_gclk():
     input_statement: RawSExprList = ['declare', 'p', ['not', ['and', ['or', ['future-gclk', 'a'], 'b']]]]
     expected_output_statement: RawSExprList = ['declare', 'p', ['or', ['and', ['future-gclk', ['not', 'a']], ['not', 'b']]]]
+    root_node_statement: RawSExprList = ['parse-sexpr', 'p']
+
+    input_document = wrap_multiple_statements_in_document([input_statement, root_node_statement])
+    expected_output_document = wrap_multiple_statements_in_document([expected_output_statement, root_node_statement])
+    check_nnf_equivalence(input_document, expected_output_document)
+
+def test_nnf_boolean_reg():
+    input_statement: RawSExprList = ['declare', 'p', ['not', ['reg', 'a', ['and', 'a', 'b']]]]
+    expected_output_statement: RawSExprList = ['declare-rec', ['not_a', ['not', 'a']],
+        ['declare', 'p', ['reg', 'not_a', ['or', 'not_a', ['not', 'b']]]]]
     root_node_statement: RawSExprList = ['parse-sexpr', 'p']
 
     input_document = wrap_multiple_statements_in_document([input_statement, root_node_statement])
@@ -389,18 +402,3 @@ def test_nnf_property_shared_subgraph():
     input_document: RawSExprList = wrap_multiple_statements_in_document([input_statement1, input_statement2, root_statement1, root_statement2])
     expected_output_document = wrap_multiple_statements_in_document([output_statement, root_statement1, root_statement2])
     check_nnf_equivalence(input_document, expected_output_document)
-
-
-
-# TODO these should be checked in the clocked to simple rewriting pass, move them there when that part exists
-#def test_nnf_error_on_prop_bool():
-#    with pytest.raises(ValueError, match='weak or strong qualifier'):
-#        input_statement_str1: str = """(declare p (prop-not (prop-bool b)))"""
-#        output_statement_str1: str = """(declare p (prop-bool a))""" # arbitrary because an error is expected anyway
-#        check_single_declaration_nnf_helper(input_statement_str1, output_statement_str1)
-#
-#def test_nnf_error_on_prop_seq():
-#    with pytest.raises(ValueError, match='weak or strong qualifier'):
-#        input_statement_str1: str = """(declare p (prop-not (prop-seq (seq-bool b))))"""
-#        output_statement_str1: str = """(declare p (prop-bool a))""" # arbitrary because an error is expected anyway
-#        check_single_declaration_nnf_helper(input_statement_str1, output_statement_str1)
