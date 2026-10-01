@@ -1,4 +1,5 @@
 #include "property_ir/sexpr_printer.h"
+#include "sexpr_common.h"
 
 #include <algorithm>
 #include <cassert>
@@ -48,11 +49,7 @@ void SExprPrinter::raw_atom(std::string_view text) {
 
 void SExprPrinter::identifier(std::string_view text) {
   assert(!text.empty());
-  assert(std::all_of(text.begin(), text.end(), [](char c) {
-    return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
-           (c >= '0' && c <= '9') || c == '_' || c == '$' || c == ':' ||
-           c == '-';
-  }));
+  assert(std::all_of(text.begin(), text.end(), is_atom_char));
   raw_atom(text);
 }
 

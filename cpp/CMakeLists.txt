@@ -10,6 +10,7 @@ endif()
 option(PROPERTY_IR_BUILD_TESTS "Build tests" ${PROPERTY_IR_STANDALONE_PROJECT})
 
 add_library(property_ir STATIC
+  src/sexpr_parser.cpp
   src/sexpr_printer.cpp
 )
 
