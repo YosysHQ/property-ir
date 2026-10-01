@@ -1912,7 +1912,7 @@ dual_primitives: dict[type[PropertyIrNode], type[PropertyIrNode]] = {
 
     And: Or,
     Or: And,
-    FutureGclk: FutureGclk, # child1 (bool) negated, child2 (bool) not negated
+    FutureGclk: FutureGclk,
     RegGclk: RegGclk,
 
     PropOverlappedImplication: PropOverlappedFollowedBy, # child1 (seq) not negated
@@ -2070,7 +2070,6 @@ def nnf_process_node(
             # the following case includes PropWeak
             if issubclass(field_type, Sequence) or \
                 (issubclass(field_type, Bool) and (isinstance(current_node, (PropAcceptOn, PropRejectOn)))) or \
-                (issubclass(field_type, Bool) and (isinstance(current_node, FutureGclk) and field.name == 'child2')) or \
                 isinstance(current_node, Sequence):
                 output_child_id = nnf_process_node(child_id, container, False, output_container, corresponding_nodes, nodes_in_call_stack)
             elif issubclass(field_type, Property) or issubclass(field_type, Bool):
