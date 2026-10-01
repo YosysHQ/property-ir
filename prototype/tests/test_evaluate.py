@@ -185,6 +185,50 @@ def test_evaluate_future_gclk():
     assert evaluate_bool(bool8, container, trace2, FencepostPosition(('at', 3))) == 'bot'
 
 
+def test_evaluate_ite():
+
+    doc_str: str = """(document
+        (declare-input a)
+        (declare-input b)
+        (declare-input c)
+
+        (declare bool1 (ite a (true) (false)))
+        (declare bool2 (ite a b c))
+        (declare bool3 (ite a (true) (true)))
+
+    )"""
+
+    doc_raw_sexpr: RawSExpr = parse_raw_sexpr(doc_str)
+    container: IrContainer = IrContainer()
+    parse_document(doc_raw_sexpr, container)
+
+    bool1: NodeId = container.get_node_id_by_name('bool1')
+    bool2: NodeId = container.get_node_id_by_name('bool2')
+    bool3: NodeId = container.get_node_id_by_name('bool3')
+
+    trace1: Trace = Trace(finite_part=(
+        frozenset(['a']),
+        frozenset(['b']),
+        frozenset([]),
+        frozenset(['a', 'b']),
+    ), suffix='top_omega')
+
+    trace2: Trace = Trace(finite_part=(), suffix='bot_omega')
+
+    assert evaluate_bool(bool1, container, trace1, FencepostPosition(('at', 0))) == True
+    assert evaluate_bool(bool1, container, trace1, FencepostPosition(('at', 1))) == False
+    assert evaluate_bool(bool1, container, trace1, FencepostPosition(('at', 4))) == 'top'
+
+    assert evaluate_bool(bool2, container, trace1, FencepostPosition(('at', 0))) == False
+    assert evaluate_bool(bool2, container, trace1, FencepostPosition(('at', 1))) == False
+    assert evaluate_bool(bool2, container, trace1, FencepostPosition(('at', 2))) == False
+    assert evaluate_bool(bool2, container, trace1, FencepostPosition(('at', 3))) == True
+    assert evaluate_bool(bool2, container, trace1, FencepostPosition(('at', 4))) == 'top'
+
+    assert evaluate_bool(bool3, container, trace1, FencepostPosition(('at', 0))) == True
+    assert evaluate_bool(bool3, container, trace1, FencepostPosition(('at', 4))) == 'top'
+
+    assert evaluate_bool(bool3, container, trace2, FencepostPosition(('at', 0))) == 'bot'
 
 
 def test_evaluate_sequence_matches():

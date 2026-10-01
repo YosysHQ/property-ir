@@ -337,7 +337,16 @@ def evaluate_bool(node_id: NodeId[Bool], container: IrContainer, trace: Trace, p
     elif isinstance(node, Initial):
         return pos.value[1] == 0
 
-    elif isinstance(node, (RegGclk, Ite)):
+    elif isinstance(node, (Ite)):
+        value1: MaybeBool = evaluate_bool(node.child1, container, trace, pos)
+        value2: MaybeBool = evaluate_bool(node.child2, container, trace, pos)
+        value3: MaybeBool = evaluate_bool(node.child3, container, trace, pos)
+        return eval_or({
+            eval_and({value1, value2}),
+            eval_and({eval_not(value1), value3}),
+        })
+
+    elif isinstance(node, (RegGclk)):
         # TODO
 
         return 'unknown'
