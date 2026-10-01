@@ -23,12 +23,8 @@ def test_evaluate_bool():
         (declare bool4 (and a (xor a b)))
         (declare bool5 (false))
         (declare bool6 a)
-        (declare bool7 (future-gclk a))
-        (declare bool8 (rising-gclk a (true)))
-        (declare bool9 (falling-gclk a (true)))
-        (declare bool10 (changing-gclk a (true)))
-        (declare bool11 (not (and a b)))
-        (declare bool12 (not (future-gclk a)))
+        (declare bool7 (not (and a b)))
+
     )"""
 
     doc_raw_sexpr: RawSExpr = parse_raw_sexpr(doc_str)
@@ -49,20 +45,15 @@ def test_evaluate_bool():
     bool5: NodeId = container.get_node_id_by_name('bool5')
     bool6: NodeId = container.get_node_id_by_name('bool6')
     bool7: NodeId = container.get_node_id_by_name('bool7')
-    bool8: NodeId = container.get_node_id_by_name('bool8')
-    bool9: NodeId = container.get_node_id_by_name('bool9')
-    bool10: NodeId = container.get_node_id_by_name('bool10')
-    bool11: NodeId = container.get_node_id_by_name('bool11')
-    bool12: NodeId = container.get_node_id_by_name('bool12')
 
     assert evaluate_bool(bool1, container, trace1, FencepostPosition(('at', 0))) == False
     assert evaluate_bool(bool1, container, trace1, FencepostPosition(('at', 1))) == False
     assert evaluate_bool(bool1, container, trace1, FencepostPosition(('at', 2))) == False
     assert evaluate_bool(bool1, container, trace1, FencepostPosition(('at', 3))) == True
 
-    assert evaluate_bool(bool1, container, trace1, FencepostPosition(('at', 4))) == True
+    assert evaluate_bool(bool1, container, trace1, FencepostPosition(('at', 4))) == 'top'
     assert evaluate_bool(bool1, container, trace1, FencepostPosition('unknown')) == 'unknown'
-    assert evaluate_bool(bool1, container, trace1, FencepostPosition('within_infinite_suffix')) == True
+    assert evaluate_bool(bool1, container, trace1, FencepostPosition('within_infinite_suffix')) == 'top'
 
     assert evaluate_bool(bool2, container, trace1, FencepostPosition(('at', 0))) == True
     assert evaluate_bool(bool2, container, trace1, FencepostPosition(('at', 1))) == True
@@ -83,47 +74,62 @@ def test_evaluate_bool():
     assert evaluate_bool(bool5, container, trace1, FencepostPosition(('at', 1))) == False
     assert evaluate_bool(bool5, container, trace1, FencepostPosition(('at', 2))) == False
     assert evaluate_bool(bool5, container, trace1, FencepostPosition(('at', 3))) == False
-    assert evaluate_bool(bool5, container, trace1, FencepostPosition(('at', 4))) == True
+    assert evaluate_bool(bool5, container, trace1, FencepostPosition(('at', 4))) == 'top'
     assert evaluate_bool(bool5, container, trace1, FencepostPosition('unknown')) == 'unknown'
-    assert evaluate_bool(bool5, container, trace1, FencepostPosition('within_infinite_suffix')) == True
+    assert evaluate_bool(bool5, container, trace1, FencepostPosition('within_infinite_suffix')) == 'top'
 
     assert evaluate_bool(bool6, container, trace1, FencepostPosition(('at', 0))) == True
     assert evaluate_bool(bool6, container, trace1, FencepostPosition(('at', 1))) == False
     assert evaluate_bool(bool6, container, trace1, FencepostPosition(('at', 2))) == False
     assert evaluate_bool(bool6, container, trace1, FencepostPosition(('at', 3))) == True
 
-    assert evaluate_bool(bool7, container, trace1, FencepostPosition(('at', 0))) == False
-    assert evaluate_bool(bool7, container, trace1, FencepostPosition(('at', 1))) == False
+
+    assert evaluate_bool(bool7, container, trace1, FencepostPosition(('at', 0))) == True
+    assert evaluate_bool(bool7, container, trace1, FencepostPosition(('at', 1))) == True
     assert evaluate_bool(bool7, container, trace1, FencepostPosition(('at', 2))) == True
-    assert evaluate_bool(bool7, container, trace1, FencepostPosition(('at', 3))) == 'unknown'
+    assert evaluate_bool(bool7, container, trace1, FencepostPosition(('at', 3))) == False
+    assert evaluate_bool(bool7, container, trace1, FencepostPosition(('at', 4))) == 'top'
 
-    assert evaluate_bool(bool8, container, trace1, FencepostPosition(('at', 0))) == False
-    assert evaluate_bool(bool8, container, trace1, FencepostPosition(('at', 1))) == False
-    assert evaluate_bool(bool8, container, trace1, FencepostPosition(('at', 2))) == True
-    assert evaluate_bool(bool8, container, trace1, FencepostPosition(('at', 3))) == 'unknown'
 
-    assert evaluate_bool(bool9, container, trace1, FencepostPosition(('at', 0))) == True
-    assert evaluate_bool(bool9, container, trace1, FencepostPosition(('at', 1))) == False
-    assert evaluate_bool(bool9, container, trace1, FencepostPosition(('at', 2))) == False
-    assert evaluate_bool(bool9, container, trace1, FencepostPosition(('at', 3))) == 'unknown'
 
-    assert evaluate_bool(bool10, container, trace1, FencepostPosition(('at', 0))) == True
-    assert evaluate_bool(bool10, container, trace1, FencepostPosition(('at', 1))) == False
-    assert evaluate_bool(bool10, container, trace1, FencepostPosition(('at', 2))) == True
-    assert evaluate_bool(bool10, container, trace1, FencepostPosition(('at', 3))) == 'unknown'
-    assert evaluate_bool(bool10, container, trace1, FencepostPosition(('at', 4))) == True
+def test_evaluate_future_gclk():
 
-    assert evaluate_bool(bool11, container, trace1, FencepostPosition(('at', 0))) == True
-    assert evaluate_bool(bool11, container, trace1, FencepostPosition(('at', 1))) == True
-    assert evaluate_bool(bool11, container, trace1, FencepostPosition(('at', 2))) == True
-    assert evaluate_bool(bool11, container, trace1, FencepostPosition(('at', 3))) == False
-    assert evaluate_bool(bool11, container, trace1, FencepostPosition(('at', 4))) == True
+    doc_str: str = """(document
+        (declare-input a)
+        (declare-input b)
 
-    assert evaluate_bool(bool12, container, trace1, FencepostPosition(('at', 0))) == True
-    assert evaluate_bool(bool12, container, trace1, FencepostPosition(('at', 1))) == True
-    assert evaluate_bool(bool12, container, trace1, FencepostPosition(('at', 2))) == False
-    assert evaluate_bool(bool12, container, trace1, FencepostPosition(('at', 3))) == 'unknown'
-    assert evaluate_bool(bool12, container, trace1, FencepostPosition(('at', 4))) == True
+        (declare bool1 (future-gclk a))
+        (declare bool2 (rising-gclk a (true)))
+        (declare bool3 (falling-gclk a (true)))
+        (declare bool4 (changing-gclk a (true)))
+
+        (declare bool5 (not (future-gclk a)))
+        (declare bool6 (and (not (falling-gclk a (true))) (falling-gclk b (true))))
+        (declare bool7 (and (not (falling-gclk a (true))) (rising-gclk b (true))))
+        (declare bool8 (and (not (changing-gclk a (true))) (changing-gclk a (true)) ))
+
+    )"""
+
+    doc_raw_sexpr: RawSExpr = parse_raw_sexpr(doc_str)
+    container: IrContainer = IrContainer()
+    parse_document(doc_raw_sexpr, container)
+
+    bool1: NodeId = container.get_node_id_by_name('bool1')
+    bool2: NodeId = container.get_node_id_by_name('bool2')
+    bool3: NodeId = container.get_node_id_by_name('bool3')
+    bool4: NodeId = container.get_node_id_by_name('bool4')
+
+    bool5: NodeId = container.get_node_id_by_name('bool5')
+    bool6: NodeId = container.get_node_id_by_name('bool6')
+    bool7: NodeId = container.get_node_id_by_name('bool7')
+    bool8: NodeId = container.get_node_id_by_name('bool8')
+
+    trace1: Trace = Trace(finite_part=(
+        frozenset(['a']),
+        frozenset(['b']),
+        frozenset([]),
+        frozenset(['a', 'b']),
+    ), suffix='top_omega')
 
     trace2: Trace = Trace(finite_part=(
         frozenset(['a']),
@@ -132,11 +138,53 @@ def test_evaluate_bool():
         frozenset(['a', 'b']),
     ), suffix='bot_omega')
 
-    assert evaluate_bool(bool12, container, trace2, FencepostPosition(('at', 0))) == True
-    assert evaluate_bool(bool12, container, trace2, FencepostPosition(('at', 1))) == True
-    assert evaluate_bool(bool12, container, trace2, FencepostPosition(('at', 2))) == False
-    assert evaluate_bool(bool12, container, trace2, FencepostPosition(('at', 3))) == 'unknown'
-    assert evaluate_bool(bool12, container, trace2, FencepostPosition(('at', 4))) == False
+    assert evaluate_bool(bool1, container, trace1, FencepostPosition(('at', 0))) == False
+    assert evaluate_bool(bool1, container, trace1, FencepostPosition(('at', 1))) == False
+    assert evaluate_bool(bool1, container, trace1, FencepostPosition(('at', 2))) == True
+
+    assert evaluate_bool(bool1, container, trace1, FencepostPosition(('at', 3))) == 'top'
+    assert evaluate_bool(bool1, container, trace1, FencepostPosition(('at', 4))) == 'top'
+    assert evaluate_bool(bool1, container, trace2, FencepostPosition(('at', 3))) == 'bot'
+    assert evaluate_bool(bool1, container, trace2, FencepostPosition(('at', 4))) == 'bot'
+
+    assert evaluate_bool(bool2, container, trace1, FencepostPosition(('at', 0))) == False
+    assert evaluate_bool(bool2, container, trace1, FencepostPosition(('at', 1))) == False
+    assert evaluate_bool(bool2, container, trace1, FencepostPosition(('at', 2))) == True
+    assert evaluate_bool(bool2, container, trace1, FencepostPosition(('at', 3))) == False
+
+    assert evaluate_bool(bool3, container, trace1, FencepostPosition(('at', 0))) == True
+    assert evaluate_bool(bool3, container, trace1, FencepostPosition(('at', 1))) == False
+    assert evaluate_bool(bool3, container, trace1, FencepostPosition(('at', 2))) == False
+    assert evaluate_bool(bool3, container, trace1, FencepostPosition(('at', 3))) == 'top'
+
+    assert evaluate_bool(bool4, container, trace1, FencepostPosition(('at', 0))) == True
+    assert evaluate_bool(bool4, container, trace1, FencepostPosition(('at', 1))) == False
+    assert evaluate_bool(bool4, container, trace1, FencepostPosition(('at', 2))) == True
+    assert evaluate_bool(bool4, container, trace1, FencepostPosition(('at', 3))) == 'top'
+    assert evaluate_bool(bool4, container, trace1, FencepostPosition(('at', 4))) == 'top'
+
+    assert evaluate_bool(bool5, container, trace1, FencepostPosition(('at', 0))) == True
+    assert evaluate_bool(bool5, container, trace1, FencepostPosition(('at', 1))) == True
+    assert evaluate_bool(bool5, container, trace1, FencepostPosition(('at', 2))) == False
+    assert evaluate_bool(bool5, container, trace1, FencepostPosition(('at', 3))) == 'top'
+    assert evaluate_bool(bool5, container, trace1, FencepostPosition(('at', 4))) == 'top'
+
+    assert evaluate_bool(bool5, container, trace2, FencepostPosition(('at', 0))) == True
+    assert evaluate_bool(bool5, container, trace2, FencepostPosition(('at', 1))) == True
+    assert evaluate_bool(bool5, container, trace2, FencepostPosition(('at', 2))) == False
+    assert evaluate_bool(bool5, container, trace2, FencepostPosition(('at', 3))) == 'bot'
+    assert evaluate_bool(bool5, container, trace2, FencepostPosition(('at', 4))) == 'bot'
+
+    assert evaluate_bool(bool6, container, trace1, FencepostPosition(('at', 3))) == 'top'
+    assert evaluate_bool(bool6, container, trace2, FencepostPosition(('at', 3))) == 'bot'
+
+    assert evaluate_bool(bool7, container, trace1, FencepostPosition(('at', 3))) == False
+    assert evaluate_bool(bool7, container, trace2, FencepostPosition(('at', 3))) == False
+
+    assert evaluate_bool(bool8, container, trace1, FencepostPosition(('at', 3))) == 'top'
+    assert evaluate_bool(bool8, container, trace2, FencepostPosition(('at', 3))) == 'bot'
+
+
 
 
 def test_evaluate_sequence_matches():
@@ -338,7 +386,6 @@ def test_evaluate_sequence_matches():
 
     assert sequence_matches(seq11, container, trace3, FencepostPosition(('at', 0))) == \
         frozenset([FencepostPosition(('at', 1)), FencepostPosition(('at', 2))])
-
 
 
 

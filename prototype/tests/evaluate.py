@@ -23,8 +23,10 @@ from ir.primitives.bool_primitives import (
     FallingGclk,
     FutureGclk,
     Initial,
+    Ite,
     Not,
     Or,
+    RegGclk,
     RisingGclk,
     Xor,
 )
@@ -60,7 +62,8 @@ from ir.primitives.simple_primitives import (
 logger = getLogger(__name__)
 
 
-type MaybeBool = bool | Literal['unknown']
+type MaybeBool = bool | Literal['unknown', 'top', 'bot']
+
 
 
 @dataclass(frozen=True)
@@ -215,6 +218,41 @@ class FencepostPosition:
 #---------+
 
 
+def eval_and(values: set[MaybeBool]) -> MaybeBool:
+    if False in values:
+        return False
+    elif 'unknown' in values:
+        return 'unknown'
+    elif 'bot' in values:
+        return 'bot'
+    elif 'top' in values:
+        return 'top'
+    return True
+
+def eval_or(values: set[MaybeBool]) -> MaybeBool:
+    if True in values:
+        return True
+    elif 'unknown' in values:
+        return 'unknown'
+    elif 'top' in values:
+        return 'top'
+    elif 'bot' in values:
+        return 'bot'
+    return False
+
+def eval_not(value: MaybeBool) -> MaybeBool:
+    if value in ['top', 'bot', 'unknown']:
+        return value
+    return not value
+
+def eval_xor(value1: MaybeBool, value2: MaybeBool) -> MaybeBool:
+    not1: MaybeBool = eval_not(value1)
+    not2: MaybeBool = eval_not(value2)
+    sub_result1 = eval_and({value1, not2})
+    sub_result2 = eval_and({not1, value2})
+    return eval_or({sub_result1, sub_result2})
+
+
 def evaluate_bool(node_id: NodeId[Bool], container: IrContainer, trace: Trace, pos: FencepostPosition) -> MaybeBool:
     """Evaluate a Bool type node starting at a specific fencepost position in
     some input trace. It is assumed that the Bool does not contain cycles."""
@@ -231,18 +269,18 @@ def evaluate_bool(node_id: NodeId[Bool], container: IrContainer, trace: Trace, p
     if pos.value == 'within_infinite_suffix':
         match(trace.suffix):
             case('top_omega'):
-                return True
+                return 'top'
             case('bot_omega' | 'bot_star_top_omega' | 'end'):
-                return False
+                return 'bot'
             case('top_star_bot_omega'):
                 return 'unknown'
     elif pos.value == 'unknown':
         return 'unknown'
 
     if trace.finite_part[pos.value[1]] == 'top':
-        return True
+        return 'top'
     elif trace.finite_part[pos.value[1]] == 'bot':
-        return False
+        return 'bot'
 
 
     if isinstance(node, Constant):
@@ -253,47 +291,27 @@ def evaluate_bool(node_id: NodeId[Bool], container: IrContainer, trace: Trace, p
 
     if isinstance(node, Not):
         child_value: MaybeBool = evaluate_bool(node.child, container, trace, pos)
-        if child_value == 'unknown':
-            return 'unknown'
-        return not child_value
+        return eval_not(child_value)
 
     elif isinstance(node, And):
-        for child_id in node.children:
-            child_value: MaybeBool = evaluate_bool(child_id, container, trace, pos)
-            if child_value == False:
-                return False
-            elif child_value == 'unknown':
-                return 'unknown'
-        return True
+        child_values: set[MaybeBool] = {evaluate_bool(child_id, container, trace, pos) for child_id in node.children}
+        return eval_and(child_values)
 
     elif isinstance(node, Or):
-        unknown_seen: bool = False
-        for child_id in node.children:
-            child_value: MaybeBool = evaluate_bool(child_id, container, trace, pos)
-            if child_value == True:
-                return True
-            elif child_value == 'unknown':
-                unknown_seen = True
-        if unknown_seen:
-            return 'unknown'
-        return False
+        child_values: set[MaybeBool] = {evaluate_bool(child_id, container, trace, pos) for child_id in node.children}
+        return eval_or(child_values)
 
-    elif isinstance(node, (Xor, Eq)):
-        child_value1: MaybeBool = evaluate_bool(node.child1, container, trace, pos)
-        child_value2: MaybeBool = evaluate_bool(node.child2, container, trace, pos)
-        if child_value1 == 'unknown' or child_value2 == 'unknown':
-            return 'unknown'
+    elif isinstance(node, Xor):
+        value1: MaybeBool = evaluate_bool(node.child1, container, trace, pos)
+        value2: MaybeBool = evaluate_bool(node.child2, container, trace, pos)
+        return eval_xor(value1, value2)
 
-        if isinstance(node, Xor):
-            return (child_value1 and not child_value2) or (not child_value1 and child_value2)
+    elif isinstance(node, Eq):
+        value1: MaybeBool = evaluate_bool(node.child1, container, trace, pos)
+        value2: MaybeBool = evaluate_bool(node.child2, container, trace, pos)
+        return eval_not(eval_xor(value1, value2))
 
-        elif isinstance(node, Eq):
-            return child_value1 == child_value2
-
-    # TODO add MaybeBool elements 'any' and 'none' to handle 'bot' and 'top'
     if isinstance(node, FutureGclk):
-        if trace.symbol_at_pos(pos.next_pos(trace)) in ['bot', 'top']:
-            return 'unknown'
         return evaluate_bool(node.child, container, trace, pos.next_pos(trace))
 
     elif isinstance(node, (ChangingGclk, FallingGclk, RisingGclk)):
@@ -301,24 +319,30 @@ def evaluate_bool(node_id: NodeId[Bool], container: IrContainer, trace: Trace, p
         clock_defined: MaybeBool = evaluate_bool(node.child2, container, trace, pos)
         next_clock_value: MaybeBool = evaluate_bool(node.child1, container, trace, pos.next_pos(trace))
         next_clock_defined: MaybeBool = evaluate_bool(node.child2, container, trace, pos.next_pos(trace))
-        if 'unknown' in { clock_value, clock_defined, next_clock_value, next_clock_defined }:
-            return 'unknown'
-        if trace.symbol_at_pos(pos.next_pos(trace)) in ['bot', 'top']:
-            return 'unknown'
 
         if isinstance(node, ChangingGclk):
-            return clock_value != next_clock_value or clock_defined != next_clock_defined
+            return eval_or({eval_xor(clock_value, next_clock_value), eval_xor(clock_defined, next_clock_defined)})
 
         elif isinstance(node, FallingGclk):
-            return (clock_value or not clock_defined) and (not next_clock_value and next_clock_defined)
+            return eval_and({
+                eval_or({clock_value, eval_not(clock_defined)}),
+                eval_and({eval_not(next_clock_value), next_clock_defined})})
 
         elif isinstance(node, RisingGclk):
-            return (not clock_value or not clock_defined) and (next_clock_value and next_clock_defined)
+            return eval_and({
+                eval_or({eval_not(clock_value), eval_not(clock_defined)}),
+                eval_and({next_clock_value, next_clock_defined})
+            })
 
     elif isinstance(node, Initial):
         return pos.value[1] == 0
 
-    # TODO add reg and ite?
+    elif isinstance(node, (RegGclk, Ite)):
+        # TODO
+
+        return 'unknown'
+
+
     # TODO memoization
 
     return 'unknown'
@@ -347,9 +371,9 @@ def sequence_matches(node_id: NodeId[Sequence], container: IrContainer, trace: T
     elif isinstance(node, SeqBool):
         child_id: NodeId = node.child
         result: MaybeBool = evaluate_bool(child_id, container, trace, pos)
-        if result == False:
+        if result in [False, 'bot']:
             return frozenset([])
-        if result == True:
+        if result in [True, 'top']:
             return frozenset([pos.next_pos(trace)])
 
     elif isinstance(node, SeqRepeat):
@@ -454,9 +478,6 @@ def sequence_matches(node_id: NodeId[Sequence], container: IrContainer, trace: T
         return frozenset(result_matches)
 
 
-
-    # SeqRefuted? Or instead allow PropNot in the input?
-
     return frozenset([FencepostPosition('unknown')])
 
 
@@ -547,7 +568,6 @@ def evaluate_property(node_id: NodeId[Property], container: IrContainer, trace: 
 
     logger.debug('Evaluate property %s on trace %s', node, trace)
 
-
     if isinstance(node, PropFalse):
         return False
     elif isinstance(node, PropTrue):
@@ -556,7 +576,12 @@ def evaluate_property(node_id: NodeId[Property], container: IrContainer, trace: 
     elif isinstance(node, PropStrongBool):
         if len(trace.finite_part) == 0 and trace.suffix == 'end':
             return False
-        return evaluate_bool(node.child, container, trace, pos=FencepostPosition(('at', 0)))
+        bool_result: MaybeBool = evaluate_bool(node.child, container, trace, pos=FencepostPosition(('at', 0)))
+        if bool_result in [True, 'top']:
+            return True
+        elif bool_result in [False, 'bot']:
+            return False
+        return 'unknown'
 
     elif isinstance(node, PropStrong):
         return evaluate_strong(node, container, trace)
@@ -757,6 +782,5 @@ def evaluate_property(node_id: NodeId[Property], container: IrContainer, trace: 
         if child_result == 'unknown':
             return 'unknown'
         return not child_result
-
 
     return 'unknown'
