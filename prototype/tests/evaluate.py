@@ -520,16 +520,16 @@ def evaluate_accept_reject_on(node: PropertyIrNode, container: IrContainer, trac
 
 def evaluate_strong(node: PropertyIrNode, container: IrContainer, trace: Trace):
     """Evaluate the child sequence of the given node as though it is strong.
-    This is used to implement PropStrong and PropWeak, where the trace gets
-    modified before this method is called."""
+    This is used to implement PropStrong, PropWeak, and PropRefuted, where the
+    trace gets modified before this method is called."""
 
-    assert isinstance(node, (PropStrong, PropWeak))
+    assert isinstance(node, (PropStrong, PropWeak, PropRefuted))
 
     if trace.suffix == 'end':
         trace = trace.replace_from(FencepostPosition('within_infinite_suffix'), 'bot_omega')
 
     child_matches: frozenset[FencepostPosition] = sequence_matches(node.child, container, trace, FencepostPosition(('at', 0)))
-    logger.debug('child_matches with trace %s in evaluate_strong %s', trace, child_matches)
+    logger.debug('child_matches with trace %s in evaluate_strong: %s', trace, child_matches)
     for match in child_matches:
         if isinstance(match.value, tuple) or (match.value == 'within_infinite_suffix' and trace.suffix in ['top_omega']):
             return True
@@ -748,7 +748,15 @@ def evaluate_property(node_id: NodeId[Property], container: IrContainer, trace: 
 
 
     elif isinstance(node, PropRefuted):
-        return 'unknown'
+        # refuted is equivalent to not weak
+        # apply bar (needed for not), then replace suffix by top_omega (to evaluate weak)
+
+        modified_trace: Trace = trace.bar().replace_from(FencepostPosition('within_infinite_suffix'), 'top_omega')
+        child_result =  evaluate_strong(node, container, modified_trace)
+
+        if child_result == 'unknown':
+            return 'unknown'
+        return not child_result
 
 
     return 'unknown'

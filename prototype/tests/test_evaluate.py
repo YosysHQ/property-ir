@@ -1059,7 +1059,6 @@ def test_evaluate_prop_not():
     doc_str: str = """(document
         (declare-input a)
         (declare-input b)
-        (declare-input c)
 
         (declare seq_rep (seq-repeat (range 2 $) (seq-bool (true)) ))
 
@@ -1102,3 +1101,123 @@ def test_evaluate_prop_not():
     assert evaluate_property(prop_unknown, container, trace1) == 'unknown'
     assert evaluate_property(prop_unknown, container, trace2) == True
     assert evaluate_property(prop_unknown, container, trace3) == 'unknown'
+
+
+def test_evaluate_prop_refuted():
+
+    doc_str: str = """(document
+        (declare-input a)
+        (declare-input b)
+        (declare-input c)
+
+        (declare seq_rep (seq-repeat (range 1 $) (seq-bool (true)) ))
+        (declare a_rep (seq-repeat (range 1 $) (seq-bool a) ))
+
+        (declare a_something (seq-concat (seq-bool a) seq_rep))
+        (declare b_something (seq-concat (seq-bool b) seq_rep))
+        (declare something_a (seq-concat seq_rep (seq-bool a)))
+        (declare something_a_star (seq-concat seq_rep a_rep))
+        (declare a_something_or_b_something (seq-or a_something b_something))
+
+        (declare prop0 (prop-refuted seq_rep))
+        (declare prop1 (prop-refuted a_rep))
+        (declare prop2 (prop-refuted a_something))
+        (declare prop3 (prop-refuted something_a))
+        (declare prop4 (prop-refuted something_a_star))
+        (declare prop5 (prop-refuted a_something_or_b_something))
+
+        (declare prop_w1 (prop-weak a_something))
+        (declare prop_w2 (prop-weak a_rep))
+
+        (declare prop1_check (prop-not (prop-weak a_rep)))
+        (declare prop2_check (prop-not (prop-weak a_something)))
+
+    )
+    """
+
+    container: IrContainer = IrContainer()
+    parse_document(parse_raw_sexpr(doc_str), container)
+
+    seq_rep: NodeId = container.get_node_id_by_name('seq_rep')
+    a_rep: NodeId = container.get_node_id_by_name('a_rep')
+    a_something: NodeId = container.get_node_id_by_name('a_something')
+    prop_w1: NodeId = container.get_node_id_by_name('prop_w1')
+    prop_w2: NodeId = container.get_node_id_by_name('prop_w2')
+    prop0: NodeId = container.get_node_id_by_name('prop0')
+    prop1: NodeId = container.get_node_id_by_name('prop1')
+    prop2: NodeId = container.get_node_id_by_name('prop2')
+    prop3: NodeId = container.get_node_id_by_name('prop3')
+    prop4: NodeId = container.get_node_id_by_name('prop4')
+    prop5: NodeId = container.get_node_id_by_name('prop5')
+    prop1_check: NodeId = container.get_node_id_by_name('prop1_check')
+    prop2_check: NodeId = container.get_node_id_by_name('prop2_check')
+
+    trace1: Trace = Trace(finite_part=(
+        frozenset(['a', 'b']),
+        frozenset(['b', 'c']),
+        frozenset(['a']),
+        frozenset(['a', 'b', 'c']),
+    ), suffix='end')
+
+    trace2: Trace = Trace(finite_part=(
+        frozenset(['b']),
+        frozenset(['b', 'c']),
+        frozenset(['a']),
+        frozenset(['a', 'b', 'c']),
+    ), suffix='end')
+
+    trace3: Trace = Trace(finite_part=(
+        frozenset(['a', 'b']),
+    ), suffix='top_omega')
+
+    trace4: Trace = Trace(finite_part=(
+        frozenset(['a', 'b']),
+    ), suffix='bot_omega')
+
+    assert sequence_matches(seq_rep, container, trace1, FencepostPosition(('at', 0))) == \
+        frozenset({FencepostPosition(('at', 1)), FencepostPosition(('at', 2)), FencepostPosition(('at', 3)), FencepostPosition(('at', 4))})
+    assert sequence_matches(a_rep, container, trace1, FencepostPosition(('at', 0))) == \
+        frozenset({FencepostPosition(('at', 1))})
+    assert sequence_matches(a_something, container, trace1, FencepostPosition(('at', 0))) == \
+        frozenset({FencepostPosition(('at', 2)), FencepostPosition(('at', 3)), FencepostPosition(('at', 4))})
+
+    assert evaluate_property(prop_w1, container, trace1) == True
+    assert evaluate_property(prop_w2, container, trace1) == True
+
+    assert evaluate_property(prop0, container, trace1) == False
+    assert evaluate_property(prop1, container, trace1) == False
+    assert evaluate_property(prop2, container, trace1) == False
+    assert evaluate_property(prop3, container, trace1) == False
+    assert evaluate_property(prop4, container, trace1) == False
+    assert evaluate_property(prop5, container, trace1) == False
+
+    assert evaluate_property(prop0, container, trace2) == False
+    assert evaluate_property(prop1, container, trace2) == True
+    assert evaluate_property(prop2, container, trace2) == True
+    assert evaluate_property(prop3, container, trace2) == False
+    assert evaluate_property(prop4, container, trace2) == False
+    assert evaluate_property(prop5, container, trace2) == False
+
+    assert evaluate_property(prop0, container, trace3) == False
+    assert evaluate_property(prop1, container, trace3) == False
+    # note on semantics: because of the top_omega suffix
+    # refuted (= not weak) is evaluated optimistically, and the result is true
+    # because in the future the sequence can still be refuted
+    assert evaluate_property(prop2, container, trace3) == True
+    assert evaluate_property(prop3, container, trace3) == True
+    assert evaluate_property(prop4, container, trace3) == True
+    assert evaluate_property(prop5, container, trace3) == True
+    assert evaluate_property(prop1_check, container, trace3) == False
+    assert evaluate_property(prop2_check, container, trace3) == True
+
+    assert evaluate_property(prop0, container, trace4) == False
+    assert evaluate_property(prop1, container, trace4) == False
+    # note on semantics: because of the bot_omega suffix
+    # refuted (= not weak) is evaluated pessimistically, and the result is false
+    # because in the future the sequence being refuted might fail
+    assert evaluate_property(prop2, container, trace4) == False
+    assert evaluate_property(prop3, container, trace4) == False
+    assert evaluate_property(prop4, container, trace4) == False
+    assert evaluate_property(prop5, container, trace4) == False
+    assert evaluate_property(prop1_check, container, trace4) == False
+    assert evaluate_property(prop2_check, container, trace4) == False
