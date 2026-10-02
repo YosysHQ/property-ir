@@ -1,14 +1,22 @@
 
-from ir.base import IrContainer, NodeId, RawSExpr
+from logging import getLogger
+
+from hypothesis import Verbosity, given, settings
+from ir.base import IrContainer, NodeId, Property, RawSExpr
 from ir.parsing import parse_document, parse_raw_sexpr
+from ir.primitives.bool_primitives import RegGclk
 
 from tests.evaluate import (
     FencepostPosition,
+    MaybeBool,
     Trace,
     evaluate_bool,
     evaluate_property,
     sequence_matches,
 )
+from tests.strategies import random_ir_with_trace_simple
+
+logger = getLogger(__name__)
 
 
 def test_evaluate_bool():
@@ -1312,3 +1320,22 @@ def test_evaluate_prop_refuted():
     assert evaluate_property(prop5, container, trace4) == False
     assert evaluate_property(prop1_check, container, trace4) == False
     assert evaluate_property(prop2_check, container, trace4) == False
+
+
+@settings(verbosity=Verbosity.verbose, max_examples=50, deadline=500)
+@given(random_ir_with_trace_simple(final_node_type=Property, primitive_filter=lambda node_type: not issubclass(node_type, RegGclk)))
+def test_evaluate_random_no_error(doc_and_trace):
+
+    doc: str = doc_and_trace[0]
+    trace: Trace = doc_and_trace[1]
+
+    container: IrContainer = IrContainer()
+    parse_document(parse_raw_sexpr(doc), container)
+
+    root_node_id: NodeId = container.get_sink_nodes()[0]
+
+    result: MaybeBool = evaluate_property(root_node_id, container, trace)
+
+    logger.debug('doc: %s', doc)
+    logger.debug('trace: %s', trace)
+    logger.debug('result: %s', result)

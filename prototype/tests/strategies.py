@@ -2,7 +2,7 @@ import logging
 import string
 from collections import defaultdict
 from collections.abc import Callable
-from typing import Any, get_args, get_origin
+from typing import Any, Literal, get_args, get_origin
 
 from hypothesis import strategies as st
 from ir.base import (
@@ -24,6 +24,7 @@ from ir.base import (
 from ir.parsing import parse_document, parse_raw_sexpr
 from ir.primitives.clocked_primitives import ClkPropOmega, ClkSeqAut
 
+from tests.evaluate import Trace
 from tests.helpers import wrap_signals_and_expr_in_document
 
 logger = logging.getLogger(__name__)
@@ -41,31 +42,89 @@ def random_ir_clocked(
     primitive_filter: Callable[[type[PropertyIrNode]], bool] = lambda node_type: True,
     directive: type[Directive] = RootTestDirective,
     **lists_params) -> st.SearchStrategy[str]:
-    only_clocked_filter : Callable[[type[PropertyIrNode]], bool] = lambda node_type: not (issubclass(node_type, Property) or issubclass(node_type, Sequence))
-    adjusted_filter: Callable[[type[PropertyIrNode]], bool] = lambda node_type: only_clocked_filter(node_type) and primitive_filter(node_type) and forbidden_primitives_filter(node_type)
+    """Generate a random DAG-shaped clocked property expression."""
+    only_clocked_filter: Callable[[type[PropertyIrNode]], bool] = lambda node_type:\
+        not (issubclass(node_type, Property) or issubclass(node_type, Sequence))
+    adjusted_filter: Callable[[type[PropertyIrNode]], bool] = lambda node_type:\
+        only_clocked_filter(node_type) and primitive_filter(node_type) and forbidden_primitives_filter(node_type)
     return random_ir(final_node_type=final_node_type, primitive_filter=adjusted_filter, directive=directive, **lists_params)
-
-
 
 
 def random_ir_simple(
     final_node_type: type[PropertyIrNode],
     primitive_filter: Callable[[type[PropertyIrNode]], bool] = lambda node_type: True,
     **lists_params) -> st.SearchStrategy[str]:
-    only_simple_filter : Callable[[type[PropertyIrNode]], bool] = lambda node_type: not (issubclass(node_type, ClockedProperty) or issubclass(node_type, ClockedSequence))
-    adjusted_filter: Callable[[type[PropertyIrNode]], bool] = lambda node_type: only_simple_filter(node_type) and primitive_filter(node_type) and forbidden_primitives_filter(node_type)
+    """Generate a random DAG-shaped simple property expression."""
+    only_simple_filter: Callable[[type[PropertyIrNode]], bool] = lambda node_type:\
+        not (issubclass(node_type, ClockedProperty) or issubclass(node_type, ClockedSequence))
+    adjusted_filter: Callable[[type[PropertyIrNode]], bool] = lambda node_type:\
+        only_simple_filter(node_type) and primitive_filter(node_type) and forbidden_primitives_filter(node_type)
     return random_ir(final_node_type=final_node_type, primitive_filter=adjusted_filter, **lists_params)
 
 
+def random_ir_with_trace_simple(
+    final_node_type: type[PropertyIrNode],
+    primitive_filter: Callable[[type[PropertyIrNode]], bool] = lambda node_type: True,
+    **lists_params) -> st.SearchStrategy[tuple[str, Trace]]:
+    only_simple_filter: Callable[[type[PropertyIrNode]], bool] = lambda node_type:\
+        not (issubclass(node_type, ClockedProperty) or issubclass(node_type, ClockedSequence))
+    adjusted_filter: Callable[[type[PropertyIrNode]], bool] = lambda node_type:\
+        only_simple_filter(node_type) and primitive_filter(node_type) and forbidden_primitives_filter(node_type)
+    """Generate a random DAG-shaped simple property expression and a trace using its signals."""
+    return random_ir_with_trace(final_node_type=final_node_type, primitive_filter=adjusted_filter, **lists_params)
 
 
-def random_ir(
+@st.composite
+def random_ir_with_trace(
+    draw: st.DrawFn,
     final_node_type: type[PropertyIrNode],
     primitive_filter: Callable[[type[PropertyIrNode]], bool] = lambda node_type: True,
     directive: type[Directive] = RootTestDirective,
-    **lists_params) -> st.SearchStrategy[str]:
-    """Generate a random Property IR expression whose graph has the form of a DAG.
-    For this, collect all strategies to generate data for each allowed primitive.
+    **lists_params) -> tuple[str, Trace]:
+    """Generate a random Property IR expression whose graph has the form of a DAG
+    and a trace using its signals.
+    The primitive_filter can be used to include certain node types.
+    The final_node_type is the type of the root."""
+
+    random_ir_data: tuple[list[IrGeneratingType], IrGeneratingType, list[str], type[Directive]] =\
+        draw(random_data_for_ir(final_node_type, primitive_filter, directive, **lists_params))
+
+    signal_names: list[str] = random_ir_data[2]
+
+    suffix: Literal['end', 'top_omega', 'bot_omega'] = draw(st.sampled_from(['end', 'top_omega', 'bot_omega']))
+
+    trace_data: list[list[bool]] = draw(
+        st.lists(
+            st.lists(st.booleans(), min_size=len(signal_names), max_size=len(signal_names)),
+            min_size=0, max_size=30))
+
+    return (build_ir_from_random_data(random_ir_data), build_trace_from_random_data(signal_names, trace_data, suffix))
+
+
+
+def build_trace_from_random_data(
+    signal_names: list[str],
+    trace_data: list[list[bool]],
+    suffix: Literal['end', 'top_omega', 'bot_omega']) -> Trace:
+    """Constructs a trace based on the given data by selecting those signals to
+    be true in each time step whose index is true in the respective trace_data
+    element."""
+
+    finite_part: list[frozenset[str]] = [frozenset([signal_names[index]
+        for index in range(len(signal_names)) if step[index]])
+            for step in trace_data]
+
+    return Trace(finite_part=tuple(finite_part), suffix=suffix)
+
+
+def random_data_for_ir(
+    final_node_type: type[PropertyIrNode],
+    primitive_filter: Callable[[type[PropertyIrNode]], bool] = lambda node_type: True,
+    directive: type[Directive] = RootTestDirective,
+    **lists_params) -> st.SearchStrategy[tuple[list[IrGeneratingType], IrGeneratingType, list[str], type[Directive]]]:
+    """Strategy generating the data that is used to construct a Property IR
+    expression. For this, collect all strategies to generate data for each
+    allowed primitive.
     The primitive_filter can be used to include certain node types.
     The final_node_type is the type of the root."""
 
@@ -84,7 +143,19 @@ def random_ir(
     return st.tuples(
         st.lists(st.one_of(primitive_generators), **lists_params),
         st.one_of(final_primitive_generators),
-        identifier_list, st.just(directive)).map(build_ir_from_random_data)
+        identifier_list, st.just(directive))
+
+
+def random_ir(
+    final_node_type: type[PropertyIrNode],
+    primitive_filter: Callable[[type[PropertyIrNode]], bool] = lambda node_type: True,
+    directive: type[Directive] = RootTestDirective,
+    **lists_params) -> st.SearchStrategy[str]:
+    """Generate a random Property IR expression whose graph has the form of a DAG.
+    The primitive_filter can be used to include certain node types.
+    The final_node_type is the type of the root."""
+
+    return random_data_for_ir(final_node_type, primitive_filter, directive, **lists_params).map(build_ir_from_random_data)
 
 
 def random_ir_primitive_template_and_args(node_class: type[PropertyIrNode]) -> st.SearchStrategy[IrGeneratingType]:
