@@ -2,14 +2,27 @@ import logging
 from pathlib import Path
 
 import pytest
+from hypothesis import example, given, settings
 from ir import IrContainer, nnf
-from ir.base import RawSExprList
-from ir.parsing import parse_document, parse_raw_sexpr
+from ir.base import NodeId, RawSExprList
+from ir.parsing import parse_document, parse_raw_sexpr, unparse_raw_sexpr
+from ir.primitives.bool_primitives import (
+    ChangingGclk,
+    Eq,
+    FallingGclk,
+    Ite,
+    RegGclk,
+    RisingGclk,
+    Xor,
+)
+from ir.primitives.simple_primitives import PropNot, PropRefuted
 
+from tests.evaluate import MaybeBool, Trace, evaluate_property
 from tests.helpers import (
     wrap_multiple_statements_in_document,
     wrap_statement_in_document,
 )
+from tests.strategies import random_ir_with_trace_simple
 
 logger = logging.getLogger(__name__)
 
@@ -402,3 +415,58 @@ def test_nnf_property_shared_subgraph():
     input_document: RawSExprList = wrap_multiple_statements_in_document([input_statement1, input_statement2, root_statement1, root_statement2])
     expected_output_document = wrap_multiple_statements_in_document([output_statement, root_statement1, root_statement2])
     check_nnf_equivalence(input_document, expected_output_document)
+
+
+
+def check_nnf_random_property_evaluation(doc_and_trace: tuple[str, Trace], visualize=False):
+
+    doc: str = doc_and_trace[0]
+    trace: Trace = doc_and_trace[1]
+
+    input_container: IrContainer = IrContainer()
+    parse_document(parse_raw_sexpr(doc), input_container)
+
+    root_node_id1: NodeId = input_container.get_sink_nodes()[0]
+    result1: MaybeBool = evaluate_property(root_node_id1, input_container, trace)
+
+    output_container: IrContainer = nnf(container=input_container)
+
+    root_node_id2: NodeId = output_container.get_sink_nodes()[0]
+    result2: MaybeBool = evaluate_property(root_node_id2, output_container, trace)
+
+    logger.debug('input_doc: %s', doc)
+    logger.debug('output_doc: %s', unparse_raw_sexpr(output_container.output_container()))
+    logger.debug('trace: %s', trace)
+    logger.debug('result1: %s', result1)
+    logger.debug('result2: %s', result2)
+
+    if visualize:
+        output_directory: Path = Path('./output')
+        input_container.show_graph(output_directory / 'nnf_input.png')
+        output_container.show_graph(output_directory / 'nnf_output.png')
+
+    assert result1 == result2 or result1 == 'unknown' or result2 == 'unknown'
+
+
+
+@settings(max_examples=100, deadline=500)
+@given(random_ir_with_trace_simple(final_node_type=PropNot,
+    primitive_filter=lambda node_type:
+        not issubclass(node_type, (RegGclk, Xor, Ite, Eq, ChangingGclk, RisingGclk, FallingGclk, PropRefuted)),
+    trace_min_length=0))
+@example(("""(document (declare-input 0)
+    (parse-sexpr (let-rec
+        (step0 (future-gclk (true)))
+        (step1 (prop-weak-bool step0))
+        (step2 (prop-not step1)) step2)))""",
+     Trace(finite_part=(frozenset(),), suffix='top_omega')))
+def test_nnf_random_property_evaluation_with_empty_trace(doc_and_trace: tuple[str, Trace]):
+    check_nnf_random_property_evaluation(doc_and_trace, visualize=False)
+
+@settings(max_examples=100, deadline=500)
+@given(random_ir_with_trace_simple(final_node_type=PropNot,
+    primitive_filter=lambda node_type:
+        not issubclass(node_type, (RegGclk, Xor, Ite, Eq, ChangingGclk, RisingGclk, FallingGclk, PropRefuted)),
+    trace_min_length=5))
+def test_nnf_random_property_evaluation_no_empty_trace(doc_and_trace: tuple[str, Trace]):
+    check_nnf_random_property_evaluation(doc_and_trace)

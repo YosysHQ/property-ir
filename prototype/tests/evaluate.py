@@ -607,7 +607,13 @@ def evaluate_property(node_id: NodeId[Property], container: IrContainer, trace: 
                     return 'unknown'
 
         modified_trace: Trace = trace.replace_from(FencepostPosition('within_infinite_suffix'), 'top_omega')
-        return evaluate_bool(node.child, container, modified_trace, pos=FencepostPosition(('at', 0)))
+
+        bool_result: MaybeBool = evaluate_bool(node.child, container, modified_trace, pos=FencepostPosition(('at', 0)))
+        if bool_result in [True, 'top']:
+            return True
+        elif bool_result in [False, 'bot']:
+            return False
+        return 'unknown'
 
     elif isinstance(node, PropWeak):
         modified_trace: Trace = trace.replace_from(FencepostPosition('within_infinite_suffix'), 'top_omega')

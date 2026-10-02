@@ -65,13 +65,14 @@ def random_ir_simple(
 def random_ir_with_trace_simple(
     final_node_type: type[PropertyIrNode],
     primitive_filter: Callable[[type[PropertyIrNode]], bool] = lambda node_type: True,
+    trace_min_length: int = 0,
     **lists_params) -> st.SearchStrategy[tuple[str, Trace]]:
     only_simple_filter: Callable[[type[PropertyIrNode]], bool] = lambda node_type:\
         not (issubclass(node_type, ClockedProperty) or issubclass(node_type, ClockedSequence))
     adjusted_filter: Callable[[type[PropertyIrNode]], bool] = lambda node_type:\
         only_simple_filter(node_type) and primitive_filter(node_type) and forbidden_primitives_filter(node_type)
     """Generate a random DAG-shaped simple property expression and a trace using its signals."""
-    return random_ir_with_trace(final_node_type=final_node_type, primitive_filter=adjusted_filter, **lists_params)
+    return random_ir_with_trace(final_node_type=final_node_type, primitive_filter=adjusted_filter, trace_min_length=trace_min_length, **lists_params)
 
 
 @st.composite
@@ -80,6 +81,7 @@ def random_ir_with_trace(
     final_node_type: type[PropertyIrNode],
     primitive_filter: Callable[[type[PropertyIrNode]], bool] = lambda node_type: True,
     directive: type[Directive] = RootTestDirective,
+    trace_min_length: int = 0,
     **lists_params) -> tuple[str, Trace]:
     """Generate a random Property IR expression whose graph has the form of a DAG
     and a trace using its signals.
@@ -96,7 +98,7 @@ def random_ir_with_trace(
     trace_data: list[list[bool]] = draw(
         st.lists(
             st.lists(st.booleans(), min_size=len(signal_names), max_size=len(signal_names)),
-            min_size=0, max_size=30))
+            min_size=trace_min_length, max_size=30))
 
     return (build_ir_from_random_data(random_ir_data), build_trace_from_random_data(signal_names, trace_data, suffix))
 
