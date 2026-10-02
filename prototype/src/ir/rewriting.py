@@ -2082,8 +2082,8 @@ def nnf_process_node(
             child_literal = getattr(current_node, field.name)
             kwargs[field.name] = child_literal
 
-    # swap children of PropUntil / PropStrongUntilWith
-    if(isinstance(current_node, (PropUntil, PropStrongUntilWith))):
+    # swap children of PropUntil / PropStrongUntilWith if these primitives get exchanged
+    if invert and isinstance(current_node, (PropUntil, PropStrongUntilWith)) :
         child1_temp = kwargs['child1']
         kwargs['child1'] = kwargs['child2']
         kwargs['child2'] = child1_temp

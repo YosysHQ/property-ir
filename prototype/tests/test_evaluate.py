@@ -1353,6 +1353,33 @@ def test_evaluate_prop_not_weak_future_gclk():
     assert evaluate_property(prop2, container, trace3) == False
 
 
+def test_evaluate_prop_not_not_until():
+
+    doc_str: str = """(document
+        (declare-input 0)
+        (declare-input 00)
+
+        (declare prop1 (let-rec
+            (step0 (prop-until (prop-weak-bool 0) (prop-weak-bool 00)))
+            (step1 (prop-not step0))
+            (step2 (prop-not step1)) step2))
+
+        (declare prop2 (prop-until (prop-weak-bool 0) (prop-weak-bool 00)))
+
+    )"""
+
+    trace1 = Trace(finite_part=(frozenset({'00'}), frozenset()), suffix='end')
+
+    container: IrContainer = IrContainer()
+    parse_document(parse_raw_sexpr(doc_str), container)
+
+    prop1: NodeId = container.get_node_id_by_name('prop1')
+    prop2: NodeId = container.get_node_id_by_name('prop2')
+
+    assert evaluate_property(prop1, container, trace1) == True
+    assert evaluate_property(prop2, container, trace1) == True
+
+
 @settings(verbosity=Verbosity.verbose, max_examples=50, deadline=500)
 @given(random_ir_with_trace_simple(final_node_type=Property, primitive_filter=lambda node_type: not issubclass(node_type, RegGclk)))
 def test_evaluate_random_no_error(doc_and_trace):

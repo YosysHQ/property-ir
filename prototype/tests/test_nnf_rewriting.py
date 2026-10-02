@@ -442,6 +442,8 @@ def check_nnf_random_property_evaluation(doc_and_trace: tuple[str, Trace], visua
 
     if visualize:
         output_directory: Path = Path('./output')
+        input_container.bypass_placeholders()
+        output_container.bypass_placeholders()
         input_container.show_graph(output_directory / 'nnf_input.png')
         output_container.show_graph(output_directory / 'nnf_output.png')
 
@@ -452,7 +454,7 @@ def check_nnf_random_property_evaluation(doc_and_trace: tuple[str, Trace], visua
 @settings(max_examples=100, deadline=500)
 @given(random_ir_with_trace_simple(final_node_type=PropNot,
     primitive_filter=lambda node_type:
-        not issubclass(node_type, (RegGclk, Xor, Ite, Eq, ChangingGclk, RisingGclk, FallingGclk, PropRefuted)),
+        not issubclass(node_type, (Xor, Ite, Eq, ChangingGclk, RisingGclk, FallingGclk, PropRefuted)),
     trace_min_length=0))
 @example(("""(document (declare-input 0)
     (parse-sexpr (let-rec
@@ -460,6 +462,13 @@ def check_nnf_random_property_evaluation(doc_and_trace: tuple[str, Trace], visua
         (step1 (prop-weak-bool step0))
         (step2 (prop-not step1)) step2)))""",
      Trace(finite_part=(frozenset(),), suffix='top_omega')))
+@example((
+"""(document (declare-input 0) (declare-input 00)
+    (parse-sexpr (let-rec
+        (step0 (prop-until (prop-weak-bool 0) (prop-weak-bool 00)))
+        (step1 (prop-not step0))
+        (step2 (prop-not step1)) step2)))""",
+    Trace(finite_part=(frozenset({'00'}), frozenset()), suffix='end')))
 def test_nnf_random_property_evaluation_with_empty_trace(doc_and_trace: tuple[str, Trace]):
     check_nnf_random_property_evaluation(doc_and_trace, visualize=False)
 
