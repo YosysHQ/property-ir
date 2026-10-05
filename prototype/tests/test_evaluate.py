@@ -6,8 +6,11 @@ from ir.base import IrContainer, NodeId, Property, RawSExpr
 from ir.parsing import parse_document, parse_raw_sexpr
 
 from tests.evaluate import (
+    BoolMemoDict,
     FencepostPosition,
     MaybeBool,
+    PropertyMemoDict,
+    SequenceMemoDict,
     Trace,
     evaluate_bool,
     evaluate_property,
@@ -53,49 +56,51 @@ def test_evaluate_bool():
     bool6: NodeId = container.get_node_id_by_name('bool6')
     bool7: NodeId = container.get_node_id_by_name('bool7')
 
-    assert evaluate_bool(bool1, container, trace1, FencepostPosition(('at', 0))) == False
-    assert evaluate_bool(bool1, container, trace1, FencepostPosition(('at', 1))) == False
-    assert evaluate_bool(bool1, container, trace1, FencepostPosition(('at', 2))) == False
-    assert evaluate_bool(bool1, container, trace1, FencepostPosition(('at', 3))) == True
+    bool_results: BoolMemoDict = {}
 
-    assert evaluate_bool(bool1, container, trace1, FencepostPosition(('at', 4))) == 'top'
-    assert evaluate_bool(bool1, container, trace1, FencepostPosition('unknown')) == 'unknown'
-    assert evaluate_bool(bool1, container, trace1, FencepostPosition('within_infinite_suffix')) == 'top'
+    assert evaluate_bool(bool1, container, trace1, FencepostPosition(('at', 0)), bool_results) == False
+    assert evaluate_bool(bool1, container, trace1, FencepostPosition(('at', 1)), bool_results) == False
+    assert evaluate_bool(bool1, container, trace1, FencepostPosition(('at', 2)), bool_results) == False
+    assert evaluate_bool(bool1, container, trace1, FencepostPosition(('at', 3)), bool_results) == True
 
-    assert evaluate_bool(bool2, container, trace1, FencepostPosition(('at', 0))) == True
-    assert evaluate_bool(bool2, container, trace1, FencepostPosition(('at', 1))) == True
-    assert evaluate_bool(bool2, container, trace1, FencepostPosition(('at', 2))) == False
-    assert evaluate_bool(bool2, container, trace1, FencepostPosition(('at', 3))) == True
+    assert evaluate_bool(bool1, container, trace1, FencepostPosition(('at', 4)), bool_results) == 'top'
+    assert evaluate_bool(bool1, container, trace1, FencepostPosition('unknown'), bool_results) == 'unknown'
+    assert evaluate_bool(bool1, container, trace1, FencepostPosition('within_infinite_suffix'), bool_results) == 'top'
 
-    assert evaluate_bool(bool3, container, trace1, FencepostPosition(('at', 0))) == True
-    assert evaluate_bool(bool3, container, trace1, FencepostPosition(('at', 1))) == True
-    assert evaluate_bool(bool3, container, trace1, FencepostPosition(('at', 2))) == True
-    assert evaluate_bool(bool3, container, trace1, FencepostPosition(('at', 3))) == True
+    assert evaluate_bool(bool2, container, trace1, FencepostPosition(('at', 0)), bool_results) == True
+    assert evaluate_bool(bool2, container, trace1, FencepostPosition(('at', 1)), bool_results) == True
+    assert evaluate_bool(bool2, container, trace1, FencepostPosition(('at', 2)), bool_results) == False
+    assert evaluate_bool(bool2, container, trace1, FencepostPosition(('at', 3)), bool_results) == True
 
-    assert evaluate_bool(bool4, container, trace1, FencepostPosition(('at', 0))) == True
-    assert evaluate_bool(bool4, container, trace1, FencepostPosition(('at', 1))) == False
-    assert evaluate_bool(bool4, container, trace1, FencepostPosition(('at', 2))) == False
-    assert evaluate_bool(bool4, container, trace1, FencepostPosition(('at', 3))) == False
+    assert evaluate_bool(bool3, container, trace1, FencepostPosition(('at', 0)), bool_results) == True
+    assert evaluate_bool(bool3, container, trace1, FencepostPosition(('at', 1)), bool_results) == True
+    assert evaluate_bool(bool3, container, trace1, FencepostPosition(('at', 2)), bool_results) == True
+    assert evaluate_bool(bool3, container, trace1, FencepostPosition(('at', 3)), bool_results) == True
 
-    assert evaluate_bool(bool5, container, trace1, FencepostPosition(('at', 0))) == False
-    assert evaluate_bool(bool5, container, trace1, FencepostPosition(('at', 1))) == False
-    assert evaluate_bool(bool5, container, trace1, FencepostPosition(('at', 2))) == False
-    assert evaluate_bool(bool5, container, trace1, FencepostPosition(('at', 3))) == False
-    assert evaluate_bool(bool5, container, trace1, FencepostPosition(('at', 4))) == 'top'
-    assert evaluate_bool(bool5, container, trace1, FencepostPosition('unknown')) == 'unknown'
-    assert evaluate_bool(bool5, container, trace1, FencepostPosition('within_infinite_suffix')) == 'top'
+    assert evaluate_bool(bool4, container, trace1, FencepostPosition(('at', 0)), bool_results) == True
+    assert evaluate_bool(bool4, container, trace1, FencepostPosition(('at', 1)), bool_results) == False
+    assert evaluate_bool(bool4, container, trace1, FencepostPosition(('at', 2)), bool_results) == False
+    assert evaluate_bool(bool4, container, trace1, FencepostPosition(('at', 3)), bool_results) == False
 
-    assert evaluate_bool(bool6, container, trace1, FencepostPosition(('at', 0))) == True
-    assert evaluate_bool(bool6, container, trace1, FencepostPosition(('at', 1))) == False
-    assert evaluate_bool(bool6, container, trace1, FencepostPosition(('at', 2))) == False
-    assert evaluate_bool(bool6, container, trace1, FencepostPosition(('at', 3))) == True
-    assert evaluate_bool(bool6, container, trace1, FencepostPosition(('at', 3))) == True
+    assert evaluate_bool(bool5, container, trace1, FencepostPosition(('at', 0)), bool_results) == False
+    assert evaluate_bool(bool5, container, trace1, FencepostPosition(('at', 1)), bool_results) == False
+    assert evaluate_bool(bool5, container, trace1, FencepostPosition(('at', 2)), bool_results) == False
+    assert evaluate_bool(bool5, container, trace1, FencepostPosition(('at', 3)), bool_results) == False
+    assert evaluate_bool(bool5, container, trace1, FencepostPosition(('at', 4)), bool_results) == 'top'
+    assert evaluate_bool(bool5, container, trace1, FencepostPosition('unknown'), bool_results) == 'unknown'
+    assert evaluate_bool(bool5, container, trace1, FencepostPosition('within_infinite_suffix'), bool_results) == 'top'
 
-    assert evaluate_bool(bool7, container, trace1, FencepostPosition(('at', 0))) == True
-    assert evaluate_bool(bool7, container, trace1, FencepostPosition(('at', 1))) == True
-    assert evaluate_bool(bool7, container, trace1, FencepostPosition(('at', 2))) == True
-    assert evaluate_bool(bool7, container, trace1, FencepostPosition(('at', 3))) == False
-    assert evaluate_bool(bool7, container, trace1, FencepostPosition(('at', 4))) == 'top'
+    assert evaluate_bool(bool6, container, trace1, FencepostPosition(('at', 0)), bool_results) == True
+    assert evaluate_bool(bool6, container, trace1, FencepostPosition(('at', 1)), bool_results) == False
+    assert evaluate_bool(bool6, container, trace1, FencepostPosition(('at', 2)), bool_results) == False
+    assert evaluate_bool(bool6, container, trace1, FencepostPosition(('at', 3)), bool_results) == True
+    assert evaluate_bool(bool6, container, trace1, FencepostPosition(('at', 3)), bool_results) == True
+
+    assert evaluate_bool(bool7, container, trace1, FencepostPosition(('at', 0)), bool_results) == True
+    assert evaluate_bool(bool7, container, trace1, FencepostPosition(('at', 1)), bool_results) == True
+    assert evaluate_bool(bool7, container, trace1, FencepostPosition(('at', 2)), bool_results) == True
+    assert evaluate_bool(bool7, container, trace1, FencepostPosition(('at', 3)), bool_results) == False
+    assert evaluate_bool(bool7, container, trace1, FencepostPosition(('at', 4)), bool_results) == 'top'
 
 
 
@@ -131,6 +136,8 @@ def test_evaluate_future_gclk():
     bool7: NodeId = container.get_node_id_by_name('bool7')
     bool8: NodeId = container.get_node_id_by_name('bool8')
 
+    bool_results: BoolMemoDict = {}
+
     trace1: Trace = Trace(finite_part=(
         frozenset(['a']),
         frozenset(['b']),
@@ -145,51 +152,51 @@ def test_evaluate_future_gclk():
         frozenset(['a', 'b']),
     ), suffix='bot_omega')
 
-    assert evaluate_bool(bool1, container, trace1, FencepostPosition(('at', 0))) == False
-    assert evaluate_bool(bool1, container, trace1, FencepostPosition(('at', 1))) == False
-    assert evaluate_bool(bool1, container, trace1, FencepostPosition(('at', 2))) == True
+    assert evaluate_bool(bool1, container, trace1, FencepostPosition(('at', 0)), bool_results) == False
+    assert evaluate_bool(bool1, container, trace1, FencepostPosition(('at', 1)), bool_results) == False
+    assert evaluate_bool(bool1, container, trace1, FencepostPosition(('at', 2)), bool_results) == True
 
-    assert evaluate_bool(bool1, container, trace1, FencepostPosition(('at', 3))) == 'top'
-    assert evaluate_bool(bool1, container, trace1, FencepostPosition(('at', 4))) == 'top'
-    assert evaluate_bool(bool1, container, trace2, FencepostPosition(('at', 3))) == 'bot'
-    assert evaluate_bool(bool1, container, trace2, FencepostPosition(('at', 4))) == 'bot'
+    assert evaluate_bool(bool1, container, trace1, FencepostPosition(('at', 3)), bool_results) == 'top'
+    assert evaluate_bool(bool1, container, trace1, FencepostPosition(('at', 4)), bool_results) == 'top'
+    assert evaluate_bool(bool1, container, trace2, FencepostPosition(('at', 3)), bool_results) == 'bot'
+    assert evaluate_bool(bool1, container, trace2, FencepostPosition(('at', 4)), bool_results) == 'bot'
 
-    assert evaluate_bool(bool2, container, trace1, FencepostPosition(('at', 0))) == False
-    assert evaluate_bool(bool2, container, trace1, FencepostPosition(('at', 1))) == False
-    assert evaluate_bool(bool2, container, trace1, FencepostPosition(('at', 2))) == True
-    assert evaluate_bool(bool2, container, trace1, FencepostPosition(('at', 3))) == False
+    assert evaluate_bool(bool2, container, trace1, FencepostPosition(('at', 0)), bool_results) == False
+    assert evaluate_bool(bool2, container, trace1, FencepostPosition(('at', 1)), bool_results) == False
+    assert evaluate_bool(bool2, container, trace1, FencepostPosition(('at', 2)), bool_results) == True
+    assert evaluate_bool(bool2, container, trace1, FencepostPosition(('at', 3)), bool_results) == False
 
-    assert evaluate_bool(bool3, container, trace1, FencepostPosition(('at', 0))) == True
-    assert evaluate_bool(bool3, container, trace1, FencepostPosition(('at', 1))) == False
-    assert evaluate_bool(bool3, container, trace1, FencepostPosition(('at', 2))) == False
-    assert evaluate_bool(bool3, container, trace1, FencepostPosition(('at', 3))) == 'top'
+    assert evaluate_bool(bool3, container, trace1, FencepostPosition(('at', 0)), bool_results) == True
+    assert evaluate_bool(bool3, container, trace1, FencepostPosition(('at', 1)), bool_results) == False
+    assert evaluate_bool(bool3, container, trace1, FencepostPosition(('at', 2)), bool_results) == False
+    assert evaluate_bool(bool3, container, trace1, FencepostPosition(('at', 3)), bool_results) == 'top'
 
-    assert evaluate_bool(bool4, container, trace1, FencepostPosition(('at', 0))) == True
-    assert evaluate_bool(bool4, container, trace1, FencepostPosition(('at', 1))) == False
-    assert evaluate_bool(bool4, container, trace1, FencepostPosition(('at', 2))) == True
-    assert evaluate_bool(bool4, container, trace1, FencepostPosition(('at', 3))) == 'top'
-    assert evaluate_bool(bool4, container, trace1, FencepostPosition(('at', 4))) == 'top'
+    assert evaluate_bool(bool4, container, trace1, FencepostPosition(('at', 0)), bool_results) == True
+    assert evaluate_bool(bool4, container, trace1, FencepostPosition(('at', 1)), bool_results) == False
+    assert evaluate_bool(bool4, container, trace1, FencepostPosition(('at', 2)), bool_results) == True
+    assert evaluate_bool(bool4, container, trace1, FencepostPosition(('at', 3)), bool_results) == 'top'
+    assert evaluate_bool(bool4, container, trace1, FencepostPosition(('at', 4)), bool_results) == 'top'
 
-    assert evaluate_bool(bool5, container, trace1, FencepostPosition(('at', 0))) == True
-    assert evaluate_bool(bool5, container, trace1, FencepostPosition(('at', 1))) == True
-    assert evaluate_bool(bool5, container, trace1, FencepostPosition(('at', 2))) == False
-    assert evaluate_bool(bool5, container, trace1, FencepostPosition(('at', 3))) == 'top'
-    assert evaluate_bool(bool5, container, trace1, FencepostPosition(('at', 4))) == 'top'
+    assert evaluate_bool(bool5, container, trace1, FencepostPosition(('at', 0)), bool_results) == True
+    assert evaluate_bool(bool5, container, trace1, FencepostPosition(('at', 1)), bool_results) == True
+    assert evaluate_bool(bool5, container, trace1, FencepostPosition(('at', 2)), bool_results) == False
+    assert evaluate_bool(bool5, container, trace1, FencepostPosition(('at', 3)), bool_results) == 'top'
+    assert evaluate_bool(bool5, container, trace1, FencepostPosition(('at', 4)), bool_results) == 'top'
 
-    assert evaluate_bool(bool5, container, trace2, FencepostPosition(('at', 0))) == True
-    assert evaluate_bool(bool5, container, trace2, FencepostPosition(('at', 1))) == True
-    assert evaluate_bool(bool5, container, trace2, FencepostPosition(('at', 2))) == False
-    assert evaluate_bool(bool5, container, trace2, FencepostPosition(('at', 3))) == 'bot'
-    assert evaluate_bool(bool5, container, trace2, FencepostPosition(('at', 4))) == 'bot'
+    assert evaluate_bool(bool5, container, trace2, FencepostPosition(('at', 0)), bool_results) == True
+    assert evaluate_bool(bool5, container, trace2, FencepostPosition(('at', 1)), bool_results) == True
+    assert evaluate_bool(bool5, container, trace2, FencepostPosition(('at', 2)), bool_results) == False
+    assert evaluate_bool(bool5, container, trace2, FencepostPosition(('at', 3)), bool_results) == 'bot'
+    assert evaluate_bool(bool5, container, trace2, FencepostPosition(('at', 4)), bool_results) == 'bot'
 
-    assert evaluate_bool(bool6, container, trace1, FencepostPosition(('at', 3))) == 'top'
-    assert evaluate_bool(bool6, container, trace2, FencepostPosition(('at', 3))) == 'bot'
+    assert evaluate_bool(bool6, container, trace1, FencepostPosition(('at', 3)), bool_results) == 'top'
+    assert evaluate_bool(bool6, container, trace2, FencepostPosition(('at', 3)), bool_results) == 'bot'
 
-    assert evaluate_bool(bool7, container, trace1, FencepostPosition(('at', 3))) == False
-    assert evaluate_bool(bool7, container, trace2, FencepostPosition(('at', 3))) == False
+    assert evaluate_bool(bool7, container, trace1, FencepostPosition(('at', 3)), bool_results) == False
+    assert evaluate_bool(bool7, container, trace2, FencepostPosition(('at', 3)), bool_results) == False
 
-    assert evaluate_bool(bool8, container, trace1, FencepostPosition(('at', 3))) == 'top'
-    assert evaluate_bool(bool8, container, trace2, FencepostPosition(('at', 3))) == 'bot'
+    assert evaluate_bool(bool8, container, trace1, FencepostPosition(('at', 3)), bool_results) == 'top'
+    assert evaluate_bool(bool8, container, trace2, FencepostPosition(('at', 3)), bool_results) == 'bot'
 
 
 def test_evaluate_ite():
@@ -213,6 +220,8 @@ def test_evaluate_ite():
     bool2: NodeId = container.get_node_id_by_name('bool2')
     bool3: NodeId = container.get_node_id_by_name('bool3')
 
+    bool_results: BoolMemoDict = {}
+
     trace1: Trace = Trace(finite_part=(
         frozenset(['a']),
         frozenset(['b']),
@@ -222,20 +231,20 @@ def test_evaluate_ite():
 
     trace2: Trace = Trace(finite_part=(), suffix='bot_omega')
 
-    assert evaluate_bool(bool1, container, trace1, FencepostPosition(('at', 0))) == True
-    assert evaluate_bool(bool1, container, trace1, FencepostPosition(('at', 1))) == False
-    assert evaluate_bool(bool1, container, trace1, FencepostPosition(('at', 4))) == 'top'
+    assert evaluate_bool(bool1, container, trace1, FencepostPosition(('at', 0)), bool_results) == True
+    assert evaluate_bool(bool1, container, trace1, FencepostPosition(('at', 1)), bool_results) == False
+    assert evaluate_bool(bool1, container, trace1, FencepostPosition(('at', 4)), bool_results) == 'top'
 
-    assert evaluate_bool(bool2, container, trace1, FencepostPosition(('at', 0))) == False
-    assert evaluate_bool(bool2, container, trace1, FencepostPosition(('at', 1))) == False
-    assert evaluate_bool(bool2, container, trace1, FencepostPosition(('at', 2))) == False
-    assert evaluate_bool(bool2, container, trace1, FencepostPosition(('at', 3))) == True
-    assert evaluate_bool(bool2, container, trace1, FencepostPosition(('at', 4))) == 'top'
+    assert evaluate_bool(bool2, container, trace1, FencepostPosition(('at', 0)), bool_results) == False
+    assert evaluate_bool(bool2, container, trace1, FencepostPosition(('at', 1)), bool_results) == False
+    assert evaluate_bool(bool2, container, trace1, FencepostPosition(('at', 2)), bool_results) == False
+    assert evaluate_bool(bool2, container, trace1, FencepostPosition(('at', 3)), bool_results) == True
+    assert evaluate_bool(bool2, container, trace1, FencepostPosition(('at', 4)), bool_results) == 'top'
 
-    assert evaluate_bool(bool3, container, trace1, FencepostPosition(('at', 0))) == True
-    assert evaluate_bool(bool3, container, trace1, FencepostPosition(('at', 4))) == 'top'
+    assert evaluate_bool(bool3, container, trace1, FencepostPosition(('at', 0)), bool_results) == True
+    assert evaluate_bool(bool3, container, trace1, FencepostPosition(('at', 4)), bool_results) == 'top'
 
-    assert evaluate_bool(bool3, container, trace2, FencepostPosition(('at', 0))) == 'bot'
+    assert evaluate_bool(bool3, container, trace2, FencepostPosition(('at', 0)), bool_results) == 'bot'
 
 
 def test_evaluate_reg():
@@ -265,6 +274,8 @@ def test_evaluate_reg():
     bool4: NodeId = container.get_node_id_by_name('bool4')
     bool5: NodeId = container.get_node_id_by_name('bool5')
 
+    bool_results: BoolMemoDict = {}
+
     trace1: Trace = Trace(finite_part=(
         frozenset(['a']),
         frozenset(['b']),
@@ -272,36 +283,36 @@ def test_evaluate_reg():
         frozenset(['a', 'b']),
     ), suffix='top_omega')
 
-    assert evaluate_bool(bool1, container, trace1, FencepostPosition(('at', 0))) == True
-    assert evaluate_bool(bool1, container, trace1, FencepostPosition(('at', 1))) == True
-    assert evaluate_bool(bool1, container, trace1, FencepostPosition(('at', 2))) == False
-    assert evaluate_bool(bool1, container, trace1, FencepostPosition(('at', 3))) == False
-    assert evaluate_bool(bool1, container, trace1, FencepostPosition(('at', 4))) == 'top'
+    assert evaluate_bool(bool1, container, trace1, FencepostPosition(('at', 0)), bool_results) == True
+    assert evaluate_bool(bool1, container, trace1, FencepostPosition(('at', 1)), bool_results) == True
+    assert evaluate_bool(bool1, container, trace1, FencepostPosition(('at', 2)), bool_results) == False
+    assert evaluate_bool(bool1, container, trace1, FencepostPosition(('at', 3)), bool_results) == False
+    assert evaluate_bool(bool1, container, trace1, FencepostPosition(('at', 4)), bool_results) == 'top'
 
-    assert evaluate_bool(bool2, container, trace1, FencepostPosition(('at', 0))) == False
-    assert evaluate_bool(bool2, container, trace1, FencepostPosition(('at', 1))) == True
-    assert evaluate_bool(bool2, container, trace1, FencepostPosition(('at', 2))) == True
-    assert evaluate_bool(bool2, container, trace1, FencepostPosition(('at', 3))) == False
-    assert evaluate_bool(bool2, container, trace1, FencepostPosition(('at', 4))) == 'top'
+    assert evaluate_bool(bool2, container, trace1, FencepostPosition(('at', 0)), bool_results) == False
+    assert evaluate_bool(bool2, container, trace1, FencepostPosition(('at', 1)), bool_results) == True
+    assert evaluate_bool(bool2, container, trace1, FencepostPosition(('at', 2)), bool_results) == True
+    assert evaluate_bool(bool2, container, trace1, FencepostPosition(('at', 3)), bool_results) == False
+    assert evaluate_bool(bool2, container, trace1, FencepostPosition(('at', 4)), bool_results) == 'top'
 
-    assert evaluate_bool(bool3, container, trace1, FencepostPosition(('at', 0))) == False
-    assert evaluate_bool(bool3, container, trace1, FencepostPosition(('at', 1))) == True
-    assert evaluate_bool(bool3, container, trace1, FencepostPosition(('at', 2))) == True
-    assert evaluate_bool(bool3, container, trace1, FencepostPosition(('at', 3))) == True
-    assert evaluate_bool(bool3, container, trace1, FencepostPosition(('at', 4))) == 'top'
+    assert evaluate_bool(bool3, container, trace1, FencepostPosition(('at', 0)), bool_results) == False
+    assert evaluate_bool(bool3, container, trace1, FencepostPosition(('at', 1)), bool_results) == True
+    assert evaluate_bool(bool3, container, trace1, FencepostPosition(('at', 2)), bool_results) == True
+    assert evaluate_bool(bool3, container, trace1, FencepostPosition(('at', 3)), bool_results) == True
+    assert evaluate_bool(bool3, container, trace1, FencepostPosition(('at', 4)), bool_results) == 'top'
 
-    assert evaluate_bool(bool4, container, trace1, FencepostPosition(('at', 0))) == False
-    assert evaluate_bool(bool4, container, trace1, FencepostPosition(('at', 1))) == False
-    assert evaluate_bool(bool4, container, trace1, FencepostPosition(('at', 2))) == False
-    assert evaluate_bool(bool4, container, trace1, FencepostPosition(('at', 3))) == True
-    assert evaluate_bool(bool4, container, trace1, FencepostPosition(('at', 4))) == 'top'
+    assert evaluate_bool(bool4, container, trace1, FencepostPosition(('at', 0)), bool_results) == False
+    assert evaluate_bool(bool4, container, trace1, FencepostPosition(('at', 1)), bool_results) == False
+    assert evaluate_bool(bool4, container, trace1, FencepostPosition(('at', 2)), bool_results) == False
+    assert evaluate_bool(bool4, container, trace1, FencepostPosition(('at', 3)), bool_results) == True
+    assert evaluate_bool(bool4, container, trace1, FencepostPosition(('at', 4)), bool_results) == 'top'
 
-    assert evaluate_bool(bool5, container, trace1, FencepostPosition(('at', 0))) == False
-    assert evaluate_bool(bool5, container, trace1, FencepostPosition(('at', 1))) == False
-    assert evaluate_bool(bool5, container, trace1, FencepostPosition(('at', 2))) == True
-    assert evaluate_bool(bool5, container, trace1, FencepostPosition(('at', 3))) == False
-    assert evaluate_bool(bool5, container, trace1, FencepostPosition(('at', 4))) == 'top'
-    assert evaluate_bool(bool5, container, trace1, FencepostPosition('within_infinite_suffix')) == 'top'
+    assert evaluate_bool(bool5, container, trace1, FencepostPosition(('at', 0)), bool_results) == False
+    assert evaluate_bool(bool5, container, trace1, FencepostPosition(('at', 1)), bool_results) == False
+    assert evaluate_bool(bool5, container, trace1, FencepostPosition(('at', 2)), bool_results) == True
+    assert evaluate_bool(bool5, container, trace1, FencepostPosition(('at', 3)), bool_results) == False
+    assert evaluate_bool(bool5, container, trace1, FencepostPosition(('at', 4)), bool_results) == 'top'
+    assert evaluate_bool(bool5, container, trace1, FencepostPosition('within_infinite_suffix'), bool_results) == 'top'
 
 
 def test_evaluate_sequence_matches():
@@ -414,6 +425,9 @@ def test_evaluate_sequence_matches():
     seq17: NodeId = container.get_node_id_by_name('seq17')
     seq18: NodeId = container.get_node_id_by_name('seq18')
 
+    bool_results: BoolMemoDict = {}
+    seq_results: SequenceMemoDict = {}
+
     trace1: Trace = Trace(finite_part=(
         frozenset(['a', 'b']),
         frozenset(['b']),
@@ -421,58 +435,58 @@ def test_evaluate_sequence_matches():
         frozenset(['a', 'b']),
     ), suffix='top_omega')
 
-    assert sequence_matches(seq0, container, trace1, FencepostPosition(('at', 0))) == frozenset([FencepostPosition(('at', 1))])
-    assert sequence_matches(seq0, container, trace1, FencepostPosition(('at', 1))) == frozenset()
-    assert sequence_matches(seq0, container, trace1, FencepostPosition(('at', 2))) == frozenset()
-    assert sequence_matches(seq0, container, trace1, FencepostPosition(('at', 3))) == frozenset([FencepostPosition(('at', 4))])
-    assert sequence_matches(seq0, container, trace1, FencepostPosition(('at', 4))) == frozenset([FencepostPosition('within_infinite_suffix')])
-    assert sequence_matches(seq0, container, trace1, FencepostPosition('within_infinite_suffix')) == frozenset([FencepostPosition('within_infinite_suffix')])
-    assert sequence_matches(seq0, container, trace1, FencepostPosition('unknown')) == frozenset([FencepostPosition('unknown')])
+    assert sequence_matches(seq0, container, trace1, FencepostPosition(('at', 0)), bool_results, seq_results) == frozenset([FencepostPosition(('at', 1))])
+    assert sequence_matches(seq0, container, trace1, FencepostPosition(('at', 1)), bool_results, seq_results) == frozenset()
+    assert sequence_matches(seq0, container, trace1, FencepostPosition(('at', 2)), bool_results, seq_results) == frozenset()
+    assert sequence_matches(seq0, container, trace1, FencepostPosition(('at', 3)), bool_results, seq_results) == frozenset([FencepostPosition(('at', 4))])
+    assert sequence_matches(seq0, container, trace1, FencepostPosition(('at', 4)), bool_results, seq_results) == frozenset([FencepostPosition('within_infinite_suffix')])
+    assert sequence_matches(seq0, container, trace1, FencepostPosition('within_infinite_suffix'), bool_results, seq_results) == frozenset([FencepostPosition('within_infinite_suffix')])
+    assert sequence_matches(seq0, container, trace1, FencepostPosition('unknown'), bool_results, seq_results) == frozenset([FencepostPosition('unknown')])
 
-    assert sequence_matches(seq1, container, trace1, FencepostPosition(('at', 0))) == frozenset([FencepostPosition(('at', 1))])
-    assert sequence_matches(seq1, container, trace1, FencepostPosition(('at', 1))) == frozenset([FencepostPosition(('at', 2))])
-    assert sequence_matches(seq1, container, trace1, FencepostPosition(('at', 2))) == frozenset()
-    assert sequence_matches(seq1, container, trace1, FencepostPosition(('at', 3))) == frozenset([FencepostPosition(('at', 4))])
+    assert sequence_matches(seq1, container, trace1, FencepostPosition(('at', 0)), bool_results, seq_results) == frozenset([FencepostPosition(('at', 1))])
+    assert sequence_matches(seq1, container, trace1, FencepostPosition(('at', 1)), bool_results, seq_results) == frozenset([FencepostPosition(('at', 2))])
+    assert sequence_matches(seq1, container, trace1, FencepostPosition(('at', 2)), bool_results, seq_results) == frozenset()
+    assert sequence_matches(seq1, container, trace1, FencepostPosition(('at', 3)), bool_results, seq_results) == frozenset([FencepostPosition(('at', 4))])
 
-    assert sequence_matches(seq2, container, trace1, FencepostPosition(('at', 0))) == frozenset([FencepostPosition(('at', 2))])
-    assert sequence_matches(seq2, container, trace1, FencepostPosition(('at', 1))) == frozenset()
-    assert sequence_matches(seq2, container, trace1, FencepostPosition(('at', 2))) == frozenset()
-    assert sequence_matches(seq2, container, trace1, FencepostPosition(('at', 3))) == frozenset([FencepostPosition('within_infinite_suffix')])
-    assert sequence_matches(seq2, container, trace1, FencepostPosition(('at', 4))) == frozenset([FencepostPosition('within_infinite_suffix')])
+    assert sequence_matches(seq2, container, trace1, FencepostPosition(('at', 0)), bool_results, seq_results) == frozenset([FencepostPosition(('at', 2))])
+    assert sequence_matches(seq2, container, trace1, FencepostPosition(('at', 1)), bool_results, seq_results) == frozenset()
+    assert sequence_matches(seq2, container, trace1, FencepostPosition(('at', 2)), bool_results, seq_results) == frozenset()
+    assert sequence_matches(seq2, container, trace1, FencepostPosition(('at', 3)), bool_results, seq_results) == frozenset([FencepostPosition('within_infinite_suffix')])
+    assert sequence_matches(seq2, container, trace1, FencepostPosition(('at', 4)), bool_results, seq_results) == frozenset([FencepostPosition('within_infinite_suffix')])
 
-    assert sequence_matches(seq3, container, trace1, FencepostPosition(('at', 0))) == \
+    assert sequence_matches(seq3, container, trace1, FencepostPosition(('at', 0)), bool_results, seq_results) == \
         frozenset([FencepostPosition(('at', 1)), FencepostPosition(('at', 2)), FencepostPosition(('at', 3)), FencepostPosition(('at', 4)), FencepostPosition('within_infinite_suffix')])
-    assert sequence_matches(seq3, container, trace1, FencepostPosition(('at', 3))) == \
+    assert sequence_matches(seq3, container, trace1, FencepostPosition(('at', 3)), bool_results, seq_results) == \
         frozenset([FencepostPosition(('at', 4)), FencepostPosition('within_infinite_suffix')])
 
-    assert sequence_matches(seq4, container, trace1, FencepostPosition(('at', 0))) == \
+    assert sequence_matches(seq4, container, trace1, FencepostPosition(('at', 0)), bool_results, seq_results) == \
         frozenset([FencepostPosition(('at', 2)), FencepostPosition(('at', 3))])
-    assert sequence_matches(seq4, container, trace1, FencepostPosition(('at', 3))) == frozenset([FencepostPosition('within_infinite_suffix')])
+    assert sequence_matches(seq4, container, trace1, FencepostPosition(('at', 3)), bool_results, seq_results) == frozenset([FencepostPosition('within_infinite_suffix')])
 
-    assert sequence_matches(seq5, container, trace1, FencepostPosition(('at', 0))) == \
+    assert sequence_matches(seq5, container, trace1, FencepostPosition(('at', 0)), bool_results, seq_results) == \
         frozenset([FencepostPosition(('at', 3)), FencepostPosition(('at', 4)), FencepostPosition('within_infinite_suffix')])
 
-    assert sequence_matches(seq6, container, trace1, FencepostPosition(('at', 0))) == frozenset([FencepostPosition(('at', 1))])
-    assert sequence_matches(seq7, container, trace1, FencepostPosition(('at', 0))) == frozenset([FencepostPosition(('at', 4))])
-    assert sequence_matches(seq8, container, trace1, FencepostPosition(('at', 0))) == frozenset()
+    assert sequence_matches(seq6, container, trace1, FencepostPosition(('at', 0)), bool_results, seq_results) == frozenset([FencepostPosition(('at', 1))])
+    assert sequence_matches(seq7, container, trace1, FencepostPosition(('at', 0)), bool_results, seq_results) == frozenset([FencepostPosition(('at', 4))])
+    assert sequence_matches(seq8, container, trace1, FencepostPosition(('at', 0)), bool_results, seq_results) == frozenset()
 
-    assert sequence_matches(seq9, container, trace1, FencepostPosition(('at', 0))) == frozenset([FencepostPosition(('at', 2))])
-    assert sequence_matches(seq10, container, trace1, FencepostPosition(('at', 0))) == frozenset([FencepostPosition(('at', 4)), FencepostPosition('unknown')])
+    assert sequence_matches(seq9, container, trace1, FencepostPosition(('at', 0)), bool_results, seq_results) == frozenset([FencepostPosition(('at', 2))])
+    assert sequence_matches(seq10, container, trace1, FencepostPosition(('at', 0)), bool_results, seq_results) == frozenset([FencepostPosition(('at', 4)), FencepostPosition('unknown')])
 
-    assert sequence_matches(seq11, container, trace1, FencepostPosition(('at', 0))) == frozenset([FencepostPosition(('at', 1))])
-    assert sequence_matches(seq12, container, trace1, FencepostPosition(('at', 0))) == frozenset([FencepostPosition('within_infinite_suffix')])
-    assert sequence_matches(seq13, container, trace1, FencepostPosition(('at', 0))) == frozenset([FencepostPosition('unknown')])
+    assert sequence_matches(seq11, container, trace1, FencepostPosition(('at', 0)), bool_results, seq_results) == frozenset([FencepostPosition(('at', 1))])
+    assert sequence_matches(seq12, container, trace1, FencepostPosition(('at', 0)), bool_results, seq_results) == frozenset([FencepostPosition('within_infinite_suffix')])
+    assert sequence_matches(seq13, container, trace1, FencepostPosition(('at', 0)), bool_results, seq_results) == frozenset([FencepostPosition('unknown')])
 
-    assert sequence_matches(seq14, container, trace1, FencepostPosition(('at', 0))) == frozenset([FencepostPosition(('at', 1))])
-    assert sequence_matches(seq14, container, trace1, FencepostPosition(('at', 1))) == frozenset()
-    assert sequence_matches(seq15, container, trace1, FencepostPosition(('at', 0))) == frozenset([FencepostPosition(('at', 1))])
-    assert sequence_matches(seq15, container, trace1, FencepostPosition(('at', 1))) == frozenset()
-    assert sequence_matches(seq16, container, trace1, FencepostPosition(('at', 0))) == frozenset([FencepostPosition(('at', 1))])
-    assert sequence_matches(seq16, container, trace1, FencepostPosition(('at', 1))) == frozenset()
-    assert sequence_matches(seq17, container, trace1, FencepostPosition(('at', 0))) == frozenset([FencepostPosition(('at', 1))])
-    assert sequence_matches(seq17, container, trace1, FencepostPosition(('at', 1))) == frozenset()
+    assert sequence_matches(seq14, container, trace1, FencepostPosition(('at', 0)), bool_results, seq_results) == frozenset([FencepostPosition(('at', 1))])
+    assert sequence_matches(seq14, container, trace1, FencepostPosition(('at', 1)), bool_results, seq_results) == frozenset()
+    assert sequence_matches(seq15, container, trace1, FencepostPosition(('at', 0)), bool_results, seq_results) == frozenset([FencepostPosition(('at', 1))])
+    assert sequence_matches(seq15, container, trace1, FencepostPosition(('at', 1)), bool_results, seq_results) == frozenset()
+    assert sequence_matches(seq16, container, trace1, FencepostPosition(('at', 0)), bool_results, seq_results) == frozenset([FencepostPosition(('at', 1))])
+    assert sequence_matches(seq16, container, trace1, FencepostPosition(('at', 1)), bool_results, seq_results) == frozenset()
+    assert sequence_matches(seq17, container, trace1, FencepostPosition(('at', 0)), bool_results, seq_results) == frozenset([FencepostPosition(('at', 1))])
+    assert sequence_matches(seq17, container, trace1, FencepostPosition(('at', 1)), bool_results, seq_results) == frozenset()
 
-    assert sequence_matches(seq18, container, trace1, FencepostPosition(('at', 0))) == frozenset([FencepostPosition('unknown')])
+    assert sequence_matches(seq18, container, trace1, FencepostPosition(('at', 0)), bool_results, seq_results) == frozenset([FencepostPosition('unknown')])
 
     trace2: Trace = Trace(finite_part=(
         frozenset(['a', 'b']),
@@ -481,12 +495,12 @@ def test_evaluate_sequence_matches():
         frozenset(['a', 'b']),
     ), suffix='bot_omega')
 
-    assert sequence_matches(seq0, container, trace2, FencepostPosition(('at', 4))) == frozenset()
-    assert sequence_matches(seq0, container, trace2, FencepostPosition('within_infinite_suffix')) == frozenset()
-    assert sequence_matches(seq2, container, trace2, FencepostPosition(('at', 3))) == frozenset()
-    assert sequence_matches(seq2, container, trace2, FencepostPosition(('at', 4))) == frozenset()
-    assert sequence_matches(seq3, container, trace2, FencepostPosition(('at', 3))) == frozenset([FencepostPosition(('at', 4))])
-    assert sequence_matches(seq12, container, trace2, FencepostPosition(('at', 0))) == frozenset()
+    assert sequence_matches(seq0, container, trace2, FencepostPosition(('at', 4)), bool_results, seq_results) == frozenset()
+    assert sequence_matches(seq0, container, trace2, FencepostPosition('within_infinite_suffix'), bool_results, seq_results) == frozenset()
+    assert sequence_matches(seq2, container, trace2, FencepostPosition(('at', 3)), bool_results, seq_results) == frozenset()
+    assert sequence_matches(seq2, container, trace2, FencepostPosition(('at', 4)), bool_results, seq_results) == frozenset()
+    assert sequence_matches(seq3, container, trace2, FencepostPosition(('at', 3)), bool_results, seq_results) == frozenset([FencepostPosition(('at', 4))])
+    assert sequence_matches(seq12, container, trace2, FencepostPosition(('at', 0)), bool_results, seq_results) == frozenset()
 
     trace3: Trace = Trace(finite_part=(
         'top',
@@ -495,13 +509,13 @@ def test_evaluate_sequence_matches():
         'bot',
     ), suffix='top_omega')
 
-    assert sequence_matches(seq0, container, trace3, FencepostPosition(('at', 0))) == frozenset([FencepostPosition(('at', 1))])
-    assert sequence_matches(seq1, container, trace3, FencepostPosition(('at', 1))) == frozenset([FencepostPosition(('at', 2))])
-    assert sequence_matches(seq1, container, trace3, FencepostPosition(('at', 3))) == frozenset()
-    assert sequence_matches(seq3, container, trace3, FencepostPosition(('at', 0))) == \
+    assert sequence_matches(seq0, container, trace3, FencepostPosition(('at', 0)), bool_results, seq_results) == frozenset([FencepostPosition(('at', 1))])
+    assert sequence_matches(seq1, container, trace3, FencepostPosition(('at', 1)), bool_results, seq_results) == frozenset([FencepostPosition(('at', 2))])
+    assert sequence_matches(seq1, container, trace3, FencepostPosition(('at', 3)), bool_results, seq_results) == frozenset()
+    assert sequence_matches(seq3, container, trace3, FencepostPosition(('at', 0)), bool_results, seq_results) == \
         frozenset([FencepostPosition(('at', 1)), FencepostPosition(('at', 2)), FencepostPosition(('at', 3))])
 
-    assert sequence_matches(seq11, container, trace3, FencepostPosition(('at', 0))) == \
+    assert sequence_matches(seq11, container, trace3, FencepostPosition(('at', 0)), bool_results, seq_results) == \
         frozenset([FencepostPosition(('at', 1)), FencepostPosition(('at', 2))])
 
 
@@ -578,59 +592,64 @@ def test_evaluate_prop_strong_weak():
         frozenset(['a', 'b']),
     ), suffix='top_omega')
 
+
+    bool_results: BoolMemoDict = {}
+    seq_results: SequenceMemoDict = {}
+    prop_results: PropertyMemoDict = {}
+
     # strong
 
-    assert evaluate_property(prop1, container, trace1) == True
-    assert evaluate_property(prop1, container, trace2) == False
-    assert evaluate_property(prop1, container, trace5) == True
-    assert evaluate_property(prop1, container, trace6) == False
-    assert evaluate_property(prop1, container, trace7) == False
+    assert evaluate_property(prop1, container, trace1, bool_results, seq_results, prop_results) == True
+    assert evaluate_property(prop1, container, trace2, bool_results, seq_results, prop_results) == False
+    assert evaluate_property(prop1, container, trace5, bool_results, seq_results, prop_results) == True
+    assert evaluate_property(prop1, container, trace6, bool_results, seq_results, prop_results) == False
+    assert evaluate_property(prop1, container, trace7, bool_results, seq_results, prop_results) == False
 
-    assert evaluate_property(prop2, container, trace1) == True
-    assert evaluate_property(prop2, container, trace2) == True
-    assert evaluate_property(prop2, container, trace3) == False
-    assert evaluate_property(prop2, container, trace4) == False
+    assert evaluate_property(prop2, container, trace1, bool_results, seq_results, prop_results) == True
+    assert evaluate_property(prop2, container, trace2, bool_results, seq_results, prop_results) == True
+    assert evaluate_property(prop2, container, trace3, bool_results, seq_results, prop_results) == False
+    assert evaluate_property(prop2, container, trace4, bool_results, seq_results, prop_results) == False
 
-    assert evaluate_property(prop3, container, trace1) == True
-    assert evaluate_property(prop3, container, trace2) == True
-    assert evaluate_property(prop3, container, trace3) == False
-    assert evaluate_property(prop3, container, trace4) == False
-    assert evaluate_property(prop3, container, trace5) == True
-    assert evaluate_property(prop3, container, trace6) == False
-    assert evaluate_property(prop3, container, trace7) == False
+    assert evaluate_property(prop3, container, trace1, bool_results, seq_results, prop_results) == True
+    assert evaluate_property(prop3, container, trace2, bool_results, seq_results, prop_results) == True
+    assert evaluate_property(prop3, container, trace3, bool_results, seq_results, prop_results) == False
+    assert evaluate_property(prop3, container, trace4, bool_results, seq_results, prop_results) == False
+    assert evaluate_property(prop3, container, trace5, bool_results, seq_results, prop_results) == True
+    assert evaluate_property(prop3, container, trace6, bool_results, seq_results, prop_results) == False
+    assert evaluate_property(prop3, container, trace7, bool_results, seq_results, prop_results) == False
 
-    assert evaluate_property(prop4, container, trace1) == True
-    assert evaluate_property(prop5, container, trace1) == 'unknown'
-    assert evaluate_property(prop5, container, trace8) == False
-    assert evaluate_property(prop4, container, trace2) == True
-    assert evaluate_property(prop5, container, trace2) == 'unknown'
+    assert evaluate_property(prop4, container, trace1, bool_results, seq_results, prop_results) == True
+    assert evaluate_property(prop5, container, trace1, bool_results, seq_results, prop_results) == 'unknown'
+    assert evaluate_property(prop5, container, trace8, bool_results, seq_results, prop_results) == False
+    assert evaluate_property(prop4, container, trace2, bool_results, seq_results, prop_results) == True
+    assert evaluate_property(prop5, container, trace2, bool_results, seq_results, prop_results) == 'unknown'
 
     # weak
 
-    assert evaluate_property(prop1_w, container, trace1) == True
-    assert evaluate_property(prop1_w, container, trace2) == False
-    assert evaluate_property(prop1_w, container, trace5) == True
-    assert evaluate_property(prop1_w, container, trace6) == False
-    assert evaluate_property(prop1_w, container, trace7) == True
+    assert evaluate_property(prop1_w, container, trace1, bool_results, seq_results, prop_results) == True
+    assert evaluate_property(prop1_w, container, trace2, bool_results, seq_results, prop_results) == False
+    assert evaluate_property(prop1_w, container, trace5, bool_results, seq_results, prop_results) == True
+    assert evaluate_property(prop1_w, container, trace6, bool_results, seq_results, prop_results) == False
+    assert evaluate_property(prop1_w, container, trace7, bool_results, seq_results, prop_results) == True
 
-    assert evaluate_property(prop2_w, container, trace1) == True
-    assert evaluate_property(prop2_w, container, trace2) == True
-    assert evaluate_property(prop2_w, container, trace3) == False
-    assert evaluate_property(prop2_w, container, trace4) == True
+    assert evaluate_property(prop2_w, container, trace1, bool_results, seq_results, prop_results) == True
+    assert evaluate_property(prop2_w, container, trace2, bool_results, seq_results, prop_results) == True
+    assert evaluate_property(prop2_w, container, trace3, bool_results, seq_results, prop_results) == False
+    assert evaluate_property(prop2_w, container, trace4, bool_results, seq_results, prop_results) == True
 
-    assert evaluate_property(prop3_w, container, trace1) == True
-    assert evaluate_property(prop3_w, container, trace2) == True
-    assert evaluate_property(prop3_w, container, trace3) == False
-    assert evaluate_property(prop3_w, container, trace4) == True
-    assert evaluate_property(prop3_w, container, trace5) == True
-    assert evaluate_property(prop3_w, container, trace6) == False
-    assert evaluate_property(prop3_w, container, trace7) == True
+    assert evaluate_property(prop3_w, container, trace1, bool_results, seq_results, prop_results) == True
+    assert evaluate_property(prop3_w, container, trace2, bool_results, seq_results, prop_results) == True
+    assert evaluate_property(prop3_w, container, trace3, bool_results, seq_results, prop_results) == False
+    assert evaluate_property(prop3_w, container, trace4, bool_results, seq_results, prop_results) == True
+    assert evaluate_property(prop3_w, container, trace5, bool_results, seq_results, prop_results) == True
+    assert evaluate_property(prop3_w, container, trace6, bool_results, seq_results, prop_results) == False
+    assert evaluate_property(prop3_w, container, trace7, bool_results, seq_results, prop_results) == True
 
-    assert evaluate_property(prop4_w, container, trace1) == True
-    assert evaluate_property(prop5_w, container, trace1) == 'unknown'
-    assert evaluate_property(prop5_w, container, trace8) == False
-    assert evaluate_property(prop4_w, container, trace2) == True
-    assert evaluate_property(prop5_w, container, trace2) == 'unknown'
+    assert evaluate_property(prop4_w, container, trace1, bool_results, seq_results, prop_results) == True
+    assert evaluate_property(prop5_w, container, trace1, bool_results, seq_results, prop_results) == 'unknown'
+    assert evaluate_property(prop5_w, container, trace8, bool_results, seq_results, prop_results) == False
+    assert evaluate_property(prop4_w, container, trace2, bool_results, seq_results, prop_results) == True
+    assert evaluate_property(prop5_w, container, trace2, bool_results, seq_results, prop_results) == 'unknown'
 
 
 def test_evaluate_prop_and_or():
@@ -673,12 +692,16 @@ def test_evaluate_prop_and_or():
         frozenset(['a', 'b']),
     ), suffix='top_omega')
 
-    assert evaluate_property(prop_and_1, container, trace1) == False
-    assert evaluate_property(prop_or_1, container, trace1) == True
-    assert evaluate_property(prop_and_2, container, trace1) == 'unknown'
-    assert evaluate_property(prop_or_2, container, trace1) == True
-    assert evaluate_property(prop_and_3, container, trace1) == False
-    assert evaluate_property(prop_or_3, container, trace1) == 'unknown'
+    bool_results: BoolMemoDict = {}
+    seq_results: SequenceMemoDict = {}
+    prop_results: PropertyMemoDict = {}
+
+    assert evaluate_property(prop_and_1, container, trace1, bool_results, seq_results, prop_results) == False
+    assert evaluate_property(prop_or_1,  container, trace1, bool_results, seq_results, prop_results) == True
+    assert evaluate_property(prop_and_2, container, trace1, bool_results, seq_results, prop_results) == 'unknown'
+    assert evaluate_property(prop_or_2,  container, trace1, bool_results, seq_results, prop_results) == True
+    assert evaluate_property(prop_and_3, container, trace1, bool_results, seq_results, prop_results) == False
+    assert evaluate_property(prop_or_3,  container, trace1, bool_results, seq_results, prop_results) == 'unknown'
 
 
 def test_evaluate_prop_nexttime_strong_nexttime():
@@ -735,22 +758,26 @@ def test_evaluate_prop_nexttime_strong_nexttime():
         frozenset(['a']),
     ), suffix='bot_omega')
 
-    assert evaluate_property(prop_n1, container, trace1) == False
-    assert evaluate_property(prop_n2, container, trace1) == True
-    assert evaluate_property(prop_n3, container, trace1) == True
-    assert evaluate_property(prop_n4, container, trace1) == False
-    assert evaluate_property(prop_n5, container, trace1) == True
+    bool_results: BoolMemoDict = {}
+    seq_results: SequenceMemoDict = {}
+    prop_results: PropertyMemoDict = {}
 
-    assert evaluate_property(prop_sn1, container, trace1) == False
-    assert evaluate_property(prop_sn2, container, trace1) == True
-    assert evaluate_property(prop_sn3, container, trace1) == False
-    assert evaluate_property(prop_sn4, container, trace1) == False
-    assert evaluate_property(prop_sn5, container, trace1) == True
+    assert evaluate_property(prop_n1, container, trace1, bool_results, seq_results, prop_results) == False
+    assert evaluate_property(prop_n2, container, trace1, bool_results, seq_results, prop_results) == True
+    assert evaluate_property(prop_n3, container, trace1, bool_results, seq_results, prop_results) == True
+    assert evaluate_property(prop_n4, container, trace1, bool_results, seq_results, prop_results) == False
+    assert evaluate_property(prop_n5, container, trace1, bool_results, seq_results, prop_results) == True
 
-    assert evaluate_property(prop_n1, container, trace2) == True
-    assert evaluate_property(prop_n1, container, trace3) == False
-    assert evaluate_property(prop_sn1, container, trace2) == True
-    assert evaluate_property(prop_sn1, container, trace3) == False
+    assert evaluate_property(prop_sn1, container, trace1, bool_results, seq_results, prop_results) == False
+    assert evaluate_property(prop_sn2, container, trace1, bool_results, seq_results, prop_results) == True
+    assert evaluate_property(prop_sn3, container, trace1, bool_results, seq_results, prop_results) == False
+    assert evaluate_property(prop_sn4, container, trace1, bool_results, seq_results, prop_results) == False
+    assert evaluate_property(prop_sn5, container, trace1, bool_results, seq_results, prop_results) == True
+
+    assert evaluate_property(prop_n1,  container, trace2, bool_results, seq_results, prop_results) == True
+    assert evaluate_property(prop_n1,  container, trace3, bool_results, seq_results, prop_results) == False
+    assert evaluate_property(prop_sn1, container, trace2, bool_results, seq_results, prop_results) == True
+    assert evaluate_property(prop_sn1, container, trace3, bool_results, seq_results, prop_results) == False
 
 
 def test_evaluate_prop_accept_reject_on():
@@ -797,15 +824,19 @@ def test_evaluate_prop_accept_reject_on():
         frozenset(['a', 'b']),
     ), suffix='top_omega')
 
-    assert evaluate_property(prop_acc_1, container, trace1) == True
-    assert evaluate_property(prop_rej_1, container, trace1) == False
-    assert evaluate_property(prop_acc_unknown, container, trace1) == 'unknown'
-    assert evaluate_property(prop_rej_unknown, container, trace1) == False
+    bool_results: BoolMemoDict = {}
+    seq_results: SequenceMemoDict = {}
+    prop_results: PropertyMemoDict = {}
 
-    assert evaluate_property(prop_acc_1, container, trace2) == True
-    assert evaluate_property(prop_rej_1, container, trace2) == True
-    assert evaluate_property(prop_acc_unknown, container, trace2) == 'unknown'
-    assert evaluate_property(prop_rej_unknown, container, trace2) == 'unknown'
+    assert evaluate_property(prop_acc_1, container, trace1, bool_results, seq_results, prop_results) == True
+    assert evaluate_property(prop_rej_1, container, trace1, bool_results, seq_results, prop_results) == False
+    assert evaluate_property(prop_acc_unknown, container, trace1, bool_results, seq_results, prop_results) == 'unknown'
+    assert evaluate_property(prop_rej_unknown, container, trace1, bool_results, seq_results, prop_results) == False
+
+    assert evaluate_property(prop_acc_1, container, trace2, bool_results, seq_results, prop_results) == True
+    assert evaluate_property(prop_rej_1, container, trace2, bool_results, seq_results, prop_results) == True
+    assert evaluate_property(prop_acc_unknown, container, trace2, bool_results, seq_results, prop_results) == 'unknown'
+    assert evaluate_property(prop_rej_unknown, container, trace2, bool_results, seq_results, prop_results) == 'unknown'
 
 
 def test_evaluate_prop_overlapped_implication():
@@ -870,33 +901,37 @@ def test_evaluate_prop_overlapped_implication():
         frozenset(['a', 'b', 'c']),
     ), suffix='bot_omega')
 
-    assert evaluate_property(prop0, container, trace1) == True
-    assert evaluate_property(prop1, container, trace1) == True
-    assert evaluate_property(prop2, container, trace1) == False
+    bool_results: BoolMemoDict = {}
+    seq_results: SequenceMemoDict = {}
+    prop_results: PropertyMemoDict = {}
 
-    assert evaluate_property(prop_unknown, container, trace1) == True
-    assert evaluate_property(prop_unknown, container, trace2) == True
-    assert evaluate_property(prop_unknown, container, trace3) == 'unknown'
+    assert evaluate_property(prop0, container, trace1, bool_results, seq_results, prop_results) == True
+    assert evaluate_property(prop1, container, trace1, bool_results, seq_results, prop_results) == True
+    assert evaluate_property(prop2, container, trace1, bool_results, seq_results, prop_results) == False
 
-    assert evaluate_property(prop0, container, trace2) == True
-    assert evaluate_property(prop1, container, trace2) == True
-    assert evaluate_property(prop2, container, trace2) == False
+    assert evaluate_property(prop_unknown, container, trace1, bool_results, seq_results, prop_results) == True
+    assert evaluate_property(prop_unknown, container, trace2, bool_results, seq_results, prop_results) == True
+    assert evaluate_property(prop_unknown, container, trace3, bool_results, seq_results, prop_results) == 'unknown'
 
-    assert evaluate_property(prop0, container, trace3) == False
-    assert evaluate_property(prop1, container, trace3) == False
-    assert evaluate_property(prop2, container, trace3) == False
+    assert evaluate_property(prop0, container, trace2, bool_results, seq_results, prop_results) == True
+    assert evaluate_property(prop1, container, trace2, bool_results, seq_results, prop_results) == True
+    assert evaluate_property(prop2, container, trace2, bool_results, seq_results, prop_results) == False
 
-    assert evaluate_property(prop3, container, trace1) == True
-    assert evaluate_property(prop3, container, trace2) == True
-    assert evaluate_property(prop3, container, trace3) == False
+    assert evaluate_property(prop0, container, trace3, bool_results, seq_results, prop_results) == False
+    assert evaluate_property(prop1, container, trace3, bool_results, seq_results, prop_results) == False
+    assert evaluate_property(prop2, container, trace3, bool_results, seq_results, prop_results) == False
 
-    assert evaluate_property(prop4, container, trace1) == False
-    assert evaluate_property(prop4, container, trace2) == False
-    assert evaluate_property(prop4, container, trace3) == False
+    assert evaluate_property(prop3, container, trace1, bool_results, seq_results, prop_results) == True
+    assert evaluate_property(prop3, container, trace2, bool_results, seq_results, prop_results) == True
+    assert evaluate_property(prop3, container, trace3, bool_results, seq_results, prop_results) == False
 
-    assert evaluate_property(prop5, container, trace1) == True
-    assert evaluate_property(prop5, container, trace2) == True
-    assert evaluate_property(prop5, container, trace3) == False
+    assert evaluate_property(prop4, container, trace1, bool_results, seq_results, prop_results) == False
+    assert evaluate_property(prop4, container, trace2, bool_results, seq_results, prop_results) == False
+    assert evaluate_property(prop4, container, trace3, bool_results, seq_results, prop_results) == False
+
+    assert evaluate_property(prop5, container, trace1, bool_results, seq_results, prop_results) == True
+    assert evaluate_property(prop5, container, trace2, bool_results, seq_results, prop_results) == True
+    assert evaluate_property(prop5, container, trace3, bool_results, seq_results, prop_results) == False
 
 
 def test_evaluate_prop_overlapped_followed_by():
@@ -961,33 +996,37 @@ def test_evaluate_prop_overlapped_followed_by():
         frozenset(['a', 'b', 'c']),
     ), suffix='bot_omega')
 
-    assert evaluate_property(prop0, container, trace1) == True
-    assert evaluate_property(prop0, container, trace2) == True
-    assert evaluate_property(prop0, container, trace3) == True
+    bool_results: BoolMemoDict = {}
+    seq_results: SequenceMemoDict = {}
+    prop_results: PropertyMemoDict = {}
 
-    assert evaluate_property(prop_unknown, container, trace1) == False
-    assert evaluate_property(prop_unknown, container, trace2) == 'unknown'
-    assert evaluate_property(prop_unknown, container, trace3) == False
+    assert evaluate_property(prop0, container, trace1, bool_results, seq_results, prop_results) == True
+    assert evaluate_property(prop0, container, trace2, bool_results, seq_results, prop_results) == True
+    assert evaluate_property(prop0, container, trace3, bool_results, seq_results, prop_results) == True
 
-    assert evaluate_property(prop1, container, trace1) == True
-    assert evaluate_property(prop1, container, trace2) == True
-    assert evaluate_property(prop1, container, trace3) == True
+    assert evaluate_property(prop_unknown, container, trace1, bool_results, seq_results, prop_results) == False
+    assert evaluate_property(prop_unknown, container, trace2, bool_results, seq_results, prop_results) == 'unknown'
+    assert evaluate_property(prop_unknown, container, trace3, bool_results, seq_results, prop_results) == False
 
-    assert evaluate_property(prop2, container, trace1) == True
-    assert evaluate_property(prop2, container, trace2) == True
-    assert evaluate_property(prop2, container, trace3) == False
+    assert evaluate_property(prop1, container, trace1, bool_results, seq_results, prop_results) == True
+    assert evaluate_property(prop1, container, trace2, bool_results, seq_results, prop_results) == True
+    assert evaluate_property(prop1, container, trace3, bool_results, seq_results, prop_results) == True
 
-    assert evaluate_property(prop3, container, trace1) == True
-    assert evaluate_property(prop3, container, trace2) == True
-    assert evaluate_property(prop3, container, trace3) == True
+    assert evaluate_property(prop2, container, trace1, bool_results, seq_results, prop_results) == True
+    assert evaluate_property(prop2, container, trace2, bool_results, seq_results, prop_results) == True
+    assert evaluate_property(prop2, container, trace3, bool_results, seq_results, prop_results) == False
 
-    assert evaluate_property(prop4, container, trace1) == True
-    assert evaluate_property(prop4, container, trace2) == True
-    assert evaluate_property(prop4, container, trace3) == True
+    assert evaluate_property(prop3, container, trace1, bool_results, seq_results, prop_results) == True
+    assert evaluate_property(prop3, container, trace2, bool_results, seq_results, prop_results) == True
+    assert evaluate_property(prop3, container, trace3, bool_results, seq_results, prop_results) == True
 
-    assert evaluate_property(prop5, container, trace1) == True
-    assert evaluate_property(prop5, container, trace2) == True
-    assert evaluate_property(prop5, container, trace3) == False
+    assert evaluate_property(prop4, container, trace1, bool_results, seq_results, prop_results) == True
+    assert evaluate_property(prop4, container, trace2, bool_results, seq_results, prop_results) == True
+    assert evaluate_property(prop4, container, trace3, bool_results, seq_results, prop_results) == True
+
+    assert evaluate_property(prop5, container, trace1, bool_results, seq_results, prop_results) == True
+    assert evaluate_property(prop5, container, trace2, bool_results, seq_results, prop_results) == True
+    assert evaluate_property(prop5, container, trace3, bool_results, seq_results, prop_results) == False
 
 
 def test_evaluate_weak_unknown():
@@ -1035,12 +1074,16 @@ def test_evaluate_weak_unknown():
     trace4: Trace = Trace(finite_part=(
     ), suffix='end')
 
-    assert evaluate_property(prop1, container, trace1) == True
-    assert evaluate_property(prop1, container, trace4) == True
-    assert evaluate_property(prop_unknown, container, trace1) == 'unknown'
-    assert evaluate_property(prop_unknown, container, trace2) == False
-    assert evaluate_property(prop_unknown, container, trace3) == 'unknown'
-    assert evaluate_property(prop_unknown, container, trace4) == 'unknown'
+    bool_results: BoolMemoDict = {}
+    seq_results: SequenceMemoDict = {}
+    prop_results: PropertyMemoDict = {}
+
+    assert evaluate_property(prop1, container, trace1, bool_results, seq_results, prop_results) == True
+    assert evaluate_property(prop1, container, trace4, bool_results, seq_results, prop_results) == True
+    assert evaluate_property(prop_unknown, container, trace1, bool_results, seq_results, prop_results) == 'unknown'
+    assert evaluate_property(prop_unknown, container, trace2, bool_results, seq_results, prop_results) == False
+    assert evaluate_property(prop_unknown, container, trace3, bool_results, seq_results, prop_results) == 'unknown'
+    assert evaluate_property(prop_unknown, container, trace4, bool_results, seq_results, prop_results) == 'unknown'
 
 
 def test_evaluate_prop_until():
@@ -1101,32 +1144,36 @@ def test_evaluate_prop_until():
         frozenset(['a', 'b']),
     ), suffix='top_omega')
 
-    assert evaluate_property(prop1, container, trace1) == True
-    assert evaluate_property(prop1, container, trace2) == True
-    assert evaluate_property(prop1, container, trace3) == True
+    bool_results: BoolMemoDict = {}
+    seq_results: SequenceMemoDict = {}
+    prop_results: PropertyMemoDict = {}
 
-    assert evaluate_property(prop2, container, trace1) == False
-    assert evaluate_property(prop2, container, trace2) == False
-    assert evaluate_property(prop2, container, trace3) == False
+    assert evaluate_property(prop1, container, trace1, bool_results, seq_results, prop_results) == True
+    assert evaluate_property(prop1, container, trace2, bool_results, seq_results, prop_results) == True
+    assert evaluate_property(prop1, container, trace3, bool_results, seq_results, prop_results) == True
 
-    assert evaluate_property(prop3, container, trace1) == True
-    assert evaluate_property(prop3, container, trace2) == True
-    assert evaluate_property(prop3, container, trace3) == False
+    assert evaluate_property(prop2, container, trace1, bool_results, seq_results, prop_results) == False
+    assert evaluate_property(prop2, container, trace2, bool_results, seq_results, prop_results) == False
+    assert evaluate_property(prop2, container, trace3, bool_results, seq_results, prop_results) == False
 
-    assert evaluate_property(prop4, container, trace1) == False
-    assert evaluate_property(prop4, container, trace2) == False
-    assert evaluate_property(prop4, container, trace3) == False
-    assert evaluate_property(prop4, container, trace4) == 'unknown'
+    assert evaluate_property(prop3, container, trace1, bool_results, seq_results, prop_results) == True
+    assert evaluate_property(prop3, container, trace2, bool_results, seq_results, prop_results) == True
+    assert evaluate_property(prop3, container, trace3, bool_results, seq_results, prop_results) == False
 
-    assert evaluate_property(prop5, container, trace1) == True
-    assert evaluate_property(prop5, container, trace2) == True
-    assert evaluate_property(prop5, container, trace3) == False
-    assert evaluate_property(prop5, container, trace4) == True
+    assert evaluate_property(prop4, container, trace1, bool_results, seq_results, prop_results) == False
+    assert evaluate_property(prop4, container, trace2, bool_results, seq_results, prop_results) == False
+    assert evaluate_property(prop4, container, trace3, bool_results, seq_results, prop_results) == False
+    assert evaluate_property(prop4, container, trace4, bool_results, seq_results, prop_results) == 'unknown'
 
-    assert evaluate_property(prop6, container, trace1) == True
-    assert evaluate_property(prop6, container, trace2) == True
-    assert evaluate_property(prop6, container, trace3) == True
-    assert evaluate_property(prop6, container, trace4) == True
+    assert evaluate_property(prop5, container, trace1, bool_results, seq_results, prop_results) == True
+    assert evaluate_property(prop5, container, trace2, bool_results, seq_results, prop_results) == True
+    assert evaluate_property(prop5, container, trace3, bool_results, seq_results, prop_results) == False
+    assert evaluate_property(prop5, container, trace4, bool_results, seq_results, prop_results) == True
+
+    assert evaluate_property(prop6, container, trace1, bool_results, seq_results, prop_results) == True
+    assert evaluate_property(prop6, container, trace2, bool_results, seq_results, prop_results) == True
+    assert evaluate_property(prop6, container, trace3, bool_results, seq_results, prop_results) == True
+    assert evaluate_property(prop6, container, trace4, bool_results, seq_results, prop_results) == True
 
 
 def test_evaluate_prop_strong_until_with():
@@ -1187,35 +1234,39 @@ def test_evaluate_prop_strong_until_with():
         frozenset(['a', 'b']),
     ), suffix='top_omega')
 
-    assert evaluate_property(prop1, container, trace1) == True
-    assert evaluate_property(prop1, container, trace2) == True
-    assert evaluate_property(prop1, container, trace3) == True
-    assert evaluate_property(prop1, container, trace4) == True
+    bool_results: BoolMemoDict = {}
+    seq_results: SequenceMemoDict = {}
+    prop_results: PropertyMemoDict = {}
 
-    assert evaluate_property(prop2, container, trace1) == False
-    assert evaluate_property(prop2, container, trace2) == False
-    assert evaluate_property(prop2, container, trace3) == False
-    assert evaluate_property(prop2, container, trace4) == True
+    assert evaluate_property(prop1, container, trace1, bool_results, seq_results, prop_results) == True
+    assert evaluate_property(prop1, container, trace2, bool_results, seq_results, prop_results) == True
+    assert evaluate_property(prop1, container, trace3, bool_results, seq_results, prop_results) == True
+    assert evaluate_property(prop1, container, trace4, bool_results, seq_results, prop_results) == True
 
-    assert evaluate_property(prop3, container, trace1) == False
-    assert evaluate_property(prop3, container, trace2) == True
-    assert evaluate_property(prop3, container, trace3) == False
-    assert evaluate_property(prop3, container, trace4) == True
+    assert evaluate_property(prop2, container, trace1, bool_results, seq_results, prop_results) == False
+    assert evaluate_property(prop2, container, trace2, bool_results, seq_results, prop_results) == False
+    assert evaluate_property(prop2, container, trace3, bool_results, seq_results, prop_results) == False
+    assert evaluate_property(prop2, container, trace4, bool_results, seq_results, prop_results) == True
 
-    assert evaluate_property(prop4, container, trace1) == False
-    assert evaluate_property(prop4, container, trace2) == False
-    assert evaluate_property(prop4, container, trace3) == False
-    assert evaluate_property(prop4, container, trace4) == 'unknown'
+    assert evaluate_property(prop3, container, trace1, bool_results, seq_results, prop_results) == False
+    assert evaluate_property(prop3, container, trace2, bool_results, seq_results, prop_results) == True
+    assert evaluate_property(prop3, container, trace3, bool_results, seq_results, prop_results) == False
+    assert evaluate_property(prop3, container, trace4, bool_results, seq_results, prop_results) == True
 
-    assert evaluate_property(prop5, container, trace1) == 'unknown'
-    assert evaluate_property(prop5, container, trace2) == 'unknown'
-    assert evaluate_property(prop5, container, trace3) == False
-    assert evaluate_property(prop5, container, trace4) == 'unknown'
+    assert evaluate_property(prop4, container, trace1, bool_results, seq_results, prop_results) == False
+    assert evaluate_property(prop4, container, trace2, bool_results, seq_results, prop_results) == False
+    assert evaluate_property(prop4, container, trace3, bool_results, seq_results, prop_results) == False
+    assert evaluate_property(prop4, container, trace4, bool_results, seq_results, prop_results) == 'unknown'
 
-    assert evaluate_property(prop6, container, trace1) == 'unknown'
-    assert evaluate_property(prop6, container, trace2) == 'unknown'
-    assert evaluate_property(prop6, container, trace3) == False
-    assert evaluate_property(prop6, container, trace4) == 'unknown'
+    assert evaluate_property(prop5, container, trace1, bool_results, seq_results, prop_results) == 'unknown'
+    assert evaluate_property(prop5, container, trace2, bool_results, seq_results, prop_results) == 'unknown'
+    assert evaluate_property(prop5, container, trace3, bool_results, seq_results, prop_results) == False
+    assert evaluate_property(prop5, container, trace4, bool_results, seq_results, prop_results) == 'unknown'
+
+    assert evaluate_property(prop6, container, trace1, bool_results, seq_results, prop_results) == 'unknown'
+    assert evaluate_property(prop6, container, trace2, bool_results, seq_results, prop_results) == 'unknown'
+    assert evaluate_property(prop6, container, trace3, bool_results, seq_results, prop_results) == False
+    assert evaluate_property(prop6, container, trace4, bool_results, seq_results, prop_results) == 'unknown'
 
 
 def test_evaluate_prop_not():
@@ -1254,17 +1305,21 @@ def test_evaluate_prop_not():
         frozenset(['a', 'b']),
     ), suffix='bot_omega')
 
-    assert evaluate_property(prop1, container, trace1) == False
-    assert evaluate_property(prop1, container, trace2) == True
-    assert evaluate_property(prop1, container, trace3) == False
+    bool_results: BoolMemoDict = {}
+    seq_results: SequenceMemoDict = {}
+    prop_results: PropertyMemoDict = {}
 
-    assert evaluate_property(prop2, container, trace1) == True
-    assert evaluate_property(prop2, container, trace2) == True
-    assert evaluate_property(prop2, container, trace3) == False
+    assert evaluate_property(prop1, container, trace1, bool_results, seq_results, prop_results) == False
+    assert evaluate_property(prop1, container, trace2, bool_results, seq_results, prop_results) == True
+    assert evaluate_property(prop1, container, trace3, bool_results, seq_results, prop_results) == False
 
-    assert evaluate_property(prop_unknown, container, trace1) == 'unknown'
-    assert evaluate_property(prop_unknown, container, trace2) == True
-    assert evaluate_property(prop_unknown, container, trace3) == 'unknown'
+    assert evaluate_property(prop2, container, trace1, bool_results, seq_results, prop_results) == True
+    assert evaluate_property(prop2, container, trace2, bool_results, seq_results, prop_results) == True
+    assert evaluate_property(prop2, container, trace3, bool_results, seq_results, prop_results) == False
+
+    assert evaluate_property(prop_unknown, container, trace1, bool_results, seq_results, prop_results) == 'unknown'
+    assert evaluate_property(prop_unknown, container, trace2, bool_results, seq_results, prop_results) == True
+    assert evaluate_property(prop_unknown, container, trace3, bool_results, seq_results, prop_results) == 'unknown'
 
 
 def test_evaluate_prop_refuted():
@@ -1338,53 +1393,57 @@ def test_evaluate_prop_refuted():
         frozenset(['a', 'b']),
     ), suffix='bot_omega')
 
-    assert sequence_matches(seq_rep, container, trace1, FencepostPosition(('at', 0))) == \
+    bool_results: BoolMemoDict = {}
+    seq_results: SequenceMemoDict = {}
+    prop_results: PropertyMemoDict = {}
+
+    assert sequence_matches(seq_rep, container, trace1, FencepostPosition(('at', 0)), bool_results, seq_results) == \
         frozenset({FencepostPosition(('at', 1)), FencepostPosition(('at', 2)), FencepostPosition(('at', 3)), FencepostPosition(('at', 4))})
-    assert sequence_matches(a_rep, container, trace1, FencepostPosition(('at', 0))) == \
+    assert sequence_matches(a_rep, container, trace1, FencepostPosition(('at', 0)), bool_results, seq_results) == \
         frozenset({FencepostPosition(('at', 1))})
-    assert sequence_matches(a_something, container, trace1, FencepostPosition(('at', 0))) == \
+    assert sequence_matches(a_something, container, trace1, FencepostPosition(('at', 0)), bool_results, seq_results) == \
         frozenset({FencepostPosition(('at', 2)), FencepostPosition(('at', 3)), FencepostPosition(('at', 4))})
 
-    assert evaluate_property(prop_w1, container, trace1) == True
-    assert evaluate_property(prop_w2, container, trace1) == True
+    assert evaluate_property(prop_w1, container, trace1, bool_results, seq_results, prop_results) == True
+    assert evaluate_property(prop_w2, container, trace1, bool_results, seq_results, prop_results) == True
 
-    assert evaluate_property(prop0, container, trace1) == False
-    assert evaluate_property(prop1, container, trace1) == False
-    assert evaluate_property(prop2, container, trace1) == False
-    assert evaluate_property(prop3, container, trace1) == False
-    assert evaluate_property(prop4, container, trace1) == False
-    assert evaluate_property(prop5, container, trace1) == False
+    assert evaluate_property(prop0, container, trace1, bool_results, seq_results, prop_results) == False
+    assert evaluate_property(prop1, container, trace1, bool_results, seq_results, prop_results) == False
+    assert evaluate_property(prop2, container, trace1, bool_results, seq_results, prop_results) == False
+    assert evaluate_property(prop3, container, trace1, bool_results, seq_results, prop_results) == False
+    assert evaluate_property(prop4, container, trace1, bool_results, seq_results, prop_results) == False
+    assert evaluate_property(prop5, container, trace1, bool_results, seq_results, prop_results) == False
 
-    assert evaluate_property(prop0, container, trace2) == False
-    assert evaluate_property(prop1, container, trace2) == True
-    assert evaluate_property(prop2, container, trace2) == True
-    assert evaluate_property(prop3, container, trace2) == False
-    assert evaluate_property(prop4, container, trace2) == False
-    assert evaluate_property(prop5, container, trace2) == False
+    assert evaluate_property(prop0, container, trace2, bool_results, seq_results, prop_results) == False
+    assert evaluate_property(prop1, container, trace2, bool_results, seq_results, prop_results) == True
+    assert evaluate_property(prop2, container, trace2, bool_results, seq_results, prop_results) == True
+    assert evaluate_property(prop3, container, trace2, bool_results, seq_results, prop_results) == False
+    assert evaluate_property(prop4, container, trace2, bool_results, seq_results, prop_results) == False
+    assert evaluate_property(prop5, container, trace2, bool_results, seq_results, prop_results) == False
 
-    assert evaluate_property(prop0, container, trace3) == False
-    assert evaluate_property(prop1, container, trace3) == False
+    assert evaluate_property(prop0, container, trace3, bool_results, seq_results, prop_results) == False
+    assert evaluate_property(prop1, container, trace3, bool_results, seq_results, prop_results) == False
     # note on semantics: because of the top_omega suffix
     # refuted (= not weak) is evaluated optimistically, and the result is true
     # because in the future the sequence can still be refuted
-    assert evaluate_property(prop2, container, trace3) == True
-    assert evaluate_property(prop3, container, trace3) == True
-    assert evaluate_property(prop4, container, trace3) == True
-    assert evaluate_property(prop5, container, trace3) == True
-    assert evaluate_property(prop1_check, container, trace3) == False
-    assert evaluate_property(prop2_check, container, trace3) == True
+    assert evaluate_property(prop2, container, trace3, bool_results, seq_results, prop_results) == True
+    assert evaluate_property(prop3, container, trace3, bool_results, seq_results, prop_results) == True
+    assert evaluate_property(prop4, container, trace3, bool_results, seq_results, prop_results) == True
+    assert evaluate_property(prop5, container, trace3, bool_results, seq_results, prop_results) == True
+    assert evaluate_property(prop1_check, container, trace3, bool_results, seq_results, prop_results) == False
+    assert evaluate_property(prop2_check, container, trace3, bool_results, seq_results, prop_results) == True
 
-    assert evaluate_property(prop0, container, trace4) == False
-    assert evaluate_property(prop1, container, trace4) == False
+    assert evaluate_property(prop0, container, trace4, bool_results, seq_results, prop_results) == False
+    assert evaluate_property(prop1, container, trace4, bool_results, seq_results, prop_results) == False
     # note on semantics: because of the bot_omega suffix
     # refuted (= not weak) is evaluated pessimistically, and the result is false
     # because in the future the sequence being refuted might fail
-    assert evaluate_property(prop2, container, trace4) == False
-    assert evaluate_property(prop3, container, trace4) == False
-    assert evaluate_property(prop4, container, trace4) == False
-    assert evaluate_property(prop5, container, trace4) == False
-    assert evaluate_property(prop1_check, container, trace4) == False
-    assert evaluate_property(prop2_check, container, trace4) == False
+    assert evaluate_property(prop2, container, trace4, bool_results, seq_results, prop_results) == False
+    assert evaluate_property(prop3, container, trace4, bool_results, seq_results, prop_results) == False
+    assert evaluate_property(prop4, container, trace4, bool_results, seq_results, prop_results) == False
+    assert evaluate_property(prop5, container, trace4, bool_results, seq_results, prop_results) == False
+    assert evaluate_property(prop1_check, container, trace4, bool_results, seq_results, prop_results) == False
+    assert evaluate_property(prop2_check, container, trace4, bool_results, seq_results, prop_results) == False
 
 
 def test_evaluate_prop_not_weak_future_gclk():
@@ -1410,12 +1469,16 @@ def test_evaluate_prop_not_weak_future_gclk():
     trace2 = Trace(finite_part=(frozenset(),), suffix='bot_omega')
     trace3 = Trace(finite_part=(frozenset(),), suffix='end')
 
-    assert evaluate_property(prop1, container, trace1) == True
-    assert evaluate_property(prop2, container, trace1) == True
-    assert evaluate_property(prop1, container, trace2) == False
-    assert evaluate_property(prop2, container, trace2) == False
-    assert evaluate_property(prop1, container, trace3) == False
-    assert evaluate_property(prop2, container, trace3) == False
+    bool_results: BoolMemoDict = {}
+    seq_results: SequenceMemoDict = {}
+    prop_results: PropertyMemoDict = {}
+
+    assert evaluate_property(prop1, container, trace1, bool_results, seq_results, prop_results) == True
+    assert evaluate_property(prop2, container, trace1, bool_results, seq_results, prop_results) == True
+    assert evaluate_property(prop1, container, trace2, bool_results, seq_results, prop_results) == False
+    assert evaluate_property(prop2, container, trace2, bool_results, seq_results, prop_results) == False
+    assert evaluate_property(prop1, container, trace3, bool_results, seq_results, prop_results) == False
+    assert evaluate_property(prop2, container, trace3, bool_results, seq_results, prop_results) == False
 
 
 def test_evaluate_prop_not_not_until():
@@ -1441,8 +1504,127 @@ def test_evaluate_prop_not_not_until():
     prop1: NodeId = container.get_node_id_by_name('prop1')
     prop2: NodeId = container.get_node_id_by_name('prop2')
 
-    assert evaluate_property(prop1, container, trace1) == True
-    assert evaluate_property(prop2, container, trace1) == True
+    bool_results: BoolMemoDict = {}
+    seq_results: SequenceMemoDict = {}
+    prop_results: PropertyMemoDict = {}
+
+    assert evaluate_property(prop1, container, trace1, bool_results, seq_results, prop_results) == True
+    assert evaluate_property(prop2, container, trace1, bool_results, seq_results, prop_results) == True
+
+
+def test_evaluate_prop_recursive():
+
+    doc_str: str = """(document
+        (declare-input a)
+
+        (declare-rec (declare prop1
+            (prop-and
+                (prop-weak-bool a)
+                (prop-overlapped-implication
+                    (seq-repeat (range 2 2) (seq-bool (constant true)))
+                    prop1))))
+    )"""
+
+    trace1 = Trace(finite_part=(
+        frozenset({'a'}),
+        frozenset({'a'}),
+        frozenset({'a'}),
+        frozenset({'a'}),
+    ), suffix='end')
+
+    trace2 = Trace(finite_part=(
+        frozenset({'a'}),
+        frozenset({'a'}),
+        frozenset(),
+        frozenset({'a'}),
+    ), suffix='end')
+
+    trace3 = Trace(finite_part=(
+        frozenset({'a'}),
+        frozenset({'a'}),
+        frozenset({'a'}),
+        frozenset({'a'}),
+    ), suffix='bot_omega')
+
+    trace4 = Trace(finite_part=(
+        frozenset({'a'}),
+        frozenset({'a'}),
+        frozenset({'a'}),
+        frozenset({'a'}),
+    ), suffix='top_omega')
+
+    container: IrContainer = IrContainer()
+    parse_document(parse_raw_sexpr(doc_str), container)
+
+    prop1: NodeId = container.get_node_id_by_name('prop1')
+
+    bool_results: BoolMemoDict = {}
+    seq_results: SequenceMemoDict = {}
+    prop_results: PropertyMemoDict = {}
+
+    assert evaluate_property(prop1, container, trace1, bool_results, seq_results, prop_results) == True
+    assert evaluate_property(prop1, container, trace2, bool_results, seq_results, prop_results) == False
+    assert evaluate_property(prop1, container, trace3, bool_results, seq_results, prop_results) == False
+    assert evaluate_property(prop1, container, trace4, bool_results, seq_results, prop_results) == True
+
+
+def test_evaluate_prop_mutually_recursive():
+
+    doc_str: str = """(document
+        (declare-input a)
+        (declare-input b)
+
+        (declare-rec
+            (declare prop1 (prop-and
+                (prop-weak-bool a)
+                (prop-overlapped-implication
+                    (seq-repeat (range 2 2) (seq-bool (constant true)))
+                     prop2)))
+            (declare prop2 (prop-and
+                (prop-weak-bool b)
+                (prop-overlapped-implication
+                    (seq-repeat (range 2 2) (seq-bool (constant true)))
+                    prop1))))
+    )"""
+
+    trace1 = Trace(finite_part=(
+        frozenset({'a'}),
+        frozenset({'b'}),
+        frozenset({'a'}),
+        frozenset({'b'}),
+    ), suffix='end')
+
+    trace2 = Trace(finite_part=(
+        frozenset({'b'}),
+        frozenset({'a'}),
+        frozenset({'b'}),
+        frozenset({'a'}),
+    ), suffix='end')
+
+    trace3 = Trace(finite_part=(
+        frozenset({'a', 'b'}),
+        frozenset({'a', 'b'}),
+        frozenset(),
+        frozenset({'a', 'b'}),
+    ), suffix='top_omega')
+
+    container: IrContainer = IrContainer()
+    parse_document(parse_raw_sexpr(doc_str), container)
+
+    prop1: NodeId = container.get_node_id_by_name('prop1')
+    prop2: NodeId = container.get_node_id_by_name('prop2')
+
+    bool_results: BoolMemoDict = {}
+    seq_results: SequenceMemoDict = {}
+    prop_results: PropertyMemoDict = {}
+
+    assert evaluate_property(prop1, container, trace1, bool_results, seq_results, prop_results) == True
+    assert evaluate_property(prop1, container, trace2, bool_results, seq_results, prop_results) == False
+    assert evaluate_property(prop1, container, trace3, bool_results, seq_results, prop_results) == False
+
+    assert evaluate_property(prop2, container, trace1, bool_results, seq_results, prop_results) == False
+    assert evaluate_property(prop2, container, trace2, bool_results, seq_results, prop_results) == True
+    assert evaluate_property(prop2, container, trace3, bool_results, seq_results, prop_results) == False
 
 
 @settings(verbosity=Verbosity.verbose, max_examples=50, deadline=500)
@@ -1457,7 +1639,11 @@ def test_evaluate_random_no_error(doc_and_trace):
 
     root_node_id: NodeId = container.get_sink_nodes()[0]
 
-    result: MaybeBool = evaluate_property(root_node_id, container, trace)
+    bool_results: BoolMemoDict = {}
+    seq_results: SequenceMemoDict = {}
+    prop_results: PropertyMemoDict = {}
+
+    result: MaybeBool = evaluate_property(root_node_id, container, trace, bool_results, seq_results, prop_results)
 
     logger.debug('doc: %s', doc)
     logger.debug('trace: %s', trace)

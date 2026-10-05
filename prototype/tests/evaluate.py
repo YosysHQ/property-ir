@@ -64,6 +64,9 @@ logger = getLogger(__name__)
 
 type MaybeBool = bool | Literal['unknown', 'top', 'bot']
 
+type BoolMemoDict = dict[tuple[NodeId, Trace, FencepostPosition], MaybeBool]
+type SequenceMemoDict = dict[tuple[NodeId, Trace, FencepostPosition], frozenset[FencepostPosition]]
+type PropertyMemoDict = dict[tuple[NodeId, Trace], MaybeBool]
 
 
 @dataclass(frozen=True)
@@ -253,12 +256,18 @@ def eval_xor(value1: MaybeBool, value2: MaybeBool) -> MaybeBool:
     return eval_or({sub_result1, sub_result2})
 
 
-def evaluate_bool(node_id: NodeId[Bool], container: IrContainer, trace: Trace, pos: FencepostPosition) -> MaybeBool:
+def evaluate_bool(node_id: NodeId[Bool],
+    container: IrContainer,
+    trace: Trace,
+    pos: FencepostPosition,
+    bool_results: BoolMemoDict) -> MaybeBool:
     """Evaluate a Bool type node starting at a specific fencepost position in
     some input trace. It is assumed that the Bool does not contain cycles."""
 
     node: PropertyIrNode = container[node_id]
     assert(isinstance(node, Bool))
+
+    logger.debug('Evaluate bool %s on trace %s at position %s', node, trace, pos)
 
     # because we get the position where the evaluation starts
     # we are already in the infinite suffix at the last fencepost position
@@ -266,96 +275,107 @@ def evaluate_bool(node_id: NodeId[Bool], container: IrContainer, trace: Trace, p
         if pos.value[1] >= len(trace.finite_part):
             pos = FencepostPosition('within_infinite_suffix')
 
+    if (node_id, trace, pos) in bool_results:
+        logger.debug('Found result in bool_results')
+        return bool_results[node_id, trace, pos]
+
+    result: MaybeBool | None = None
+
+    # special symbols
+
     if pos.value == 'within_infinite_suffix':
         match(trace.suffix):
             case('top_omega'):
-                return 'top'
+                result = 'top'
             case('bot_omega' | 'bot_star_top_omega' | 'end'):
-                return 'bot'
+                result = 'bot'
             case('top_star_bot_omega'):
-                return 'unknown'
+                result = 'unknown'
     elif pos.value == 'unknown':
-        return 'unknown'
+        result = 'unknown'
 
-    if trace.finite_part[pos.value[1]] == 'top':
-        return 'top'
+    elif trace.finite_part[pos.value[1]] == 'top':
+        result = 'top'
     elif trace.finite_part[pos.value[1]] == 'bot':
-        return 'bot'
+        result = 'bot'
 
+    # evaluate primitives
 
-    if isinstance(node, Constant):
-        return node.value
+    elif isinstance(node, Constant):
+        result = node.value
 
-    if isinstance(node, Signal):
-        return node.signal_name in trace.finite_part[pos.value[1]]
+    elif isinstance(node, Signal):
+        result = node.signal_name in trace.finite_part[pos.value[1]]
 
-    if isinstance(node, Not):
-        child_value: MaybeBool = evaluate_bool(node.child, container, trace, pos)
-        return eval_not(child_value)
+    elif isinstance(node, Not):
+        child_value: MaybeBool = evaluate_bool(node.child, container, trace, pos, bool_results)
+        result = eval_not(child_value)
 
     elif isinstance(node, And):
-        child_values: set[MaybeBool] = {evaluate_bool(child_id, container, trace, pos) for child_id in node.children}
-        return eval_and(child_values)
+        child_values: set[MaybeBool] = {evaluate_bool(child_id, container, trace, pos, bool_results) for child_id in node.children}
+        result = eval_and(child_values)
 
     elif isinstance(node, Or):
-        child_values: set[MaybeBool] = {evaluate_bool(child_id, container, trace, pos) for child_id in node.children}
-        return eval_or(child_values)
+        child_values: set[MaybeBool] = {evaluate_bool(child_id, container, trace, pos, bool_results) for child_id in node.children}
+        result = eval_or(child_values)
 
     elif isinstance(node, Xor):
-        value1: MaybeBool = evaluate_bool(node.child1, container, trace, pos)
-        value2: MaybeBool = evaluate_bool(node.child2, container, trace, pos)
-        return eval_xor(value1, value2)
+        value1: MaybeBool = evaluate_bool(node.child1, container, trace, pos, bool_results)
+        value2: MaybeBool = evaluate_bool(node.child2, container, trace, pos, bool_results)
+        result = eval_xor(value1, value2)
 
     elif isinstance(node, Eq):
-        value1: MaybeBool = evaluate_bool(node.child1, container, trace, pos)
-        value2: MaybeBool = evaluate_bool(node.child2, container, trace, pos)
-        return eval_not(eval_xor(value1, value2))
+        value1: MaybeBool = evaluate_bool(node.child1, container, trace, pos, bool_results)
+        value2: MaybeBool = evaluate_bool(node.child2, container, trace, pos, bool_results)
+        result = eval_not(eval_xor(value1, value2))
 
-    if isinstance(node, FutureGclk):
-        return evaluate_bool(node.child, container, trace, pos.next_pos(trace))
+    elif isinstance(node, FutureGclk):
+        result = evaluate_bool(node.child, container, trace, pos.next_pos(trace), bool_results)
 
     elif isinstance(node, (ChangingGclk, FallingGclk, RisingGclk)):
-        clock_value: MaybeBool = evaluate_bool(node.child1, container, trace, pos)
-        clock_defined: MaybeBool = evaluate_bool(node.child2, container, trace, pos)
-        next_clock_value: MaybeBool = evaluate_bool(node.child1, container, trace, pos.next_pos(trace))
-        next_clock_defined: MaybeBool = evaluate_bool(node.child2, container, trace, pos.next_pos(trace))
+        clock_value: MaybeBool = evaluate_bool(node.child1, container, trace, pos, bool_results)
+        clock_defined: MaybeBool = evaluate_bool(node.child2, container, trace, pos, bool_results)
+        next_clock_value: MaybeBool = evaluate_bool(node.child1, container, trace, pos.next_pos(trace), bool_results)
+        next_clock_defined: MaybeBool = evaluate_bool(node.child2, container, trace, pos.next_pos(trace), bool_results)
 
         if isinstance(node, ChangingGclk):
-            return eval_or({eval_xor(clock_value, next_clock_value), eval_xor(clock_defined, next_clock_defined)})
+            result = eval_or({eval_xor(clock_value, next_clock_value), eval_xor(clock_defined, next_clock_defined)})
 
         elif isinstance(node, FallingGclk):
-            return eval_and({
+            result = eval_and({
                 eval_or({clock_value, eval_not(clock_defined)}),
                 eval_and({eval_not(next_clock_value), next_clock_defined})})
 
         elif isinstance(node, RisingGclk):
-            return eval_and({
+            result = eval_and({
                 eval_or({eval_not(clock_value), eval_not(clock_defined)}),
                 eval_and({next_clock_value, next_clock_defined})
             })
 
     elif isinstance(node, Initial):
-        return pos.value[1] == 0
+        result = pos.value[1] == 0
 
     elif isinstance(node, (Ite)):
-        value1: MaybeBool = evaluate_bool(node.child1, container, trace, pos)
-        value2: MaybeBool = evaluate_bool(node.child2, container, trace, pos)
-        value3: MaybeBool = evaluate_bool(node.child3, container, trace, pos)
-        return eval_or({
+        value1: MaybeBool = evaluate_bool(node.child1, container, trace, pos, bool_results)
+        value2: MaybeBool = evaluate_bool(node.child2, container, trace, pos, bool_results)
+        value3: MaybeBool = evaluate_bool(node.child3, container, trace, pos, bool_results)
+        result = eval_or({
             eval_and({value1, value2}),
             eval_and({eval_not(value1), value3}),
         })
 
     elif isinstance(node, (RegGclk)):
         if pos == FencepostPosition(('at', 0)):
-            return evaluate_bool(node.child1, container, trace, pos) # initial value
+            result = evaluate_bool(node.child1, container, trace, pos, bool_results) # initial value
         else:
-            return evaluate_bool(node.child2, container, trace, pos.prev_pos()) # set value
+            result = evaluate_bool(node.child2, container, trace, pos.prev_pos(), bool_results) # set value
 
 
-    # TODO memoization
+    if result is None:
+        result = 'unknown'
+    bool_results[node_id, trace, pos] = result
+    return result
 
-    return 'unknown'
 
 
 
@@ -364,23 +384,23 @@ def evaluate_bool(node_id: NodeId[Bool], container: IrContainer, trace: Trace, p
 #--------------------+
 
 
-def sequence_matches(node_id: NodeId[Sequence], container: IrContainer, trace: Trace, pos: FencepostPosition) -> frozenset[FencepostPosition]:
+
+def sequence_matches_evaluate_primitive(node: Sequence,
+    container: IrContainer,
+    trace: Trace,
+    pos: FencepostPosition,
+    bool_results: BoolMemoDict,
+    seq_results: SequenceMemoDict) -> frozenset[FencepostPosition]:
     """Evaluate a Sequence type node on some input trace starting at a specific
-    fencepost position. The fencepost positions in the returned frozenset are
-    the end points of the sequence matches, so they mark the end of the last
-    matched symbol. It is assumed that the Sequence does not contain cycles."""
-
-    node: PropertyIrNode = container[node_id]
-    assert(isinstance(node, Sequence))
-
-    logger.debug('Compute sequence matches of %s at %s', node, pos)
+    fencepost position. This function is called from sequence_matches as a
+    separate function to facilitate memoization."""
 
     if isinstance(node, SeqNoMatch):
         return frozenset()
 
     elif isinstance(node, SeqBool):
         child_id: NodeId = node.child
-        result: MaybeBool = evaluate_bool(child_id, container, trace, pos)
+        result: MaybeBool = evaluate_bool(child_id, container, trace, pos, bool_results)
         if result in [False, 'bot']:
             return frozenset([])
         if result in [True, 'top']:
@@ -394,7 +414,8 @@ def sequence_matches(node_id: NodeId[Sequence], container: IrContainer, trace: T
         for _ in range(rng.lower_bound):
             next_start_positions = set()
             for start_pos in start_positions:
-                next_start_positions = next_start_positions.union(sequence_matches(node.child2, container, trace, start_pos))
+                next_start_positions = next_start_positions.union(
+                    sequence_matches(node.child2, container, trace, start_pos, bool_results, seq_results))
             start_positions = next_start_positions
         result_positions = result_positions.union(start_positions)
 
@@ -404,7 +425,8 @@ def sequence_matches(node_id: NodeId[Sequence], container: IrContainer, trace: T
             while True:
                 next_start_positions = set()
                 for start_pos in start_positions:
-                    next_start_positions = next_start_positions.union(sequence_matches(node.child2, container, trace, start_pos))
+                    next_start_positions = next_start_positions.union(
+                        sequence_matches(node.child2, container, trace, start_pos, bool_results, seq_results))
                 if start_positions == next_start_positions:
                     return frozenset(result_positions)
                 start_positions = next_start_positions
@@ -414,7 +436,8 @@ def sequence_matches(node_id: NodeId[Sequence], container: IrContainer, trace: T
             for _ in range(rng.upper_bound.value - rng.lower_bound):
                 next_start_positions = set()
                 for start_pos in start_positions:
-                    next_start_positions = next_start_positions.union(sequence_matches(node.child2, container, trace, start_pos))
+                    next_start_positions = next_start_positions.union(
+                        sequence_matches(node.child2, container, trace, start_pos, bool_results, seq_results))
                 start_positions = next_start_positions
                 result_positions = result_positions.union(start_positions)
                 if start_positions == next_start_positions:
@@ -428,7 +451,8 @@ def sequence_matches(node_id: NodeId[Sequence], container: IrContainer, trace: T
         for child_id in node.children:
             next_start_positions = set()
             for start_pos in start_positions:
-                next_start_positions = next_start_positions.union(sequence_matches(child_id, container, trace, start_pos))
+                next_start_positions = next_start_positions.union(
+                    sequence_matches(child_id, container, trace, start_pos, bool_results, seq_results))
             start_positions = next_start_positions
         return frozenset(start_positions)
 
@@ -442,14 +466,16 @@ def sequence_matches(node_id: NodeId[Sequence], container: IrContainer, trace: T
             logger.debug('Start positions at seq-fusion child_id %s: %s', child_id, start_positions)
             next_start_positions = set()
             for start_pos in start_positions:
-                next_start_positions = next_start_positions.union(sequence_matches(child_id, container, trace, start_pos))
+                next_start_positions = next_start_positions.union(
+                    sequence_matches(child_id, container, trace, start_pos, bool_results, seq_results))
             start_positions = next_start_positions
         return frozenset(start_positions)
 
     elif isinstance(node, SeqOr):
         child_matches: set[FencepostPosition] = set()
         for child_id in node.children:
-            child_matches = child_matches.union(sequence_matches(child_id, container, trace, pos))
+            child_matches = child_matches.union(
+                sequence_matches(child_id, container, trace, pos, bool_results, seq_results))
         return frozenset(child_matches)
 
     elif isinstance(node, SeqIntersect):
@@ -457,17 +483,23 @@ def sequence_matches(node_id: NodeId[Sequence], container: IrContainer, trace: T
         first_child: bool = True
         for child_id in node.children:
             if first_child:
-                child_matches = set(sequence_matches(child_id, container, trace, pos))
+                child_matches = set(sequence_matches(child_id, container, trace, pos, bool_results, seq_results))
             first_child = False
-            child_matches = child_matches.intersection(sequence_matches(child_id, container, trace, pos))
+            child_matches = child_matches.intersection(
+                sequence_matches(child_id, container, trace, pos, bool_results, seq_results))
         if FencepostPosition('within_infinite_suffix') in child_matches:
             child_matches.remove(FencepostPosition('within_infinite_suffix'))
             child_matches.add(FencepostPosition('unknown'))
         return frozenset(child_matches)
 
-        # TODO what about matches in the infinite suffix?
-        # they must happen at the same position, but that information is not
-        # available
+        # NOTE
+        # intersection matches in the infinite suffix must happen at the same position
+        # but we do not compute that information in the infinite suffix
+        # this case is very rare, so add 'unknown' to the result
+
+        # the treatment of 'unknown' could be improved by spliiting it into
+        # ('unknown_at', position) and 'unknown_within_infinite_suffix'
+        # but unknown results are very rare in any case
 
     # matches contain the earliest non-top match and all earlier top-matches
     # if the earliest match is in the infinite suffix, only within_infinite_suffix is returned
@@ -476,10 +508,12 @@ def sequence_matches(node_id: NodeId[Sequence], container: IrContainer, trace: T
     # where the first match could happen are considered)
     # if there is any match 'unknown', only 'unknown' will be returned
     elif isinstance(node, SeqFirstMatch):
-        child_matches: set[FencepostPosition] = set(sequence_matches(node.child, container, trace, pos))
+        child_matches: set[FencepostPosition] = set(sequence_matches(node.child, container, trace, pos,
+            bool_results, seq_results))
         if FencepostPosition('unknown') in child_matches:
             return frozenset([FencepostPosition('unknown')])
-        bar_matches: set[FencepostPosition] = set(sequence_matches(node.child, container, trace.bar(), pos))
+        bar_matches: set[FencepostPosition] = set(sequence_matches(node.child, container, trace.bar(), pos,
+            bool_results, seq_results))
         result_matches: set[FencepostPosition] = set()
         for child_match in child_matches:
             smaller_bar_matches: set[FencepostPosition] = {match for match in bar_matches if match < child_match}
@@ -493,6 +527,40 @@ def sequence_matches(node_id: NodeId[Sequence], container: IrContainer, trace: T
 
 
 
+def sequence_matches(node_id: NodeId[Sequence],
+    container: IrContainer,
+    trace: Trace,
+    pos: FencepostPosition,
+    bool_results: BoolMemoDict,
+    seq_results: SequenceMemoDict) -> frozenset[FencepostPosition]:
+    """Evaluate a Sequence type node on some input trace starting at a specific
+    fencepost position. The fencepost positions in the returned frozenset are
+    the end points of the sequence matches, so they mark the end of the last
+    matched symbol. It is assumed that the Sequence does not contain cycles."""
+
+    node: PropertyIrNode = container[node_id]
+    assert(isinstance(node, Sequence))
+
+    logger.debug('Compute sequence matches of %s at %s', node, pos)
+
+    if isinstance(pos.value, tuple):
+        if pos.value[1] >= len(trace.finite_part):
+            pos = FencepostPosition('within_infinite_suffix')
+
+    if (node_id, trace, pos) in seq_results:
+        logger.debug('Found result in seq_results')
+        return seq_results[node_id, trace, pos]
+
+    if pos == FencepostPosition('unknown'):
+        return frozenset([FencepostPosition('unknown')])
+
+    result = sequence_matches_evaluate_primitive(node, container, trace, pos, bool_results, seq_results)
+    seq_results[node_id, trace, pos] = result
+    return result
+
+
+
+
 
 #--------------------+
 #  SIMPLE PROPERTIES |
@@ -501,7 +569,12 @@ def sequence_matches(node_id: NodeId[Sequence], container: IrContainer, trace: T
 
 
 
-def evaluate_accept_reject_on(node: PropertyIrNode, container: IrContainer, trace: Trace) -> tuple[MaybeBool, MaybeBool | None, MaybeBool | None]:
+def evaluate_accept_reject_on(node: PropertyIrNode,
+    container: IrContainer,
+    trace: Trace,
+    bool_results: BoolMemoDict,
+    seq_results: SequenceMemoDict,
+    prop_results: PropertyMemoDict) -> tuple[MaybeBool, MaybeBool | None, MaybeBool | None]:
     """Evaluate a property on the necessary traces to determine the result of a
     prop-accept-on or prop-reject-on primitive. The resulting MaybeBool values,
     if they exist, are the results of the evaluation of the property on the input
@@ -518,21 +591,23 @@ def evaluate_accept_reject_on(node: PropertyIrNode, container: IrContainer, trac
     else:
         raise TypeError('Wrong node type in evaluate_accept_reject_on on node %s', node)
 
-    p_result: MaybeBool = evaluate_property(node.child2, container, trace)
+    p_result: MaybeBool = evaluate_property(node.child2, container, trace, bool_results, seq_results, prop_results)
     earliest_bool_result: MaybeBool | None = None
     unknown_bool_result: MaybeBool | None = None
 
     earliest_bool: int | None = None
     earliest_unknown: int | None = None
     for index in range(len(trace.finite_part) + 1):
-        bool_result: MaybeBool = evaluate_bool(node.child1, container, trace_for_bool, FencepostPosition(('at', index)))
+        bool_result: MaybeBool = evaluate_bool(node.child1, container, trace_for_bool, FencepostPosition(('at', index)), bool_results)
         if bool_result == True:
             earliest_bool = index
             break
         elif bool_result == 'unknown' and earliest_unknown is None:
             earliest_unknown = index
     if earliest_bool is not None:
-        earliest_bool_result = evaluate_property(node.child2, container, trace.replace_from(FencepostPosition(('at', earliest_bool)), suffix))
+        earliest_bool_result = evaluate_property(node.child2, container,
+            trace.replace_from(FencepostPosition(('at', earliest_bool)), suffix),
+            bool_results, seq_results, prop_results)
 
     earlier_unknown = False
     if earliest_unknown is not None and earliest_bool is None:
@@ -542,14 +617,20 @@ def evaluate_accept_reject_on(node: PropertyIrNode, container: IrContainer, trac
             earlier_unknown = True
     if earlier_unknown:
         assert earliest_unknown is not None
-        unknown_bool_result = evaluate_property(node.child2, container, trace.replace_from(FencepostPosition(('at', earliest_unknown)), suffix))
+        unknown_bool_result = evaluate_property(node.child2, container,
+            trace.replace_from(FencepostPosition(('at', earliest_unknown)), suffix),
+            bool_results, seq_results, prop_results)
 
     return (p_result, earliest_bool_result, unknown_bool_result)
 
 
 
 
-def evaluate_strong(node: PropertyIrNode, container: IrContainer, trace: Trace):
+def evaluate_strong(node: PropertyIrNode,
+    container: IrContainer,
+    trace: Trace,
+    bool_results: BoolMemoDict,
+    seq_results: SequenceMemoDict):
     """Evaluate the child sequence of the given node as though it is strong.
     This is used to implement PropStrong, PropWeak, and PropRefuted, where the
     trace gets modified before this method is called."""
@@ -559,7 +640,7 @@ def evaluate_strong(node: PropertyIrNode, container: IrContainer, trace: Trace):
     if trace.suffix == 'end':
         trace = trace.replace_from(FencepostPosition('within_infinite_suffix'), 'bot_omega')
 
-    child_matches: frozenset[FencepostPosition] = sequence_matches(node.child, container, trace, FencepostPosition(('at', 0)))
+    child_matches: frozenset[FencepostPosition] = sequence_matches(node.child, container, trace, FencepostPosition(('at', 0)), bool_results, seq_results)
     logger.debug('child_matches with trace %s in evaluate_strong: %s', trace, child_matches)
     for match in child_matches:
         if isinstance(match.value, tuple) or (match.value == 'within_infinite_suffix' and trace.suffix in ['top_omega']):
@@ -571,12 +652,15 @@ def evaluate_strong(node: PropertyIrNode, container: IrContainer, trace: Trace):
 
 
 
-def evaluate_property(node_id: NodeId[Property], container: IrContainer, trace: Trace) -> MaybeBool:
-
-    node: PropertyIrNode = container[node_id]
-    assert(isinstance(node, Property))
-
-    logger.debug('Evaluate property %s on trace %s', node, trace)
+def evaluate_property_primitive(node: PropertyIrNode,
+    container: IrContainer,
+    trace: Trace,
+    bool_results: BoolMemoDict,
+    seq_results: SequenceMemoDict,
+    prop_results: PropertyMemoDict
+    ) -> MaybeBool:
+    """Evaluate a Property type node on some input trace. This function is called
+    from evaluate_property as a separate function to facilitate memoization."""
 
     if isinstance(node, PropFalse):
         return False
@@ -586,7 +670,7 @@ def evaluate_property(node_id: NodeId[Property], container: IrContainer, trace: 
     elif isinstance(node, PropStrongBool):
         if len(trace.finite_part) == 0 and trace.suffix == 'end':
             return False
-        bool_result: MaybeBool = evaluate_bool(node.child, container, trace, pos=FencepostPosition(('at', 0)))
+        bool_result: MaybeBool = evaluate_bool(node.child, container, trace, FencepostPosition(('at', 0)), bool_results)
         if bool_result in [True, 'top']:
             return True
         elif bool_result in [False, 'bot']:
@@ -594,7 +678,7 @@ def evaluate_property(node_id: NodeId[Property], container: IrContainer, trace: 
         return 'unknown'
 
     elif isinstance(node, PropStrong):
-        return evaluate_strong(node, container, trace)
+        return evaluate_strong(node, container, trace, bool_results, seq_results)
 
     elif isinstance(node, PropWeakBool):
 
@@ -609,7 +693,7 @@ def evaluate_property(node_id: NodeId[Property], container: IrContainer, trace: 
 
         modified_trace: Trace = trace.replace_from(FencepostPosition('within_infinite_suffix'), 'top_omega')
 
-        bool_result: MaybeBool = evaluate_bool(node.child, container, modified_trace, pos=FencepostPosition(('at', 0)))
+        bool_result: MaybeBool = evaluate_bool(node.child, container, modified_trace, FencepostPosition(('at', 0)), bool_results)
         if bool_result in [True, 'top']:
             return True
         elif bool_result in [False, 'bot']:
@@ -618,10 +702,10 @@ def evaluate_property(node_id: NodeId[Property], container: IrContainer, trace: 
 
     elif isinstance(node, PropWeak):
         modified_trace: Trace = trace.replace_from(FencepostPosition('within_infinite_suffix'), 'top_omega')
-        return evaluate_strong(node, container, modified_trace)
+        return evaluate_strong(node, container, modified_trace, bool_results, seq_results)
 
     elif isinstance(node, PropNot):
-        child_result = evaluate_property(node.child, container, trace.bar())
+        child_result = evaluate_property(node.child, container, trace.bar(), bool_results, seq_results, prop_results)
         if child_result == 'unknown':
             return 'unknown'
         return not child_result
@@ -629,7 +713,7 @@ def evaluate_property(node_id: NodeId[Property], container: IrContainer, trace: 
     elif isinstance(node, PropAnd):
         unknown_seen: bool = False
         for child_id in node.children:
-            child_value: MaybeBool = evaluate_property(child_id, container, trace)
+            child_value: MaybeBool = evaluate_property(child_id, container, trace, bool_results, seq_results, prop_results)
             if child_value == False:
                 return False
             elif child_value == 'unknown':
@@ -641,7 +725,7 @@ def evaluate_property(node_id: NodeId[Property], container: IrContainer, trace: 
     elif isinstance(node, PropOr):
         unknown_seen: bool = False
         for child_id in node.children:
-            child_value: MaybeBool = evaluate_property(child_id, container, trace)
+            child_value: MaybeBool = evaluate_property(child_id, container, trace, bool_results, seq_results, prop_results)
             if child_value == True:
                 return True
             elif child_value == 'unknown':
@@ -654,25 +738,28 @@ def evaluate_property(node_id: NodeId[Property], container: IrContainer, trace: 
         shortened_trace: Trace = trace.remove_first_symbols(num=node.child1)
         if len(shortened_trace.finite_part) == 0 and shortened_trace.suffix == 'end':
             return True
-        return evaluate_property(node.child2, container, shortened_trace)
+        return evaluate_property(node.child2, container, shortened_trace, bool_results, seq_results, prop_results)
 
     elif isinstance(node, PropStrongNexttime):
         shortened_trace: Trace = trace.remove_first_symbols(num=node.child1)
         if len(shortened_trace.finite_part) == 0 and shortened_trace.suffix == 'end':
             return False
-        return evaluate_property(node.child2, container, shortened_trace)
+        return evaluate_property(node.child2, container, shortened_trace, bool_results, seq_results, prop_results)
 
     # TODO improve unknown result behavior
     elif isinstance(node, PropOverlappedImplication):
-        all_bar_matches: frozenset[FencepostPosition] = sequence_matches(node.child1, container, trace.bar(), FencepostPosition(('at', 0)))
+        all_bar_matches: frozenset[FencepostPosition] = sequence_matches(
+            node.child1, container, trace.bar(), FencepostPosition(('at', 0)), bool_results, seq_results)
         logger.debug('PropOverlappedImplication all_bar_matches: %s', all_bar_matches)
         unknown_result: bool = False
         for match in all_bar_matches:
             if isinstance(match.value, tuple) or match.value == 'within_infinite_suffix':
                 if isinstance(match.value, tuple):
-                    result: MaybeBool = evaluate_property(node.child2, container, trace.remove_first_symbols(num=match.value[1]-1))
+                    result: MaybeBool = evaluate_property(node.child2, container, trace.remove_first_symbols(num=match.value[1]-1),
+                        bool_results, seq_results, prop_results)
                 else:
-                    result: MaybeBool = evaluate_property(node.child2, container, trace.remove_first_symbols(num=len(trace.finite_part)))
+                    result: MaybeBool = evaluate_property(node.child2, container, trace.remove_first_symbols(num=len(trace.finite_part)),
+                        bool_results, seq_results, prop_results)
                 if result == 'unknown':
                     unknown_result = True
                 elif result == False:
@@ -684,15 +771,20 @@ def evaluate_property(node_id: NodeId[Property], container: IrContainer, trace: 
         return True
 
     elif isinstance(node, PropOverlappedFollowedBy):
-        all_matches: frozenset[FencepostPosition] = sequence_matches(node.child1, container, trace, FencepostPosition(('at', 0)))
+        all_matches: frozenset[FencepostPosition] = sequence_matches(
+            node.child1, container, trace, FencepostPosition(('at', 0)), bool_results, seq_results)
         logger.debug('PropOverlappedFollowedBy all_matches: %s', all_matches)
         unknown_result: bool = False
         for match in all_matches:
             if isinstance(match.value, tuple) or match.value == 'within_infinite_suffix':
                 if isinstance(match.value, tuple):
-                    result: MaybeBool = evaluate_property(node.child2, container, trace.remove_first_symbols(num=match.value[1]-1))
+                    result: MaybeBool = evaluate_property(
+                        node.child2, container, trace.remove_first_symbols(num=match.value[1]-1),
+                        bool_results, seq_results, prop_results)
                 else:
-                    result: MaybeBool = evaluate_property(node.child2, container, trace.remove_first_symbols(num=len(trace.finite_part)))
+                    result: MaybeBool = evaluate_property(
+                        node.child2, container, trace.remove_first_symbols(num=len(trace.finite_part)),
+                        bool_results, seq_results, prop_results)
                 if result == 'unknown':
                     unknown_result = True
                 elif result == True:
@@ -712,8 +804,8 @@ def evaluate_property(node_id: NodeId[Property], container: IrContainer, trace: 
             if len(next_trace.finite_part) == 0 and next_trace.suffix == 'end':
                 break
 
-            p1_result: MaybeBool = evaluate_property(node.child1, container, next_trace)
-            p2_result: MaybeBool = evaluate_property(node.child2, container, next_trace)
+            p1_result: MaybeBool = evaluate_property(node.child1, container, next_trace, bool_results, seq_results, prop_results)
+            p2_result: MaybeBool = evaluate_property(node.child2, container, next_trace, bool_results, seq_results, prop_results)
 
             if p2_result == True and p1_unknown:
                 return 'unknown'
@@ -745,8 +837,8 @@ def evaluate_property(node_id: NodeId[Property], container: IrContainer, trace: 
             if len(next_trace.finite_part) == 0 and next_trace.suffix == 'end':
                 break
 
-            p1_result: MaybeBool = evaluate_property(node.child1, container, next_trace)
-            p2_result: MaybeBool = evaluate_property(node.child2, container, next_trace)
+            p1_result: MaybeBool = evaluate_property(node.child1, container, next_trace, bool_results, seq_results, prop_results)
+            p2_result: MaybeBool = evaluate_property(node.child2, container, next_trace, bool_results, seq_results, prop_results)
 
             if p1_result == True and p2_result == True:
                 if p1_unknown:
@@ -772,7 +864,8 @@ def evaluate_property(node_id: NodeId[Property], container: IrContainer, trace: 
         return False
 
     elif isinstance(node, PropAcceptOn):
-        (p_result, earliest_bool_result, earliest_unknown) = evaluate_accept_reject_on(node, container, trace)
+        (p_result, earliest_bool_result, earliest_unknown) = evaluate_accept_reject_on(node, container, trace,
+            bool_results, seq_results, prop_results)
         if p_result == True or earliest_bool_result == True:
             return True
         elif p_result == 'unknown' or earliest_bool_result == 'unknown' or earliest_unknown in [True, 'unknown']:
@@ -780,7 +873,8 @@ def evaluate_property(node_id: NodeId[Property], container: IrContainer, trace: 
         return False
 
     elif isinstance(node, PropRejectOn):
-        (p_result, earliest_bool_result, earliest_unknown) = evaluate_accept_reject_on(node, container, trace)
+        (p_result, earliest_bool_result, earliest_unknown) = evaluate_accept_reject_on(node, container, trace,
+            bool_results, seq_results, prop_results)
         if p_result == False or earliest_bool_result == False:
             return False
         elif p_result == 'unknown' or earliest_bool_result == 'unknown' or earliest_unknown in [False, 'unknown']:
@@ -793,10 +887,36 @@ def evaluate_property(node_id: NodeId[Property], container: IrContainer, trace: 
         # apply bar (needed for not), then replace suffix by top_omega (to evaluate weak)
 
         modified_trace: Trace = trace.bar().replace_from(FencepostPosition('within_infinite_suffix'), 'top_omega')
-        child_result =  evaluate_strong(node, container, modified_trace)
+        child_result =  evaluate_strong(node, container, modified_trace, bool_results, seq_results)
 
         if child_result == 'unknown':
             return 'unknown'
         return not child_result
 
     return 'unknown'
+
+
+def evaluate_property(node_id: NodeId[Property],
+    container: IrContainer,
+    trace: Trace,
+    bool_results: BoolMemoDict,
+    seq_results: SequenceMemoDict,
+    prop_results: PropertyMemoDict
+    ) -> MaybeBool:
+    """Evaluate a Property type node on some input trace. It is assumed that the
+    input property is valid. This must be checked beforehand. Not checking it may
+    result in an infinite loop if the property is recursive without progressing
+    in time."""
+
+    node: PropertyIrNode = container[node_id]
+    assert(isinstance(node, Property))
+
+    logger.debug('Evaluate property %s on trace %s', node, trace)
+
+    if (node_id, trace) in prop_results:
+        logger.debug('Found result in prop_results')
+        return prop_results[node_id, trace]
+
+    result = evaluate_property_primitive(node, container, trace, bool_results, seq_results, prop_results)
+    prop_results[node_id, trace] = result
+    return result

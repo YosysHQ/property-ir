@@ -16,7 +16,14 @@ from ir.primitives.bool_primitives import (
 )
 from ir.primitives.simple_primitives import PropNot, PropRefuted
 
-from tests.evaluate import MaybeBool, Trace, evaluate_property
+from tests.evaluate import (
+    BoolMemoDict,
+    MaybeBool,
+    PropertyMemoDict,
+    SequenceMemoDict,
+    Trace,
+    evaluate_property,
+)
 from tests.helpers import (
     wrap_multiple_statements_in_document,
     wrap_statement_in_document,
@@ -422,16 +429,24 @@ def check_nnf_random_property_evaluation(doc_and_trace: tuple[str, Trace], visua
     doc: str = doc_and_trace[0]
     trace: Trace = doc_and_trace[1]
 
+    bool_results1: BoolMemoDict = {}
+    seq_results1: SequenceMemoDict = {}
+    prop_results1: PropertyMemoDict = {}
+
+    bool_results2: BoolMemoDict = {}
+    seq_results2: SequenceMemoDict = {}
+    prop_results2: PropertyMemoDict = {}
+
     input_container: IrContainer = IrContainer()
     parse_document(parse_raw_sexpr(doc), input_container)
 
     root_node_id1: NodeId = input_container.get_sink_nodes()[0]
-    result1: MaybeBool = evaluate_property(root_node_id1, input_container, trace)
+    result1: MaybeBool = evaluate_property(root_node_id1, input_container, trace, bool_results1, seq_results1, prop_results1)
 
     output_container: IrContainer = nnf(container=input_container)
 
     root_node_id2: NodeId = output_container.get_sink_nodes()[0]
-    result2: MaybeBool = evaluate_property(root_node_id2, output_container, trace)
+    result2: MaybeBool = evaluate_property(root_node_id2, output_container, trace, bool_results2, seq_results2, prop_results2)
 
     logger.debug('input_doc: %s', doc)
     logger.debug('output_doc: %s', unparse_raw_sexpr(output_container.output_container()))
