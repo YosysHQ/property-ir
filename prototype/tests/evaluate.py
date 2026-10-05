@@ -180,7 +180,7 @@ class FencepostPosition:
             else:
                 return FencepostPosition(('at', self.value[1]+1))
 
-    def prev_pos(self, trace: Trace) -> FencepostPosition:
+    def prev_pos(self) -> FencepostPosition:
         if self.value == 'within_infinite_suffix' or self.value == 'unknown':
             return self
         else:
@@ -347,9 +347,10 @@ def evaluate_bool(node_id: NodeId[Bool], container: IrContainer, trace: Trace, p
         })
 
     elif isinstance(node, (RegGclk)):
-        # TODO
-
-        return 'unknown'
+        if pos == FencepostPosition(('at', 0)):
+            return evaluate_bool(node.child1, container, trace, pos) # initial value
+        else:
+            return evaluate_bool(node.child2, container, trace, pos.prev_pos()) # set value
 
 
     # TODO memoization
@@ -436,7 +437,7 @@ def sequence_matches(node_id: NodeId[Sequence], container: IrContainer, trace: T
         first_child: bool = True
         for child_id in node.children:
             if not first_child:
-                start_positions = {start_pos.prev_pos(trace) for start_pos in start_positions}
+                start_positions = {start_pos.prev_pos() for start_pos in start_positions}
             first_child = False
             logger.debug('Start positions at seq-fusion child_id %s: %s', child_id, start_positions)
             next_start_positions = set()

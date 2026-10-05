@@ -4,7 +4,6 @@ from logging import getLogger
 from hypothesis import Verbosity, given, settings
 from ir.base import IrContainer, NodeId, Property, RawSExpr
 from ir.parsing import parse_document, parse_raw_sexpr
-from ir.primitives.bool_primitives import RegGclk
 
 from tests.evaluate import (
     FencepostPosition,
@@ -90,7 +89,7 @@ def test_evaluate_bool():
     assert evaluate_bool(bool6, container, trace1, FencepostPosition(('at', 1))) == False
     assert evaluate_bool(bool6, container, trace1, FencepostPosition(('at', 2))) == False
     assert evaluate_bool(bool6, container, trace1, FencepostPosition(('at', 3))) == True
-
+    assert evaluate_bool(bool6, container, trace1, FencepostPosition(('at', 3))) == True
 
     assert evaluate_bool(bool7, container, trace1, FencepostPosition(('at', 0))) == True
     assert evaluate_bool(bool7, container, trace1, FencepostPosition(('at', 1))) == True
@@ -237,6 +236,72 @@ def test_evaluate_ite():
     assert evaluate_bool(bool3, container, trace1, FencepostPosition(('at', 4))) == 'top'
 
     assert evaluate_bool(bool3, container, trace2, FencepostPosition(('at', 0))) == 'bot'
+
+
+def test_evaluate_reg():
+
+    doc_str: str = """(document
+        (declare-input a)
+        (declare-input b)
+        (declare-input c)
+
+        (declare bool1 (reg-gclk (true) a))
+        (declare bool2 (reg-gclk (false) (or a b)) )
+        (declare-rec (declare bool3 (reg-gclk (false) (or a bool3)) ))
+        (declare-rec (bool_1 (reg-gclk (false) (or a bool_1)) )
+                     (bool_2 (reg-gclk (false) (or b bool_2)) )
+                     (declare bool4 (reg-gclk (false) (and bool_1 bool_2))))
+        (declare bool5 (reg-gclk (false) (reg-gclk (false) a)))
+
+    )"""
+
+    doc_raw_sexpr: RawSExpr = parse_raw_sexpr(doc_str)
+    container: IrContainer = IrContainer()
+    parse_document(doc_raw_sexpr, container)
+
+    bool1: NodeId = container.get_node_id_by_name('bool1')
+    bool2: NodeId = container.get_node_id_by_name('bool2')
+    bool3: NodeId = container.get_node_id_by_name('bool3')
+    bool4: NodeId = container.get_node_id_by_name('bool4')
+    bool5: NodeId = container.get_node_id_by_name('bool5')
+
+    trace1: Trace = Trace(finite_part=(
+        frozenset(['a']),
+        frozenset(['b']),
+        frozenset([]),
+        frozenset(['a', 'b']),
+    ), suffix='top_omega')
+
+    assert evaluate_bool(bool1, container, trace1, FencepostPosition(('at', 0))) == True
+    assert evaluate_bool(bool1, container, trace1, FencepostPosition(('at', 1))) == True
+    assert evaluate_bool(bool1, container, trace1, FencepostPosition(('at', 2))) == False
+    assert evaluate_bool(bool1, container, trace1, FencepostPosition(('at', 3))) == False
+    assert evaluate_bool(bool1, container, trace1, FencepostPosition(('at', 4))) == 'top'
+
+    assert evaluate_bool(bool2, container, trace1, FencepostPosition(('at', 0))) == False
+    assert evaluate_bool(bool2, container, trace1, FencepostPosition(('at', 1))) == True
+    assert evaluate_bool(bool2, container, trace1, FencepostPosition(('at', 2))) == True
+    assert evaluate_bool(bool2, container, trace1, FencepostPosition(('at', 3))) == False
+    assert evaluate_bool(bool2, container, trace1, FencepostPosition(('at', 4))) == 'top'
+
+    assert evaluate_bool(bool3, container, trace1, FencepostPosition(('at', 0))) == False
+    assert evaluate_bool(bool3, container, trace1, FencepostPosition(('at', 1))) == True
+    assert evaluate_bool(bool3, container, trace1, FencepostPosition(('at', 2))) == True
+    assert evaluate_bool(bool3, container, trace1, FencepostPosition(('at', 3))) == True
+    assert evaluate_bool(bool3, container, trace1, FencepostPosition(('at', 4))) == 'top'
+
+    assert evaluate_bool(bool4, container, trace1, FencepostPosition(('at', 0))) == False
+    assert evaluate_bool(bool4, container, trace1, FencepostPosition(('at', 1))) == False
+    assert evaluate_bool(bool4, container, trace1, FencepostPosition(('at', 2))) == False
+    assert evaluate_bool(bool4, container, trace1, FencepostPosition(('at', 3))) == True
+    assert evaluate_bool(bool4, container, trace1, FencepostPosition(('at', 4))) == 'top'
+
+    assert evaluate_bool(bool5, container, trace1, FencepostPosition(('at', 0))) == False
+    assert evaluate_bool(bool5, container, trace1, FencepostPosition(('at', 1))) == False
+    assert evaluate_bool(bool5, container, trace1, FencepostPosition(('at', 2))) == True
+    assert evaluate_bool(bool5, container, trace1, FencepostPosition(('at', 3))) == False
+    assert evaluate_bool(bool5, container, trace1, FencepostPosition(('at', 4))) == 'top'
+    assert evaluate_bool(bool5, container, trace1, FencepostPosition('within_infinite_suffix')) == 'top'
 
 
 def test_evaluate_sequence_matches():
@@ -1381,7 +1446,7 @@ def test_evaluate_prop_not_not_until():
 
 
 @settings(verbosity=Verbosity.verbose, max_examples=50, deadline=500)
-@given(random_ir_with_trace_simple(final_node_type=Property, primitive_filter=lambda node_type: not issubclass(node_type, RegGclk)))
+@given(random_ir_with_trace_simple(final_node_type=Property))
 def test_evaluate_random_no_error(doc_and_trace):
 
     doc: str = doc_and_trace[0]

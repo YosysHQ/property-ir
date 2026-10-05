@@ -11,7 +11,6 @@ from ir.primitives.bool_primitives import (
     Eq,
     FallingGclk,
     Ite,
-    RegGclk,
     RisingGclk,
     Xor,
 )
@@ -475,7 +474,7 @@ def test_nnf_random_property_evaluation_with_empty_trace(doc_and_trace: tuple[st
 @settings(max_examples=100, deadline=500)
 @given(random_ir_with_trace_simple(final_node_type=PropNot,
     primitive_filter=lambda node_type:
-        not issubclass(node_type, (RegGclk, Xor, Ite, Eq, ChangingGclk, RisingGclk, FallingGclk, PropRefuted)),
+        not issubclass(node_type, (Xor, Ite, Eq, ChangingGclk, RisingGclk, FallingGclk, PropRefuted)),
     trace_min_length=5))
 def test_nnf_random_property_evaluation_no_empty_trace(doc_and_trace: tuple[str, Trace]):
     check_nnf_random_property_evaluation(doc_and_trace)
