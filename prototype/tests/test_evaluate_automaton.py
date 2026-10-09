@@ -220,9 +220,11 @@ def test_automaton_simplify_conf():
         frozenset([n6])
     ])
 
+    empty_conf: Configuration = frozenset()
+
     assert conf1 == simplify_conf(conf1, container)
     assert conf2 == simplify_conf(conf2, container)
-    assert conf5 == simplify_conf(conf5, container)
+    assert empty_conf == simplify_conf(conf5, container)
     assert conf6 == simplify_conf(conf6, container)
 
     assert conf1 == conf_or({conf1}, container)
@@ -231,7 +233,7 @@ def test_automaton_simplify_conf():
     assert conf2 == conf_and({conf2}, container)
 
     assert conf2 == simplify_conf(conf3, container)
-    assert simplify_conf(conf4, container) == frozenset([frozenset([n5])])
+    assert simplify_conf(conf4, container) == frozenset()
 
     assert conf_or({conf6, conf1}, container) == frozenset([frozenset([n1]), frozenset([n2])])
     assert conf_and({conf6, conf1}, container) == frozenset([frozenset([n1, n3]), frozenset([n2, n1])])
@@ -351,8 +353,8 @@ def test_automaton_aut_and():
     )"""
 
     container: IrContainer = IrContainer()
-    container.bypass_placeholders()
     parse_document(parse_raw_sexpr(doc_str), container)
+    container.bypass_placeholders()
 
     #output_directory: Path = Path('./output')
     #container.show_graph(output_directory / 'aut_or.png')
@@ -391,3 +393,152 @@ def test_automaton_aut_and():
 
     assert evaluate_finite_automaton(aut_and_5, container, trace2, FencepostPosition(('at', 0))) == [
         FencepostPosition(('at', 2))]
+
+
+
+def test_automaton_aut_subcall():
+
+    doc_str: str = """(document
+        (declare-input a)
+        (declare-input b)
+        (declare-input c)
+
+        (declare subcall_aut1 (aut-consume a (aut-true) (aut-false)))
+        (declare subcall_aut2 (aut-consume a
+            (aut-consume b (aut-acc (aut-false)) (aut-false))
+            (aut-false))
+        )
+        (declare subcall_aut3 (aut-read a (aut-true) (aut-false)))
+
+        (declare succ_aut1 (aut-acc (aut-false)) )
+        (declare succ_aut2 (aut-consume b (aut-acc (aut-false)) (aut-false)))
+        (declare succ_aut3 (aut-read a (aut-acc (aut-false)) (aut-false)))
+        (declare succ_aut4 (aut-read b (aut-acc (aut-false)) (aut-false)))
+
+        (declare aut_first1 (aut-call-first subcall_aut1 succ_aut1))
+        (declare aut_first2 (aut-call-first subcall_aut1 succ_aut2))
+        (declare aut_first3 (aut-call-first subcall_aut2 succ_aut1))
+        (declare aut_first4 (aut-call-first subcall_aut3 succ_aut1))
+        (declare aut_first5 (aut-call-first subcall_aut3 succ_aut3))
+        (declare aut_first6 (aut-call-first subcall_aut3 succ_aut4))
+
+        (declare aut_ex1 (aut-call-ex subcall_aut1 succ_aut1))
+        (declare aut_ex2 (aut-call-ex subcall_aut1 succ_aut2))
+        (declare aut_ex3 (aut-call-ex subcall_aut2 succ_aut1))
+        (declare aut_ex4 (aut-call-ex subcall_aut3 succ_aut1))
+        (declare aut_ex5 (aut-call-ex subcall_aut3 succ_aut3))
+        (declare aut_ex6 (aut-call-ex subcall_aut3 succ_aut4))
+        (declare aut_ex7 (aut-call-ex succ_aut3 succ_aut4))
+        (declare aut_ex8 (aut-call-ex succ_aut4 succ_aut1))
+
+        (declare nested_call1 (aut-call-ex aut_ex1 succ_aut4))
+        (declare nested_call2 (aut-call-ex aut_ex1 succ_aut2))
+
+        (declare-rec (declare other_aut
+            (aut-consume c (aut-acc other_aut) other_aut)
+        ))
+
+        (declare call_in_or (aut-or
+            aut_ex2
+            other_aut
+        ))
+
+        (declare call_in_and (aut-and
+            aut_ex2
+            other_aut
+        ))
+
+    )"""
+
+    container: IrContainer = IrContainer()
+    parse_document(parse_raw_sexpr(doc_str), container)
+    container.bypass_placeholders()
+
+    #output_directory: Path = Path('./output')
+    #container.show_graph(output_directory / 'aut_or.png')
+
+    aut_first1: NodeId = container.get_node_id_by_name('aut_first1')
+    aut_first2: NodeId = container.get_node_id_by_name('aut_first2')
+    aut_first3: NodeId = container.get_node_id_by_name('aut_first3')
+    subcall_aut2: NodeId = container.get_node_id_by_name('subcall_aut2')
+    aut_first4: NodeId = container.get_node_id_by_name('aut_first4')
+    aut_first5: NodeId = container.get_node_id_by_name('aut_first5')
+    aut_first6: NodeId = container.get_node_id_by_name('aut_first6')
+
+    aut_ex1: NodeId = container.get_node_id_by_name('aut_ex1')
+    aut_ex2: NodeId = container.get_node_id_by_name('aut_ex2')
+    aut_ex3: NodeId = container.get_node_id_by_name('aut_ex3')
+    aut_ex4: NodeId = container.get_node_id_by_name('aut_ex4')
+    aut_ex5: NodeId = container.get_node_id_by_name('aut_ex5')
+    aut_ex6: NodeId = container.get_node_id_by_name('aut_ex6')
+    aut_ex7: NodeId = container.get_node_id_by_name('aut_ex7')
+    aut_ex8: NodeId = container.get_node_id_by_name('aut_ex8')
+
+    nested_call1: NodeId = container.get_node_id_by_name('nested_call1')
+    nested_call2: NodeId = container.get_node_id_by_name('nested_call2')
+
+    call_in_or: NodeId = container.get_node_id_by_name('call_in_or')
+    call_in_and: NodeId = container.get_node_id_by_name('call_in_and')
+    other_aut: NodeId = container.get_node_id_by_name('other_aut')
+
+    trace1 = Trace(finite_part=(
+        frozenset({'a'}),
+        frozenset({'b'}),
+        frozenset({}),
+        frozenset({'c'}),
+    ), suffix='end')
+
+    trace2 = Trace(finite_part=(
+        frozenset({'a'}),
+        frozenset({'a'}),
+        frozenset({'b'}),
+        frozenset({}),
+        frozenset({'b'}),
+        frozenset({}),
+        frozenset({'c'}),
+        frozenset({}),
+    ), suffix='end')
+
+    trace3 = Trace(finite_part=(
+        frozenset({'a'}),
+        frozenset({'a'}),
+        frozenset({'b'}),
+        frozenset({}),
+        frozenset({'b', 'c'}),
+        frozenset({}),
+        frozenset({'c'}),
+        frozenset({}),
+    ), suffix='end')
+
+    assert evaluate_finite_automaton(aut_first1, container, trace1, FencepostPosition(('at', 0))) == [FencepostPosition(('at', 1))]
+    assert evaluate_finite_automaton(aut_first2, container, trace1, FencepostPosition(('at', 0))) == [FencepostPosition(('at', 2))]
+    assert evaluate_finite_automaton(subcall_aut2, container, trace1, FencepostPosition(('at', 0))) == [FencepostPosition(('at', 2))]
+    assert evaluate_finite_automaton(aut_first3, container, trace1, FencepostPosition(('at', 0))) == [FencepostPosition(('at', 2))]
+    assert evaluate_finite_automaton(aut_first4, container, trace1, FencepostPosition(('at', 0))) == [FencepostPosition(('at', 0))]
+    assert evaluate_finite_automaton(aut_first5, container, trace1, FencepostPosition(('at', 0))) == [FencepostPosition(('at', 0))]
+    assert evaluate_finite_automaton(aut_first6, container, trace1, FencepostPosition(('at', 0))) == []
+
+    assert evaluate_finite_automaton(aut_ex1, container, trace1, FencepostPosition(('at', 0))) == [
+        FencepostPosition(('at', 1)), FencepostPosition(('at', 2)), FencepostPosition(('at', 3)), FencepostPosition(('at', 4))]
+    assert evaluate_finite_automaton(aut_ex2, container, trace1, FencepostPosition(('at', 0))) == [FencepostPosition(('at', 2))]
+    assert evaluate_finite_automaton(aut_ex3, container, trace1, FencepostPosition(('at', 0))) == [FencepostPosition(('at', 2))]
+    assert evaluate_finite_automaton(aut_ex4, container, trace1, FencepostPosition(('at', 0))) == [
+        FencepostPosition(('at', 0)), FencepostPosition(('at', 1)), FencepostPosition(('at', 2)), FencepostPosition(('at', 3)), FencepostPosition(('at', 4))]
+    assert evaluate_finite_automaton(aut_ex5, container, trace1, FencepostPosition(('at', 0))) == [FencepostPosition(('at', 0))]
+    assert evaluate_finite_automaton(aut_ex6, container, trace1, FencepostPosition(('at', 0))) == [FencepostPosition(('at', 1))]
+    assert evaluate_finite_automaton(aut_ex7, container, trace1, FencepostPosition(('at', 0))) == []
+    assert evaluate_finite_automaton(aut_ex8, container, trace1, FencepostPosition(('at', 0))) == []
+
+    assert evaluate_finite_automaton(nested_call1, container, trace1, FencepostPosition(('at', 0))) == [FencepostPosition(('at', 1))]
+    assert evaluate_finite_automaton(nested_call2, container, trace1, FencepostPosition(('at', 0))) == [FencepostPosition(('at', 2))]
+
+    assert evaluate_finite_automaton(call_in_or, container, trace2, FencepostPosition(('at', 0))) == [
+        FencepostPosition(('at', 3)), FencepostPosition(('at', 5)), FencepostPosition(('at', 7))]
+
+    assert evaluate_finite_automaton(aut_ex2, container, trace2, FencepostPosition(('at', 0))) == [FencepostPosition(('at', 3)), FencepostPosition(('at', 5))]
+    assert evaluate_finite_automaton(aut_ex2, container, trace3, FencepostPosition(('at', 0))) == [FencepostPosition(('at', 3)), FencepostPosition(('at', 5))]
+    assert evaluate_finite_automaton(other_aut, container, trace2, FencepostPosition(('at', 0))) == [FencepostPosition(('at', 7))]
+    assert evaluate_finite_automaton(other_aut, container, trace3, FencepostPosition(('at', 0))) == [FencepostPosition(('at', 5)), FencepostPosition(('at', 7))]
+
+    assert evaluate_finite_automaton(call_in_and, container, trace2, FencepostPosition(('at', 0))) == []
+    assert evaluate_finite_automaton(call_in_and, container, trace3, FencepostPosition(('at', 0))) == [FencepostPosition(('at', 5))]

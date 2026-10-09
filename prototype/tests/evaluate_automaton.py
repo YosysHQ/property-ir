@@ -1,3 +1,4 @@
+from collections.abc import Callable
 from itertools import product
 from logging import getLogger
 
@@ -23,9 +24,16 @@ from tests.evaluate import FencepostPosition, MaybeBool, Trace, evaluate_bool
 
 logger = getLogger(__name__)
 
-type Configuration = frozenset[frozenset[NodeId]]
+type Configuration = frozenset[frozenset[State]]
 
-EMPTY_CONF: Configuration = frozenset([frozenset()])
+EMPTY_CONF: Configuration = frozenset()
+
+# for subcalls we add delayed states (= NodeIdWithPos) to the configuration
+# (initial state of the successor automaton for all acceptance positions of the subcall automaton)
+# with the FencepostPosition when will become active
+# that is necessary to enter those states with the correct boolean combination
+type NodeIdWithPos = tuple[NodeId, FencepostPosition]
+type State = NodeId | NodeIdWithPos
 
 
 #------------------+
@@ -42,24 +50,28 @@ def simplify_conf(configuration: Configuration, container: IrContainer) -> Confi
 
     logger.debug('simplify configuration %s', configuration)
 
-    candidates: set[frozenset[NodeId]] = set()
+    candidates: set[frozenset[State]] = set()
     false_sinks: set[NodeId] = set()
 
     # conjunction with True -> remove True
     # conjunction with False -> False
     # empty conjunction -> True
     for conjunction in configuration:
-        non_sink_nodes: set[NodeId] = set()
+        non_sink_nodes: set[State] = set()
         true_sinks: set[NodeId] = set()
         has_false: bool = False
-        for node_id in conjunction:
-            if isinstance(container[node_id], AutTrue):
-                true_sinks.add(node_id)
-            elif isinstance(container[node_id], AutFalse):
-                has_false = True
-                false_sinks.add(node_id)
+        for state in conjunction:
+            if isinstance(state, NodeId):
+                node_id: NodeId = state
+                if isinstance(container[node_id], AutTrue):
+                    true_sinks.add(node_id)
+                elif isinstance(container[node_id], AutFalse):
+                    has_false = True
+                    false_sinks.add(node_id)
+                else:
+                    non_sink_nodes.add(node_id)
             else:
-                non_sink_nodes.add(node_id)
+                non_sink_nodes.add(state)
         if not has_false and len(non_sink_nodes) > 0:
             candidates.add(frozenset(non_sink_nodes))
         if not has_false and len(non_sink_nodes) == 0:
@@ -79,12 +91,13 @@ def simplify_conf(configuration: Configuration, container: IrContainer) -> Confi
     # empty disjunction -> False
     # choose one False-sink as a representative of the whole configuration
     if len(candidates) == 0:
-        return frozenset([frozenset([false_sinks.pop()])])
+        return EMPTY_CONF
+        #return frozenset([frozenset([false_sinks.pop()])])
         # TODO choose here the right (empty or False-singleton?)
         #return frozenset([frozenset()])
 
     # remove supersets from the remaining candidates
-    filtered_candidates: set[frozenset[NodeId]] = set()
+    filtered_candidates: set[frozenset[State]] = set()
     for conj1 in candidates:
         is_proper_superset: bool = False
         for conj2 in candidates:
@@ -105,7 +118,7 @@ def conf_and(configurations: set[Configuration], container: IrContainer) -> Conf
 
     logger.debug('AND of %s', configurations)
 
-    crossproduct: set[frozenset[NodeId]] = {frozenset().union(*selection) for selection in product(*configurations)}
+    crossproduct: set[frozenset[State]] = {frozenset().union(*selection) for selection in product(*configurations)}
     return simplify_conf(frozenset(crossproduct), container)
 
 
@@ -114,7 +127,7 @@ def conf_or(configurations: set[Configuration], container: IrContainer) -> Confi
 
     logger.debug('OR of %s', configurations)
 
-    conf_union = frozenset().union(*configurations)
+    conf_union: Configuration = frozenset().union(*configurations)
     return simplify_conf(conf_union, container)
 
 
@@ -146,7 +159,7 @@ def evaluate_finite_automaton_primitive(node_id: NodeId[FiniteAutomaton],
     assert(isinstance(node, FiniteAutomaton))
     node_repr: NodeId = container.merged_nodes.find(node_id)
 
-    result_set: frozenset[frozenset[NodeId]]= frozenset()
+    result_set: Configuration = frozenset()
     acceptance_result: bool = False
 
     if isinstance(node, AutTrue): # stay in this state - accepting
@@ -207,10 +220,44 @@ def evaluate_finite_automaton_primitive(node_id: NodeId[FiniteAutomaton],
 
 
 
-    elif isinstance(node, AutCallEx): # noqa
-        raise NotImplementedError
-    elif isinstance(node, AutCallFirst): # noqa
-        raise NotImplementedError
+    elif isinstance(node, (AutCallEx, AutCallFirst)):
+
+        logger.debug('SUBCALL primitive at %s', node)
+
+        subcall_init: NodeId = node.child1
+        successor_init: NodeId = container.merged_nodes.find(node.child2)
+        subcall_matches: list[FencepostPosition] = evaluate_finite_automaton(subcall_init, container, trace, pos)
+
+        logger.debug('-- subcall_matches: %s', subcall_matches)
+
+        if len(subcall_matches) == 0:
+           result_set = EMPTY_CONF
+
+        else:
+            # if the first match is at the current step, we need to evaluate
+            # the successor state to get the configuration for the next step
+            first_match: FencepostPosition = subcall_matches[0]
+            if first_match == pos:
+                subcall_matches.pop(0)
+
+            if isinstance(node, AutCallEx):
+                successor_states: frozenset[frozenset[tuple[NodeId, FencepostPosition]]] = frozenset([
+                    frozenset([(successor_init, match)]) for match in subcall_matches])
+                if first_match == pos:
+                    current_step_next_conf, acceptance_result = evaluate_finite_automaton_primitive(successor_init, container, trace, pos)
+                    result_set = conf_or({current_step_next_conf, successor_states}, container)
+                else:
+                    result_set =  successor_states
+
+            elif isinstance(node, AutCallFirst):
+
+                if first_match == pos:
+                    current_step_next_conf, acceptance_result = evaluate_finite_automaton_primitive(successor_init, container, trace, pos)
+                    result_set = current_step_next_conf
+                else:
+                    result_set = frozenset([frozenset([(successor_init, first_match)])])
+
+
     elif isinstance(node, AutRepeat): # noqa
         raise NotImplementedError
     elif isinstance(node, AutRepeatUpTo): # noqa
@@ -218,10 +265,22 @@ def evaluate_finite_automaton_primitive(node_id: NodeId[FiniteAutomaton],
     elif isinstance(node, AutRefuted):
         raise NotImplementedError
 
-
+    logger.debug('--> Return at pos %s acceptance %s with result_set %s', pos, acceptance_result, result_set)
 
     return result_set, acceptance_result
 
+
+def remove_pos_from_current_states(conf: Configuration, pos: FencepostPosition) -> Configuration:
+    """Modify each of the delayed states in the configuration (that were
+    generated by subcalls) that coincide with the given FencepostPostition
+    such that the position annotation gets removed and they can be handled in
+    the same manner as other states for the current time step."""
+
+    remove_pos_if_now: Callable[[State, FencepostPosition], State] = lambda state, pos:\
+        state[0] if isinstance(state, tuple) and state[1] == pos else state
+    updated_conf: set[frozenset[State]] = {frozenset({remove_pos_if_now(state, pos)\
+        for state in conjunction}) for conjunction in conf}
+    return frozenset(updated_conf)
 
 
 def evaluate_finite_automaton_conf(conf: Configuration,
@@ -231,16 +290,31 @@ def evaluate_finite_automaton_conf(conf: Configuration,
     """Evaluate a configuration on a trace starting at FencepostPosition pos.
     Returns a representation of the new configuration after reading one symbol
     as a frozenset of frozensets (disjunction of conjunctions).
-    Also returns whether the automaton accepts at the current position."""
+    Also returns whether the automaton accepts at the current position.
+    States that belong to the current position are evaluated immediately.
+    Delayed states that should be handled in later time steps are put back into
+    the result as-is."""
+
+    updated_conf: Configuration = remove_pos_from_current_states(conf, pos)
+    logger.debug('Evaluate configuration %s at pos %s', conf, pos)
+    logger.debug('Updated configuration: %s', updated_conf)
 
     conjunction_conf_results: set[Configuration] = set()
     conjunction_acc_results: set[bool] = set()
-    for conjunction in conf:
-        result_pairs: set[tuple[Configuration, bool]] = {evaluate_finite_automaton_primitive(node_id, container, trace, pos) for node_id in conjunction}
+    for conjunction in updated_conf:
+
+        now_states: set[NodeId] = {state for state in conjunction if isinstance(state, NodeId)}
+        delayed_states: set[NodeIdWithPos] = {state for state in conjunction if isinstance(state, tuple)}
+
+        result_pairs: set[tuple[Configuration, bool]] = {
+            evaluate_finite_automaton_primitive(node_id, container, trace, pos) for node_id in now_states}
         conf_results: set[Configuration] = {pair[0] for pair in result_pairs}
         acc_results: set[bool] = {pair[1] for pair in result_pairs}
+
+        conf_results.add(frozenset([frozenset(delayed_states)]))
         conjunction_conf_results.add(conf_and(conf_results, container))
-        conjunction_acc_results.add(all(acc_results))
+        conjunction_acc_results.add(len(acc_results) > 0 and all(acc_results) and len(delayed_states) == 0)
+
     disjunction_conf_result: Configuration = conf_or(conjunction_conf_results, container)
     disjunction_acc_result: bool = any(conjunction_acc_results)
     return (disjunction_conf_result, disjunction_acc_result)
@@ -260,8 +334,7 @@ def evaluate_finite_automaton(node_id: NodeId[FiniteAutomaton],
     assert(isinstance(node, FiniteAutomaton))
     node_repr: NodeId = container.merged_nodes.find(node_id)
 
-
-    logger.debug('START of evaluation %s on trace %s at pos %s', node, trace, pos)
+    logger.debug('---- START of evaluation %s on trace %s at pos %s', node, trace, pos)
 
     acc_pos: list[FencepostPosition] = []
 
@@ -280,6 +353,9 @@ def evaluate_finite_automaton(node_id: NodeId[FiniteAutomaton],
             acc_pos.append(next_pos)
             logger.debug('Add pos %s to accepting positions', next_pos)
         next_pos = next_pos.next_pos(trace)
+
+    logger.debug('---- RETURN of evaluation %s on trace %s at pos %s', node, trace, pos)
+    logger.debug('acc_pos: %s', acc_pos)
 
     return acc_pos
 
