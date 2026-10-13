@@ -9,9 +9,11 @@
 # Arguments are represented as {"name": <string>, "type": <type-name>, "variadic": <boolean>}.
 # Options are represented as {"name": <string>, "keyword": <string>, "type": <type-name>, "default": <value>}.
 
+import argparse
 import json
 from dataclasses import MISSING, fields
 from enum import Enum
+from pathlib import Path
 from types import UnionType
 from typing import get_args, get_origin, get_type_hints
 
@@ -159,4 +161,11 @@ def export_schema():
 
 
 if __name__ == "__main__":
-    print(json.dumps(export_schema(), indent=2))
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("-o", "--output", type=Path)
+    args = parser.parse_args()
+    output = json.dumps(export_schema(), indent=2)
+    if args.output is None:
+        print(output)
+    else:
+        args.output.write_text(output + "\n")

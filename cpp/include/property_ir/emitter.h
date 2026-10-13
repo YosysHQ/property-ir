@@ -6,6 +6,7 @@
 #include <initializer_list>
 #include <memory>
 #include <string>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -22,7 +23,19 @@ using EmitterPtr = std::shared_ptr<const Emitter>;
 EmitterPtr identifier(std::string name);
 } // namespace detail
 
-enum class Type { Bool, ClkProp };
+enum class Type;
+
+struct IntLiteral {
+  explicit IntLiteral() = delete;
+};
+
+struct RangeLiteral {
+  explicit RangeLiteral() = delete;
+};
+
+struct BoundedRangeLiteral {
+  explicit BoundedRangeLiteral() = delete;
+};
 
 template <Type T> class Identifier;
 
@@ -58,11 +71,6 @@ void emit(SExprPrinter &printer, const Identifier<T> &identifier) {
   emit(printer, identifier.expression);
 }
 
-using BoolExpr = Expr<Type::Bool>;
-using ClkPropExpr = Expr<Type::ClkProp>;
-using BoolId = Identifier<Type::Bool>;
-using ClkPropId = Identifier<Type::ClkProp>;
-
 class Statement {
 public:
   explicit Statement(detail::EmitterPtr emitter)
@@ -74,11 +82,7 @@ private:
   detail::EmitterPtr emitter;
 };
 
-BoolExpr constant(bool value);
-ClkPropExpr clk_prop_bool(BoolExpr value);
-ClkPropExpr clk_prop_always(ClkPropExpr property);
-ClkPropExpr clk_prop_and(std::vector<ClkPropExpr> properties);
-ClkPropExpr clk_prop_and(std::initializer_list<ClkPropExpr> properties);
+#include "property_ir/emitter_declarations.inc"
 
 Statement declare_input(BoolId name);
 

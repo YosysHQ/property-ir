@@ -1,5 +1,6 @@
 #include "property_ir/emitter.h"
 
+#include <cstdlib>
 #include <tuple>
 
 namespace property_ir {
@@ -19,6 +20,25 @@ template <typename F> EmitterPtr make_emitter(F body) {
   return std::make_shared<CallableEmitter<F>>(std::move(body));
 }
 
+template <typename T>
+void emit_argument(SExprPrinter &printer, const T &value) {
+  property_ir::emit(printer, value);
+}
+
+void emit_argument(SExprPrinter &printer, bool value) {
+  printer.identifier(value ? "true" : "false");
+}
+
+void emit_argument(SExprPrinter &, IntLiteral) { std::abort(); } // TODO
+void emit_argument(SExprPrinter &, RangeLiteral) { std::abort(); } // TODO
+void emit_argument(SExprPrinter &, BoundedRangeLiteral) { std::abort(); } // TODO
+
+template <typename T>
+void emit_argument(SExprPrinter &printer, const std::vector<T> &values) {
+  for (const auto &value : values)
+    emit_argument(printer, value);
+}
+
 } // namespace
 
 EmitterPtr identifier(std::string name) {
@@ -34,46 +54,13 @@ T application(const char *name, Args... args) {
     printer.list([&] {
       printer.identifier(name);
       std::apply(
-          [&](const auto &...arg) { (property_ir::emit(printer, arg), ...); },
+          [&](const auto &...arg) { (emit_argument(printer, arg), ...); },
           args);
     });
   }));
 }
 
 } // namespace detail
-
-BoolExpr constant(bool value) {
-  return BoolExpr(detail::make_emitter([value](SExprPrinter &printer) {
-    printer.list([&] {
-      printer.raw_atom("constant");
-      printer.raw_atom(value ? "true" : "false");
-    });
-  }));
-}
-
-ClkPropExpr clk_prop_bool(BoolExpr value) {
-  return detail::application<ClkPropExpr>("clk-prop-bool", std::move(value));
-}
-
-ClkPropExpr clk_prop_always(ClkPropExpr property) {
-  return detail::application<ClkPropExpr>("clk-prop-always",
-                                          std::move(property));
-}
-
-ClkPropExpr clk_prop_and(std::vector<ClkPropExpr> properties) {
-  return ClkPropExpr(detail::make_emitter(
-      [properties = std::move(properties)](SExprPrinter &printer) {
-        printer.list([&] {
-          printer.raw_atom("clk-prop-and");
-          for (const auto &property : properties)
-            property_ir::emit(printer, property);
-        });
-      }));
-}
-
-ClkPropExpr clk_prop_and(std::initializer_list<ClkPropExpr> properties) {
-  return clk_prop_and(std::vector<ClkPropExpr>(properties));
-}
 
 Statement declare_input(BoolId name) {
   return detail::application<Statement>("declare-input", std::move(name));
@@ -84,11 +71,10 @@ template <Type T> Statement declare(Identifier<T> name, Expr<T> value) {
                                         std::move(value));
 }
 
-template Statement declare(BoolId name, BoolExpr value);
-template Statement declare(ClkPropId name, ClkPropExpr value);
-
 void emit(SExprPrinter &printer, const Statement &statement) {
   statement.emitter->emit(printer);
 }
+
+#include "property_ir/emitter_definitions.inc"
 
 } // namespace property_ir
