@@ -7,6 +7,14 @@ if(CMAKE_CURRENT_SOURCE_DIR STREQUAL CMAKE_SOURCE_DIR)
   set(PROPERTY_IR_STANDALONE_PROJECT ON)
 endif()
 
+if(PROPERTY_IR_STANDALONE_PROJECT)
+  if(MSVC)
+    add_compile_options(/GR-)
+  else()
+    add_compile_options(-fno-rtti)
+  endif()
+endif()
+
 option(PROPERTY_IR_BUILD_TESTS "Build tests" ${PROPERTY_IR_STANDALONE_PROJECT})
 
 find_package(Python3 3.10 REQUIRED COMPONENTS Interpreter)
