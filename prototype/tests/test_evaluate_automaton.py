@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from ir.base import IrContainer, NodeId
 from ir.parsing import parse_document, parse_raw_sexpr
 from ir.primitives.automata_primitives import AutAcc, AutConsume, AutRead
@@ -82,6 +84,12 @@ def test_automaton_aut_consume():
         frozenset({'b'}),
     ), suffix='end')
 
+    trace1_top = Trace(finite_part=(
+        frozenset({'a'}),
+        frozenset({'b'}),
+        frozenset({'b'}),
+    ), suffix='top_omega')
+
     result1 = evaluate_finite_automaton_primitive(aut1, container, trace1, FencepostPosition(('at', 0)))
     assert result1[0] == frozenset([frozenset([aut1])])
     assert result1[1] == True
@@ -124,11 +132,16 @@ def test_automaton_aut_consume():
 
     assert evaluate_finite_automaton(aut1, container, trace1, FencepostPosition(('at', 0))) == [
         FencepostPosition(('at', 0)), FencepostPosition(('at', 1)), FencepostPosition(('at', 2)), FencepostPosition(('at', 3))]
+    assert evaluate_finite_automaton(aut1, container, trace1_top, FencepostPosition(('at', 0))) == [
+        FencepostPosition(('at', 0)), FencepostPosition(('at', 1)), FencepostPosition(('at', 2)), FencepostPosition(('at', 3)), FencepostPosition('within_infinite_suffix')]
 
     assert evaluate_finite_automaton(aut2, container, trace1, FencepostPosition(('at', 0))) == []
+    assert evaluate_finite_automaton(aut2, container, trace1_top, FencepostPosition(('at', 0))) == []
 
     assert evaluate_finite_automaton(aut3, container, trace1, FencepostPosition(('at', 0))) == [
         FencepostPosition(('at', 1)), FencepostPosition(('at', 2)), FencepostPosition(('at', 3))]
+    assert evaluate_finite_automaton(aut3, container, trace1_top, FencepostPosition(('at', 0))) == [
+        FencepostPosition(('at', 1)), FencepostPosition(('at', 2)), FencepostPosition(('at', 3)), FencepostPosition('within_infinite_suffix')]
 
     assert evaluate_finite_automaton(aut4, container, trace1, FencepostPosition(('at', 0))) == []
 
@@ -143,10 +156,14 @@ def test_automaton_aut_consume():
 
     assert evaluate_finite_automaton(aut8, container, trace1, FencepostPosition(('at', 0))) == [
         FencepostPosition(('at', 2)), FencepostPosition(('at', 3))]
+    assert evaluate_finite_automaton(aut8, container, trace1_top, FencepostPosition(('at', 0))) == [
+        FencepostPosition(('at', 2)), FencepostPosition(('at', 3)), FencepostPosition('within_infinite_suffix')]
 
     assert evaluate_finite_automaton(aut9, container, trace1, FencepostPosition(('at', 0))) == []
 
     assert evaluate_finite_automaton(aut10, container, trace1, FencepostPosition(('at', 0))) == [
+        FencepostPosition(('at', 2))]
+    assert evaluate_finite_automaton(aut10, container, trace1_top, FencepostPosition(('at', 0))) == [
         FencepostPosition(('at', 2))]
 
     assert evaluate_finite_automaton(aut11, container, trace1, FencepostPosition(('at', 0))) == [
@@ -284,6 +301,12 @@ def test_automaton_aut_or():
         frozenset({'b'}),
     ), suffix='end')
 
+    trace1_top = Trace(finite_part=(
+        frozenset({'a'}),
+        frozenset({'b'}),
+        frozenset({'b'}),
+    ), suffix='top_omega')
+
     trace2 = Trace(finite_part=(
         frozenset({'a'}),
         frozenset({'a', 'b'}),
@@ -294,12 +317,18 @@ def test_automaton_aut_or():
 
     assert evaluate_finite_automaton(aut_or_1, container, trace1, FencepostPosition(('at', 0))) == [
         FencepostPosition(('at', 0))]
+    assert evaluate_finite_automaton(aut_or_1, container, trace1_top, FencepostPosition(('at', 0))) == [
+        FencepostPosition(('at', 0))]
 
     assert evaluate_finite_automaton(aut_or_2, container, trace1, FencepostPosition(('at', 0))) == [
         FencepostPosition(('at', 0)), FencepostPosition(('at', 2)), FencepostPosition(('at', 3))]
+    assert evaluate_finite_automaton(aut_or_2, container, trace1_top, FencepostPosition(('at', 0))) == [
+        FencepostPosition(('at', 0)), FencepostPosition(('at', 2)), FencepostPosition(('at', 3)), FencepostPosition('within_infinite_suffix')]
 
     assert evaluate_finite_automaton(aut_or_3, container, trace1, FencepostPosition(('at', 0))) == [
         FencepostPosition(('at', 2)), FencepostPosition(('at', 3))]
+    assert evaluate_finite_automaton(aut_or_3, container, trace1_top, FencepostPosition(('at', 0))) == [
+        FencepostPosition(('at', 2)), FencepostPosition(('at', 3)), FencepostPosition('within_infinite_suffix')]
 
     assert evaluate_finite_automaton(aut_or_4, container, trace1, FencepostPosition(('at', 0))) == [
         FencepostPosition(('at', 2))]
@@ -372,6 +401,13 @@ def test_automaton_aut_and():
         frozenset({'b'}),
     ), suffix='end')
 
+    trace1_top = Trace(finite_part=(
+        frozenset({'a'}),
+        frozenset({'b'}),
+        frozenset({'b'}),
+        frozenset({'b'}),
+    ), suffix='top_omega')
+
     trace2 = Trace(finite_part=(
         frozenset({'a'}),
         frozenset({'a', 'b'}),
@@ -381,9 +417,12 @@ def test_automaton_aut_and():
     ), suffix='end')
 
     assert evaluate_finite_automaton(aut_and_1, container, trace1, FencepostPosition(('at', 0))) == []
+    assert evaluate_finite_automaton(aut_and_1, container, trace1_top, FencepostPosition(('at', 0))) == []
 
     assert evaluate_finite_automaton(aut_and_2, container, trace1, FencepostPosition(('at', 0))) == [
         FencepostPosition(('at', 2)), FencepostPosition(('at', 3)), FencepostPosition(('at', 4))]
+    assert evaluate_finite_automaton(aut_and_2, container, trace1_top, FencepostPosition(('at', 0))) == [
+        FencepostPosition(('at', 2)), FencepostPosition(('at', 3)), FencepostPosition(('at', 4)), FencepostPosition('within_infinite_suffix')]
 
     assert evaluate_finite_automaton(aut_and_3, container, trace1, FencepostPosition(('at', 0))) == [
         FencepostPosition(('at', 2))]
@@ -454,8 +493,10 @@ def test_automaton_aut_subcall():
     parse_document(parse_raw_sexpr(doc_str), container)
     container.bypass_placeholders()
 
-    #output_directory: Path = Path('./output')
-    #container.show_graph(output_directory / 'aut_or.png')
+    visualize: bool = False
+    if visualize:
+        output_directory: Path = Path('./output')
+        container.show_graph(output_directory / 'aut_or.png')
 
     aut_first1: NodeId = container.get_node_id_by_name('aut_first1')
     aut_first2: NodeId = container.get_node_id_by_name('aut_first2')
@@ -488,6 +529,13 @@ def test_automaton_aut_subcall():
         frozenset({'c'}),
     ), suffix='end')
 
+    trace1_top = Trace(finite_part=(
+        frozenset({'a'}),
+        frozenset({'b'}),
+        frozenset({}),
+        frozenset({'c'}),
+    ), suffix='top_omega')
+
     trace2 = Trace(finite_part=(
         frozenset({'a'}),
         frozenset({'a'}),
@@ -498,6 +546,17 @@ def test_automaton_aut_subcall():
         frozenset({'c'}),
         frozenset({}),
     ), suffix='end')
+
+    trace2_top = Trace(finite_part=(
+        frozenset({'a'}),
+        frozenset({'a'}),
+        frozenset({'b'}),
+        frozenset({}),
+        frozenset({'b'}),
+        frozenset({}),
+        frozenset({'c'}),
+        frozenset({}),
+    ), suffix='top_omega')
 
     trace3 = Trace(finite_part=(
         frozenset({'a'}),
@@ -510,6 +569,17 @@ def test_automaton_aut_subcall():
         frozenset({}),
     ), suffix='end')
 
+    trace3_top = Trace(finite_part=(
+        frozenset({'a'}),
+        frozenset({'a'}),
+        frozenset({'b'}),
+        frozenset({}),
+        frozenset({'b', 'c'}),
+        frozenset({}),
+        frozenset({'c'}),
+        frozenset({}),
+    ), suffix='top_omega')
+
     assert evaluate_finite_automaton(aut_first1, container, trace1, FencepostPosition(('at', 0))) == [FencepostPosition(('at', 1))]
     assert evaluate_finite_automaton(aut_first2, container, trace1, FencepostPosition(('at', 0))) == [FencepostPosition(('at', 2))]
     assert evaluate_finite_automaton(subcall_aut2, container, trace1, FencepostPosition(('at', 0))) == [FencepostPosition(('at', 2))]
@@ -520,20 +590,39 @@ def test_automaton_aut_subcall():
 
     assert evaluate_finite_automaton(aut_ex1, container, trace1, FencepostPosition(('at', 0))) == [
         FencepostPosition(('at', 1)), FencepostPosition(('at', 2)), FencepostPosition(('at', 3)), FencepostPosition(('at', 4))]
+    assert evaluate_finite_automaton(aut_ex1, container, trace1_top, FencepostPosition(('at', 0))) == [
+        FencepostPosition(('at', 1)), FencepostPosition(('at', 2)), FencepostPosition(('at', 3)), FencepostPosition(('at', 4)), FencepostPosition('unknown')]
+
     assert evaluate_finite_automaton(aut_ex2, container, trace1, FencepostPosition(('at', 0))) == [FencepostPosition(('at', 2))]
+    assert evaluate_finite_automaton(aut_ex2, container, trace1_top, FencepostPosition(('at', 0))) == [FencepostPosition(('at', 2)), FencepostPosition('within_infinite_suffix')]
+
     assert evaluate_finite_automaton(aut_ex3, container, trace1, FencepostPosition(('at', 0))) == [FencepostPosition(('at', 2))]
+    assert evaluate_finite_automaton(aut_ex3, container, trace1_top, FencepostPosition(('at', 0))) == [FencepostPosition(('at', 2))]
+
     assert evaluate_finite_automaton(aut_ex4, container, trace1, FencepostPosition(('at', 0))) == [
         FencepostPosition(('at', 0)), FencepostPosition(('at', 1)), FencepostPosition(('at', 2)), FencepostPosition(('at', 3)), FencepostPosition(('at', 4))]
+    assert evaluate_finite_automaton(aut_ex4, container, trace1_top, FencepostPosition(('at', 0))) == [
+        FencepostPosition(('at', 0)), FencepostPosition(('at', 1)), FencepostPosition(('at', 2)), FencepostPosition(('at', 3)), FencepostPosition(('at', 4)), FencepostPosition('unknown')]
+
     assert evaluate_finite_automaton(aut_ex5, container, trace1, FencepostPosition(('at', 0))) == [FencepostPosition(('at', 0))]
+    assert evaluate_finite_automaton(aut_ex5, container, trace1_top, FencepostPosition(('at', 0))) == [FencepostPosition(('at', 0)), FencepostPosition(('at', 4)), FencepostPosition('unknown')]
+
     assert evaluate_finite_automaton(aut_ex6, container, trace1, FencepostPosition(('at', 0))) == [FencepostPosition(('at', 1))]
+    assert evaluate_finite_automaton(aut_ex6, container, trace1_top, FencepostPosition(('at', 0))) == [FencepostPosition(('at', 1)), FencepostPosition(('at', 4)), FencepostPosition('unknown')]
+
     assert evaluate_finite_automaton(aut_ex7, container, trace1, FencepostPosition(('at', 0))) == []
+    assert evaluate_finite_automaton(aut_ex7, container, trace1_top, FencepostPosition(('at', 0))) == []
+
     assert evaluate_finite_automaton(aut_ex8, container, trace1, FencepostPosition(('at', 0))) == []
+    assert evaluate_finite_automaton(aut_ex8, container, trace1_top, FencepostPosition(('at', 0))) == []
 
     assert evaluate_finite_automaton(nested_call1, container, trace1, FencepostPosition(('at', 0))) == [FencepostPosition(('at', 1))]
     assert evaluate_finite_automaton(nested_call2, container, trace1, FencepostPosition(('at', 0))) == [FencepostPosition(('at', 2))]
 
     assert evaluate_finite_automaton(call_in_or, container, trace2, FencepostPosition(('at', 0))) == [
         FencepostPosition(('at', 3)), FencepostPosition(('at', 5)), FencepostPosition(('at', 7))]
+    assert evaluate_finite_automaton(call_in_or, container, trace2_top, FencepostPosition(('at', 0))) == [
+        FencepostPosition(('at', 3)), FencepostPosition(('at', 5)), FencepostPosition(('at', 7)), FencepostPosition('within_infinite_suffix')]
 
     assert evaluate_finite_automaton(aut_ex2, container, trace2, FencepostPosition(('at', 0))) == [FencepostPosition(('at', 3)), FencepostPosition(('at', 5))]
     assert evaluate_finite_automaton(aut_ex2, container, trace3, FencepostPosition(('at', 0))) == [FencepostPosition(('at', 3)), FencepostPosition(('at', 5))]
@@ -542,3 +631,119 @@ def test_automaton_aut_subcall():
 
     assert evaluate_finite_automaton(call_in_and, container, trace2, FencepostPosition(('at', 0))) == []
     assert evaluate_finite_automaton(call_in_and, container, trace3, FencepostPosition(('at', 0))) == [FencepostPosition(('at', 5))]
+
+    assert evaluate_finite_automaton(call_in_and, container, trace2_top, FencepostPosition(('at', 0))) == [FencepostPosition('within_infinite_suffix')]
+    assert evaluate_finite_automaton(call_in_and, container, trace3_top, FencepostPosition(('at', 0))) == [FencepostPosition(('at', 5)), FencepostPosition('within_infinite_suffix')]
+
+
+def test_automaton_aut_suffix():
+
+    doc_str: str = """(document
+        (declare-input a)
+        (declare-input b)
+        (declare-input c)
+
+        (declare aut1 (aut-consume a (aut-true) (aut-false)))
+        (declare aut2 (aut-consume a
+            (aut-consume b (aut-acc (aut-false)) (aut-false))
+            (aut-false))
+        )
+        (declare aut3 (aut-consume a
+            (aut-consume b
+                (aut-consume b (aut-acc (aut-false)) (aut-false))
+                (aut-false))
+            (aut-false))
+        )
+
+        (declare-rec (declare aut4
+            (aut-consume c (aut-acc aut4) aut4)
+        ))
+
+        (declare aut_and_1 (aut-and aut1 aut2))
+        (declare aut_and_2 (aut-and aut2 aut3))
+
+        (declare aut_sub_1 (aut-call-ex
+            aut1
+            (aut-acc (aut-false))
+        ))
+        (declare aut_sub_2 (aut-call-ex
+            aut2
+            (aut-acc (aut-false))
+        ))
+        (declare aut_sub_3 (aut-call-ex
+            aut3
+            (aut-acc (aut-false))
+        ))
+
+        (declare aut_and_3 (aut-and aut_sub_1 aut_sub_2))
+        (declare aut_and_4 (aut-and aut_sub_2 aut_sub_3))
+        (declare aut_and_5 (aut-and aut1 aut_sub_3))
+        (declare aut_and_6 (aut-and aut_sub_2 aut3))
+        (declare aut_and_7 (aut-and aut_sub_2 aut4))
+        (declare aut_and_8 (aut-and aut_sub_1 aut4))
+
+        (declare aut_or_1 (aut-or aut1 aut2))
+        (declare aut_or_2 (aut-or aut2 aut3))
+
+        (declare aut_or_3 (aut-or aut_sub_1 aut_sub_2))
+        (declare aut_or_4 (aut-or aut_sub_2 aut_sub_3))
+        (declare aut_or_5 (aut-or aut1 aut_sub_3))
+        (declare aut_or_6 (aut-or aut_sub_2 aut3))
+        (declare aut_or_7 (aut-or aut_sub_2 aut4))
+        (declare aut_or_8 (aut-or aut_sub_1 aut4))
+
+    )"""
+
+    container: IrContainer = IrContainer()
+    parse_document(parse_raw_sexpr(doc_str), container)
+    container.bypass_placeholders()
+
+    #output_directory: Path = Path('./output')
+    #container.show_graph(output_directory / 'aut_or.png')
+
+    aut_and_1: NodeId = container.get_node_id_by_name('aut_and_1')
+    aut_and_2: NodeId = container.get_node_id_by_name('aut_and_2')
+    aut_and_3: NodeId = container.get_node_id_by_name('aut_and_3')
+    aut_and_4: NodeId = container.get_node_id_by_name('aut_and_4')
+    aut_and_5: NodeId = container.get_node_id_by_name('aut_and_5')
+    aut_and_6: NodeId = container.get_node_id_by_name('aut_and_6')
+    aut_and_7: NodeId = container.get_node_id_by_name('aut_and_7')
+    aut_and_8: NodeId = container.get_node_id_by_name('aut_and_8')
+
+    aut_or_1: NodeId = container.get_node_id_by_name('aut_or_1')
+    aut_or_2: NodeId = container.get_node_id_by_name('aut_or_2')
+    aut_or_3: NodeId = container.get_node_id_by_name('aut_or_3')
+    aut_or_4: NodeId = container.get_node_id_by_name('aut_or_4')
+    aut_or_5: NodeId = container.get_node_id_by_name('aut_or_5')
+    aut_or_6: NodeId = container.get_node_id_by_name('aut_or_6')
+    aut_or_7: NodeId = container.get_node_id_by_name('aut_or_7')
+    aut_or_8: NodeId = container.get_node_id_by_name('aut_or_8')
+
+    trace1 = Trace(finite_part=(
+    ), suffix='top_omega')
+
+    trace2 = Trace(finite_part=(
+        frozenset({'a'}),
+    ), suffix='top_omega')
+
+    assert evaluate_finite_automaton(aut_and_1, container, trace1, FencepostPosition(('at', 0))) == [FencepostPosition('within_infinite_suffix')]
+    assert evaluate_finite_automaton(aut_and_2, container, trace1, FencepostPosition(('at', 0))) == []
+
+    assert evaluate_finite_automaton(aut_and_3, container, trace1, FencepostPosition(('at', 0))) == [FencepostPosition('unknown')]
+    assert evaluate_finite_automaton(aut_and_4, container, trace1, FencepostPosition(('at', 0))) == [FencepostPosition('unknown')]
+    assert evaluate_finite_automaton(aut_and_5, container, trace1, FencepostPosition(('at', 0))) == [FencepostPosition('unknown')]
+    assert evaluate_finite_automaton(aut_and_6, container, trace1, FencepostPosition(('at', 0))) == [FencepostPosition('unknown')]
+    assert evaluate_finite_automaton(aut_and_7, container, trace1, FencepostPosition(('at', 0))) == [FencepostPosition('unknown')]
+    assert evaluate_finite_automaton(aut_and_8, container, trace1, FencepostPosition(('at', 0))) == [FencepostPosition('unknown')]
+    assert evaluate_finite_automaton(aut_and_8, container, trace2, FencepostPosition(('at', 0))) == [FencepostPosition('unknown')]
+
+    assert evaluate_finite_automaton(aut_or_1, container, trace1, FencepostPosition(('at', 0))) == [FencepostPosition('within_infinite_suffix')]
+    assert evaluate_finite_automaton(aut_or_2, container, trace1, FencepostPosition(('at', 0))) == [FencepostPosition('within_infinite_suffix')]
+
+    assert evaluate_finite_automaton(aut_or_3, container, trace1, FencepostPosition(('at', 0))) == [FencepostPosition('unknown')]
+    assert evaluate_finite_automaton(aut_or_4, container, trace1, FencepostPosition(('at', 0))) == [FencepostPosition('unknown')]
+    assert evaluate_finite_automaton(aut_or_5, container, trace1, FencepostPosition(('at', 0))) == [FencepostPosition('within_infinite_suffix')]
+    assert evaluate_finite_automaton(aut_or_6, container, trace1, FencepostPosition(('at', 0))) == [FencepostPosition('within_infinite_suffix')]
+    assert evaluate_finite_automaton(aut_or_7, container, trace1, FencepostPosition(('at', 0))) == [FencepostPosition('within_infinite_suffix')]
+    assert evaluate_finite_automaton(aut_or_8, container, trace1, FencepostPosition(('at', 0))) == [FencepostPosition('within_infinite_suffix')]
+    assert evaluate_finite_automaton(aut_or_8, container, trace2, FencepostPosition(('at', 0))) == [FencepostPosition(('at', 1)), FencepostPosition('within_infinite_suffix')]

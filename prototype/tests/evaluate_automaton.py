@@ -17,10 +17,32 @@ from ir.primitives.automata_primitives import (
     AutRepeatUpTo,
     AutTrue,
     FiniteAutomaton,
+    OmegaAcceptOn,
+    OmegaAnd,
     OmegaAutomaton,
+    OmegaCallAll,
+    OmegaCallExStrong,
+    OmegaCallExWeak,
+    OmegaFalse,
+    OmegaOr,
+    OmegaRejectOn,
+    OmegaStrongConsume,
+    OmegaStrongConsumeAcc,
+    OmegaStrongRead,
+    OmegaTrue,
+    OmegaWeakConsume,
+    OmegaWeakConsumeAcc,
+    OmegaWeakRead,
 )
 
-from tests.evaluate import FencepostPosition, MaybeBool, Trace, evaluate_bool
+from tests.evaluate import (
+    FencepostPosition,
+    MaybeBool,
+    Trace,
+    eval_and,
+    eval_or,
+    evaluate_bool,
+)
 
 logger = getLogger(__name__)
 
@@ -149,9 +171,6 @@ def evaluate_finite_automaton_primitive(node_id: NodeId[FiniteAutomaton],
     # (= no epsilon-cycles)
     # it is also assumed that after aut-acc there is no aut-read that can change that result
     # (because the automaton construction can not produce such automata)
-
-    # TODO handle end of word
-    # what to do with unknown bool results? or should those never occur?
 
     # TODO add memoization
 
@@ -313,12 +332,71 @@ def evaluate_finite_automaton_conf(conf: Configuration,
 
         conf_results.add(frozenset([frozenset(delayed_states)]))
         conjunction_conf_results.add(conf_and(conf_results, container))
-        conjunction_acc_results.add(len(acc_results) > 0 and all(acc_results) and len(delayed_states) == 0)
+        conjunction_acc_results.add(all(acc_results) and len(delayed_states) == 0)
 
     disjunction_conf_result: Configuration = conf_or(conjunction_conf_results, container)
     disjunction_acc_result: bool = any(conjunction_acc_results)
     return (disjunction_conf_result, disjunction_acc_result)
 
+
+
+def evaluate_finite_automaton_conf_infinite_suffix(conf: Configuration,
+        container: IrContainer,
+        trace: Trace) -> MaybeBool:
+    """Evaluate the finite automaton on the infinite suffix. If the automaton
+    accepts at any position in the infinite suffix, True is returned. If a loop
+    of the configuration is detected without accepting, False is returned.
+    A conjunction of accepting positions in the infinite suffix can lead to an
+    unknown result. We do not keep track of where exactly a subcall with a
+    match within the infinite suffix will continue the computation in the
+    successor automaton. This corresponds to sequence intersection, which also
+    can have an unknown result."""
+
+    next_configuration: Configuration = conf
+    seen_configurations: set[Configuration] = set()
+    unknown_seen: bool = False
+
+    while next_configuration not in seen_configurations:
+
+        seen_configurations.add(next_configuration)
+
+        # delayed states in the configuration are all 'within_infinite_suffix'
+        # we do not know when they will become active, so we treat their result as 'unknown'
+        # and let them stay in the next configuration
+        # (they might yield any result in any step in the infinite suffix)
+
+        conjunction_conf_results: set[Configuration] = set()
+        conjunction_acc_results: set[MaybeBool] = set()
+        for conjunction in next_configuration:
+
+            now_states: set[NodeId] = {state for state in conjunction if isinstance(state, NodeId)}
+            delayed_states: set[NodeIdWithPos] = {state for state in conjunction if isinstance(state, tuple)}
+
+            result_pairs: set[tuple[Configuration, bool]] = {
+                evaluate_finite_automaton_primitive(node_id, container, trace, FencepostPosition('within_infinite_suffix')) for node_id in now_states}
+            conf_results: set[Configuration] = {pair[0] for pair in result_pairs}
+            acc_results: set[MaybeBool] = {pair[1] for pair in result_pairs}
+
+            conf_results.add(frozenset([frozenset(delayed_states)]))
+            conjunction_conf_results.add(conf_and(conf_results, container))
+            if len(delayed_states) > 0:
+                acc_results.add('unknown')
+            conjunction_acc_results.add(eval_and(acc_results))
+
+        disjunction_conf_result: Configuration = conf_or(conjunction_conf_results, container)
+        disjunction_acc_result: MaybeBool = eval_or(conjunction_acc_results)
+
+        if disjunction_acc_result == True:
+            return True
+        elif disjunction_acc_result == 'unknown':
+            unknown_seen = True
+
+        next_configuration = disjunction_conf_result
+
+    if unknown_seen:
+        return 'unknown'
+
+    return False
 
 
 
@@ -341,8 +419,6 @@ def evaluate_finite_automaton(node_id: NodeId[FiniteAutomaton],
     next_conf: Configuration = frozenset([frozenset([node_repr])])
     next_pos: FencepostPosition = pos
 
-    # TODO deal with infinite suffix
-
     while next_conf != EMPTY_CONF and next_pos != FencepostPosition('within_infinite_suffix'):
         assert isinstance(next_pos.value, tuple)
 
@@ -353,6 +429,16 @@ def evaluate_finite_automaton(node_id: NodeId[FiniteAutomaton],
             acc_pos.append(next_pos)
             logger.debug('Add pos %s to accepting positions', next_pos)
         next_pos = next_pos.next_pos(trace)
+
+    # we assume that we can have only matches in the infinite suffix if it is top_omega
+    if next_conf != EMPTY_CONF and trace.suffix == 'top_omega':
+        suffix_result: MaybeBool = evaluate_finite_automaton_conf_infinite_suffix(next_conf, container, trace)
+        if suffix_result == True:
+            acc_pos.append(FencepostPosition('within_infinite_suffix'))
+            logger.debug('Add pos within_infinite_suffix to accepting positions')
+        elif suffix_result == 'unknown':
+            acc_pos.append(FencepostPosition('unknown'))
+            logger.debug('Add pos unknown to accepting positions')
 
     logger.debug('---- RETURN of evaluation %s on trace %s at pos %s', node, trace, pos)
     logger.debug('acc_pos: %s', acc_pos)
@@ -367,5 +453,88 @@ def evaluate_finite_automaton(node_id: NodeId[FiniteAutomaton],
 #------------------+
 
 
-def evaluate_omega_automaton(node_id: NodeId[OmegaAutomaton], container: IrContainer, trace: Trace) -> MaybeBool:
+
+
+
+def evaluate_omega_automaton_primitive(node_id: NodeId[OmegaAutomaton],
+    container: IrContainer,
+    trace: Trace,
+    pos: FencepostPosition) -> tuple[Configuration, bool]:
+
+    node: PropertyIrNode = container[node_id]
+    assert(isinstance(node, OmegaAutomaton))
+    #node_repr: NodeId = container.merged_nodes.find(node_id)
+
+
+    if isinstance(node, OmegaTrue): # noqa
+        raise NotImplementedError
+    elif isinstance(node, OmegaFalse): # noqa
+        raise NotImplementedError
+
+
+    elif isinstance(node, OmegaAnd): # noqa
+        raise NotImplementedError
+    elif isinstance(node, OmegaOr): # noqa
+        raise NotImplementedError
+
+
+    elif isinstance(node, OmegaStrongRead): # noqa
+        raise NotImplementedError
+    elif isinstance(node, OmegaWeakRead): # noqa
+        raise NotImplementedError
+    elif isinstance(node, OmegaStrongConsume): # noqa
+        raise NotImplementedError
+    elif isinstance(node, OmegaWeakConsume): # noqa
+        raise NotImplementedError
+    elif isinstance(node, OmegaStrongConsumeAcc): # noqa
+        raise NotImplementedError
+    elif isinstance(node, OmegaWeakConsumeAcc): # noqa
+        raise NotImplementedError
+
+
+    elif isinstance(node, OmegaAcceptOn): # noqa
+        raise NotImplementedError
+    elif isinstance(node, OmegaRejectOn): # noqa
+        raise NotImplementedError
+
+
+    elif isinstance(node, OmegaCallAll): # noqa
+        raise NotImplementedError
+    elif isinstance(node, OmegaCallExStrong): # noqa
+        raise NotImplementedError
+    elif isinstance(node, OmegaCallExWeak):
+        raise NotImplementedError
+
+
+
+
+
+
+    raise NotImplementedError
+
+
+
+
+
+def evaluate_omega_automaton_conf(conf: Configuration,
+    container: IrContainer,
+    trace: Trace,
+    pos: FencepostPosition) -> tuple[Configuration, bool]:
+    raise NotImplementedError
+
+
+def evaluate_omega_automaton_conf_infinite_suffix(conf: Configuration,
+    container: IrContainer,
+    trace: Trace) -> bool:
+    """Evaluate the omega automaton on the infinite suffix. If a loop of the
+    configuration is detected, check whether there is an accepting configuration
+    within the loop. If yes, return True. Else, return False."""
+
+    raise NotImplementedError
+
+
+
+def evaluate_omega_automaton(node_id: NodeId[OmegaAutomaton],
+    container: IrContainer,
+    trace: Trace) -> MaybeBool:
     raise NotImplementedError
