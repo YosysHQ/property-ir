@@ -1,4 +1,5 @@
 from ir import UnionFind
+from ir.utils import find_sccs, has_productive_cycle
 
 
 def test_union_find():
@@ -44,3 +45,51 @@ def test_union_find():
     assert uf.find(3) in [1,2,3,4,6,7,8]
 
     assert uf.find(15) == 15
+
+
+def test_find_sccs_empty_and_singleton():
+    assert find_sccs({}) == []
+    assert find_sccs({0: []}) == [[0]]
+    assert find_sccs({0: [0]}) == [[0]]
+
+
+def test_find_sccs_reverse_topological_order():
+    # {0, 1} -> {2, 3} -> {4} where 4 is an implicit sink.
+    adjacency = {0: [1, 1, 4], 1: [0, 2], 2: [3, 4], 3: [2]}
+    assert [sorted(scc) for scc in find_sccs(adjacency)] == [[4], [2, 3], [0, 1]]
+
+
+def test_find_sccs_external_roots():
+    components = find_sccs({0: [], 1: [0]}, [2, 3, 0, 1])
+    assert sorted(components) == [[0], [1], [2], [3]]
+    assert components.index([0]) < components.index([1])
+
+
+def test_has_productive_cycle_empty_and_acyclic():
+    assert not has_productive_cycle({}, set())
+    assert not has_productive_cycle({}, {0})
+    assert not has_productive_cycle({0: []}, {0})
+    assert not has_productive_cycle({0: [1]}, {0, 1})
+
+
+def test_has_productive_cycle_self_loop():
+    adjacency = {0: [0, 1]}
+    assert has_productive_cycle(adjacency, {0})
+    assert not has_productive_cycle(adjacency, set())
+    assert not has_productive_cycle(adjacency, {1})
+
+
+def test_has_productive_cycle_scc():
+    # 0 -> 1 <-> 2 -> 3
+    adjacency = {0: [1], 1: [2], 2: [1, 3]}
+    assert not has_productive_cycle(adjacency, {0})
+    assert not has_productive_cycle(adjacency, {3})
+    assert has_productive_cycle(adjacency, {1})
+
+
+def test_has_productive_cycle_disconnected():
+    adjacency = {0: [1], 1: [0], 2: [3], 3: [2]}
+    assert sorted(sorted(scc) for scc in find_sccs(adjacency)) == [[0, 1], [2, 3]]
+    assert has_productive_cycle(adjacency, {0})
+    assert has_productive_cycle(adjacency, {2})
+    assert not has_productive_cycle(adjacency, {4})
