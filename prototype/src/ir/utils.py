@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from collections.abc import Collection, Iterable, Iterator, Mapping
+from collections.abc import Set as AbstractSet
+
 from typeguard import typechecked
 
 
@@ -45,3 +48,91 @@ class UnionFind[T]:
             return
         self.parents[current_repr] = elem
         self.parents[elem] = elem
+
+
+def find_sccs[T](
+    adjacency: Mapping[T, Collection[T]], roots: Iterable[T] | None = None
+) -> list[list[T]]:
+    """Iterative implementation of Tarjan's algorithm for finding strongly connected
+    components (in reverse topological order).
+
+    Missing keys in adjacency are considered sinks.
+    Passing roots restricts the computation to vertices reachable from roots
+    """
+    components: list[list[T]] = []
+    low: dict[T, int] = {}
+    dfs: list[tuple[T, Iterator[T] | None, int]] = []
+    stack: list[T] = []
+
+    vertices = {}
+    for vertex, successors in adjacency.items():
+        vertices[vertex] = None
+        for successor in successors:
+            vertices[successor] = None
+
+    if roots is None:
+        roots = vertices
+
+    for start in roots:
+        if start in low:
+            continue
+
+        dfs.append((start, None, len(low)))
+
+        while dfs:
+            vertex, vertex_edges, num = dfs.pop()
+            if vertex_edges is None:
+                if vertex in low:
+                    continue
+                else:
+                    low[vertex] = num
+                    stack.append(vertex)
+                vertex_edges = iter(adjacency.get(vertex, ()))
+
+            try:
+                next_edge = next(vertex_edges)
+            except StopIteration:
+                pass
+            else:
+                dfs.append((vertex, vertex_edges, num))
+                dfs.append((next_edge, None, len(low)))
+                continue
+
+            val = low[vertex]
+            for edge in adjacency.get(vertex, ()):
+                if edge in low:
+                    val = min(val, low[edge])
+
+            low[vertex] = val
+
+            if num == val:
+                component: list[T] = []
+                while stack:
+                    component_vertex = stack.pop()
+                    component.append(component_vertex)
+                    low[component_vertex] = len(vertices)
+                    if component_vertex == vertex:
+                        break
+
+                components.append(component)
+    return components
+
+
+def has_productive_cycle[T](
+    adjacency: Mapping[T, Collection[T]], productive: AbstractSet[T]
+) -> bool:
+    """Tests whether the graph has directed cycle containing at least one productive
+    vertex. Handles self-loops of productive vertices.
+    """
+    for scc in find_sccs(adjacency):
+        if not any(v in productive for v in scc):
+            continue
+
+        if len(scc) == 1:
+            singleton_vertex = scc[0]
+            if singleton_vertex in adjacency.get(singleton_vertex, ()):
+                return True
+        else:
+            return True
+
+    return False
