@@ -72,6 +72,10 @@ def find_sccs[T](
 
     if roots is None:
         roots = vertices
+    else:
+        roots = list(roots)
+        for root in roots:
+            vertices[root] = None
 
     for start in roots:
         if start in low:
