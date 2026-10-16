@@ -463,6 +463,11 @@ type OmegaConjunction = tuple[Conjunction, Conjunction]
 # (= the time step when the obligation set was empty and then fillied again for the next round)
 type OmegaConfiguration = frozenset[OmegaConjunction]
 
+# graph of OmegaConjunctions that connects each OmegaConjunctions with each
+# successor OmegaConjunction in the disjunction of OmegaConjunctions after
+# evaluating it 1 step in the infinite suffix
+type ConjunctionGraph = dict[OmegaConjunction, set[OmegaConjunction]]
+
 
 
 def simplify_omega_conf(configuration: OmegaConfiguration, container: IrContainer):
@@ -614,18 +619,73 @@ def evaluate_omega_automaton_primitive(node_id: NodeId[OmegaAutomaton],
 
 
 
+def remove_obligations(conf: OmegaConfiguration) -> OmegaConfiguration:
+    """Sets all obligations of the OmegaConfiguration to the empty set."""
+    result_conf: set[OmegaConjunction] = {(conjunction, frozenset()) for (conjunction, _) in conf}
+    return frozenset(result_conf)
 
 
-def evaluate_omega_automaton_conf(conf: Configuration,
+def evaluate_omega_automaton_conf(conf: OmegaConfiguration,
     container: IrContainer,
     trace: Trace,
-    pos: FencepostPosition) -> tuple[Configuration, bool]:
+    pos: FencepostPosition,
+    graph: ConjunctionGraph | None) -> OmegaConfiguration:
+    """Evaluate an OmegaConfiguration on a trace starting at
+    FencepostPosition pos. Returns a representation of the new configuration
+    after reading one symbol (disjunction of conjunction-obligations pairs).
+    If a ConjunctionGraph is given, it is updated with the new reachable
+    OmegaConjunctions from each OmegaConjunction in conf."""
+
+    # TODO handle delayed states
+
+    conjunction_results: set[OmegaConfiguration] = set()
+
+    for (conjunction, obligations) in conf:
+
+        reset_obligations: bool = len(obligations) == 0
+        child_results: set[OmegaConfiguration] = set()
+
+        for state in conjunction:
+
+            assert(isinstance(state, NodeId))
+            node_id: NodeId = state
+
+            child_result: OmegaConfiguration = evaluate_omega_automaton_primitive(node_id, container, trace, pos)
+
+            if state not in obligations and not reset_obligations:
+                child_result = remove_obligations(child_result)
+
+            child_results.add(child_result)
+
+        conjunction_result: OmegaConfiguration = omega_conf_and(child_results, container)
+        conjunction_results.add(conjunction_result)
+
+        # the OmegaConjunction graph connects each OmegaConjunction of the input
+        # to each OmegaConjunction of the OmegaConfiguration conjunction_result
+        # that it evaluates to within 1 step in the infinite suffix
+
+        if graph is not None:
+            graph[(conjunction, obligations)] = graph.get((conjunction, obligations), set()) | conjunction_result
+
+    return omega_conf_or(conjunction_results, container)
+
+
+def omega_conf_result(conf: OmegaConfiguration) -> bool | None:
+    """If the OmegaConfiguration already evaluates to True or False because it
+    simplifies to a true-sink or false-sink, that result is returned."""
+
+
     raise NotImplementedError
 
 
-def evaluate_omega_automaton_conf_infinite_suffix(conf: Configuration,
+def conjunction_graph_success(graph: ConjunctionGraph) -> bool:
+
+    raise NotImplementedError
+
+
+def evaluate_omega_automaton_conf_infinite_suffix(conf: OmegaConfiguration,
     container: IrContainer,
-    trace: Trace) -> bool:
+    trace: Trace) -> MaybeBool:
     """Evaluate the omega automaton on the infinite suffix.
     Build a graph of conjunction-obligation pairs and check every 2^n steps
     whether there is a cycle containing a conjunction with empty obligations.
@@ -633,7 +693,26 @@ def evaluate_omega_automaton_conf_infinite_suffix(conf: Configuration,
     Return False if the same configuration is reached without such a cycle,
     or abort after a certain number of steps."""
 
-    raise NotImplementedError
+    graph: ConjunctionGraph = {}
+
+    #next_checkpoint: int = 4
+    abort_point: int = 2000
+    counter: int = 0
+
+    next_conf: OmegaConfiguration = conf
+    seen_configurations: set[OmegaConfiguration] = set()
+
+    while next_conf != EMPTY_CONF and next_conf not in seen_configurations and counter < abort_point:
+        seen_configurations.add(conf)
+
+        # TODO
+
+    if conjunction_graph_success(graph):
+        return True
+    elif next_conf in seen_configurations:
+        return False
+
+    return 'unknown'
 
 
 
@@ -646,4 +725,25 @@ def evaluate_omega_automaton(node_id: NodeId[OmegaAutomaton],
     A result can already be returned in the finite part if the configuration
     is a true-/false-sink."""
 
-    raise NotImplementedError
+    node: PropertyIrNode = container[node_id]
+    assert(isinstance(node, OmegaAutomaton))
+    node_repr: NodeId = container.merged_nodes.find(node_id)
+
+    next_conf: OmegaConfiguration = frozenset([(frozenset([node_repr]), frozenset([node_repr]))])
+    next_pos: FencepostPosition = FencepostPosition(('at', 0))
+
+    # evaluate finite part
+
+    while next_conf != EMPTY_CONF and next_pos != FencepostPosition('within_infinite_suffix'):
+        assert isinstance(next_pos.value, tuple)
+
+        next_conf = evaluate_omega_automaton_conf(next_conf, container, trace, next_pos, None)
+        next_pos = next_pos.next_pos(trace)
+
+        result: bool | None = omega_conf_result(next_conf)
+        if result is not None:
+            return result
+
+    # evaluate infinite suffix
+
+    return evaluate_omega_automaton_conf_infinite_suffix(next_conf, container, trace)
