@@ -11,6 +11,7 @@ from tests.evaluate_automaton import (
     conf_or,
     evaluate_finite_automaton,
     evaluate_finite_automaton_primitive,
+    evaluate_omega_automaton,
     simplify_conf,
 )
 
@@ -747,3 +748,242 @@ def test_automaton_aut_suffix():
     assert evaluate_finite_automaton(aut_or_7, container, trace1, FencepostPosition(('at', 0))) == [FencepostPosition('within_infinite_suffix')]
     assert evaluate_finite_automaton(aut_or_8, container, trace1, FencepostPosition(('at', 0))) == [FencepostPosition('within_infinite_suffix')]
     assert evaluate_finite_automaton(aut_or_8, container, trace2, FencepostPosition(('at', 0))) == [FencepostPosition(('at', 1)), FencepostPosition('within_infinite_suffix')]
+
+
+
+def test_automaton_omega_finite_part_linear():
+
+    doc_str: str = """(document
+        (declare-input a)
+        (declare-input b)
+
+        (declare omega1 (omega-true))
+        (declare omega2 (omega-false))
+        (declare omega3 (omega-weak-consume a (omega-true) (omega-false)))
+        (declare omega4 (omega-weak-consume b (omega-true) (omega-false)))
+        (declare omega5 (omega-strong-consume a (omega-true) (omega-false)))
+        (declare omega6 (omega-strong-consume b (omega-true) (omega-false)))
+
+        (declare omega7 (omega-weak-consume a (omega-weak-consume b (omega-true) (omega-false)) (omega-false)))
+        (declare omega8 (omega-weak-consume a (omega-weak-consume b (omega-false) (omega-false)) (omega-false)))
+
+        (declare omega9 (omega-weak-consume a (omega-strong-consume b (omega-true) (omega-false)) (omega-false)))
+        (declare omega10 (omega-strong-consume a (omega-weak-consume b (omega-true) (omega-false)) (omega-false)))
+
+        (declare omega11 (omega-weak-consume a
+            (omega-weak-consume b
+                (omega-weak-consume b
+                    (omega-true)
+                    (omega-false))
+                (omega-false))
+            (omega-false))
+        )
+
+    )"""
+
+    container: IrContainer = IrContainer()
+    parse_document(parse_raw_sexpr(doc_str), container)
+
+    omega1: NodeId = container.get_node_id_by_name('omega1')
+    omega2: NodeId = container.get_node_id_by_name('omega2')
+    omega3: NodeId = container.get_node_id_by_name('omega3')
+    omega4: NodeId = container.get_node_id_by_name('omega4')
+    omega5: NodeId = container.get_node_id_by_name('omega5')
+    omega6: NodeId = container.get_node_id_by_name('omega6')
+    omega7: NodeId = container.get_node_id_by_name('omega7')
+    omega8: NodeId = container.get_node_id_by_name('omega8')
+    omega9: NodeId = container.get_node_id_by_name('omega9')
+    omega10: NodeId = container.get_node_id_by_name('omega10')
+    omega11: NodeId = container.get_node_id_by_name('omega11')
+
+
+    trace1 = Trace(finite_part=(
+        frozenset({'a'}),
+        frozenset({'b'}),
+        frozenset({'b'}),
+    ), suffix='end')
+    trace1_top = Trace(finite_part=(
+        frozenset({'a'}),
+        frozenset({'b'}),
+        frozenset({'b'}),
+    ), suffix='top_omega')
+    trace1_bot = Trace(finite_part=(
+        frozenset({'a'}),
+        frozenset({'b'}),
+        frozenset({'b'}),
+    ), suffix='bot_omega')
+
+    trace2 = Trace(finite_part=(
+        frozenset({'a'}),
+    ), suffix='end')
+    trace2_top = Trace(finite_part=(
+        frozenset({'a'}),
+    ), suffix='top_omega')
+    trace2_bot = Trace(finite_part=(
+        frozenset({'a'}),
+    ), suffix='bot_omega')
+
+    container: IrContainer = IrContainer()
+    parse_document(parse_raw_sexpr(doc_str), container)
+
+    #container.bypass_placeholders()
+    #output_directory: Path = Path('./output')
+    #container.show_graph(output_directory / 'aut_or.png')
+
+    assert evaluate_omega_automaton(omega1, container, trace1) == True
+    assert evaluate_omega_automaton(omega2, container, trace1) == False
+
+    assert evaluate_omega_automaton(omega3, container, trace1) == True
+    assert evaluate_omega_automaton(omega3, container, trace1_top) == True
+    assert evaluate_omega_automaton(omega3, container, trace1_bot) == True
+
+    assert evaluate_omega_automaton(omega4, container, trace1) == False
+    assert evaluate_omega_automaton(omega5, container, trace1) == True
+    assert evaluate_omega_automaton(omega6, container, trace1) == False
+    assert evaluate_omega_automaton(omega7, container, trace1) == True
+
+    assert evaluate_omega_automaton(omega8, container, trace1) == False
+    assert evaluate_omega_automaton(omega8, container, trace1_top) == False
+    assert evaluate_omega_automaton(omega8, container, trace1_bot) == False
+
+    assert evaluate_omega_automaton(omega9, container, trace2) == False
+    assert evaluate_omega_automaton(omega9, container, trace2_top) == True
+    assert evaluate_omega_automaton(omega9, container, trace2_bot) == False
+
+    assert evaluate_omega_automaton(omega10, container, trace2) == True
+    assert evaluate_omega_automaton(omega10, container, trace2_top) == True
+    assert evaluate_omega_automaton(omega10, container, trace2_bot) == False
+
+    assert evaluate_omega_automaton(omega11, container, trace2) == True
+    assert evaluate_omega_automaton(omega11, container, trace2_top) == True
+    assert evaluate_omega_automaton(omega11, container, trace2_bot) == False
+
+
+def test_automaton_omega_finite_part_alternation():
+
+    doc_str: str = """(document
+        (declare-input a)
+        (declare-input b)
+
+        (declare omega1 (omega-true))
+        (declare omega2 (omega-false))
+        (declare omega3 (omega-weak-consume a (omega-true) (omega-false)))
+        (declare omega6 (omega-strong-consume b (omega-true) (omega-false)))
+        (declare omega7 (omega-weak-consume a (omega-weak-consume b (omega-true) (omega-false)) (omega-false)))
+
+        (declare or1 (omega-or omega1 omega2))
+        (declare or2 (omega-or omega6 omega7))
+
+        (declare and1 (omega-and omega1 omega2))
+        (declare and2 (omega-and omega6 omega7))
+
+        (declare both1 (omega-or
+            (omega-and omega1 omega3)
+            and2
+        ))
+
+        (declare both2 (omega-or and1 and2))
+        (declare both3 (omega-and or1 or2))
+
+        (declare both4 (omega-and
+            (omega-or omega2 omega6)
+            or2
+        ))
+
+    )"""
+
+    trace1 = Trace(finite_part=(
+        frozenset({'a'}),
+        frozenset({'b'}),
+        frozenset({'b'}),
+    ), suffix='end')
+
+    container: IrContainer = IrContainer()
+    parse_document(parse_raw_sexpr(doc_str), container)
+
+    or1: NodeId = container.get_node_id_by_name('or1')
+    or2: NodeId = container.get_node_id_by_name('or2')
+
+    and1: NodeId = container.get_node_id_by_name('and1')
+    and2: NodeId = container.get_node_id_by_name('and2')
+
+    both1: NodeId = container.get_node_id_by_name('both1')
+    both2: NodeId = container.get_node_id_by_name('both2')
+    both3: NodeId = container.get_node_id_by_name('both3')
+    both4: NodeId = container.get_node_id_by_name('both4')
+
+    assert evaluate_omega_automaton(or1, container, trace1) == True
+    assert evaluate_omega_automaton(or2, container, trace1) == True
+
+    assert evaluate_omega_automaton(and1, container, trace1) == False
+    assert evaluate_omega_automaton(and2, container, trace1) == False
+
+    assert evaluate_omega_automaton(both1, container, trace1) == True
+    assert evaluate_omega_automaton(both2, container, trace1) == False
+    assert evaluate_omega_automaton(both3, container, trace1) == True
+    assert evaluate_omega_automaton(both4, container, trace1) == False
+
+
+def test_automaton_omega_infinite_suffix_cycle():
+
+    doc_str: str = """(document
+        (declare-input a)
+        (declare-input b)
+
+        (declare-rec (declare omega1
+            (omega-weak-consume-acc a
+                omega1
+                (omega-false)
+            )
+        ))
+
+        (declare-rec (declare omega2
+            (omega-weak-consume a
+                omega2
+                (omega-false)
+            )
+        ))
+
+        (declare or1 (omega-or omega1 omega2))
+        (declare and1 (omega-and omega1 omega2))
+
+    )"""
+
+    trace1 = Trace(finite_part=(
+        frozenset({'a'}),
+        frozenset({'b'}),
+        frozenset({'b'}),
+    ), suffix='end')
+
+    trace2 = Trace(finite_part=(
+        frozenset({'a'}),
+    ), suffix='end')
+
+    trace2_bot = Trace(finite_part=(
+        frozenset({'a'}),
+    ), suffix='bot_omega')
+
+    trace2_top = Trace(finite_part=(
+        frozenset({'a'}),
+    ), suffix='top_omega')
+
+    container: IrContainer = IrContainer()
+    parse_document(parse_raw_sexpr(doc_str), container)
+
+    omega1: NodeId = container.get_node_id_by_name('omega1')
+    omega2: NodeId = container.get_node_id_by_name('omega2')
+    or1: NodeId = container.get_node_id_by_name('or1')
+    and1: NodeId = container.get_node_id_by_name('and1')
+
+    assert evaluate_omega_automaton(omega1, container, trace1) == False
+    assert evaluate_omega_automaton(omega1, container, trace2) == True
+    assert evaluate_omega_automaton(omega1, container, trace2_bot) == False
+
+    assert evaluate_omega_automaton(omega2, container, trace1) == False
+    assert evaluate_omega_automaton(omega2, container, trace2) == False
+    assert evaluate_omega_automaton(omega2, container, trace2_bot) == False
+    assert evaluate_omega_automaton(omega2, container, trace2_top) == False
+
+    assert evaluate_omega_automaton(or1, container, trace1) == False
+    assert evaluate_omega_automaton(or1, container, trace2) == True
+    assert evaluate_omega_automaton(and1, container, trace2) == False

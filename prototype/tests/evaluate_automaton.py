@@ -34,6 +34,7 @@ from ir.primitives.automata_primitives import (
     OmegaWeakConsumeAcc,
     OmegaWeakRead,
 )
+from ir.utils import has_productive_cycle
 
 from tests.evaluate import (
     FencepostPosition,
@@ -463,6 +464,8 @@ type OmegaConjunction = tuple[Conjunction, Conjunction]
 # (= the time step when the obligation set was empty and then fillied again for the next round)
 type OmegaConfiguration = frozenset[OmegaConjunction]
 
+EMPTY_OMEGA_CONF: OmegaConfiguration = frozenset()
+
 # graph of OmegaConjunctions that connects each OmegaConjunctions with each
 # successor OmegaConjunction in the disjunction of OmegaConjunctions after
 # evaluating it 1 step in the infinite suffix
@@ -470,9 +473,73 @@ type ConjunctionGraph = dict[OmegaConjunction, set[OmegaConjunction]]
 
 
 
-def simplify_omega_conf(configuration: OmegaConfiguration, container: IrContainer):
-    return configuration
-    # TODO simplify OmegaConfiguration
+def simplify_omega_conf(configuration: OmegaConfiguration, container: IrContainer) -> OmegaConfiguration:
+    """To keep the omega-configuration small, remove conjunction-obligation
+    pairs that are a pairwise superset of other conjunction-obligation pairs,
+    and check whether true/false-sinks are contained in a frozenset to simplify
+    it."""
+
+    logger.debug('simplify_omega_conf %s', configuration)
+
+    candidates: set[OmegaConjunction] = set()
+    false_sinks: set[NodeId] = set()
+
+    for conj_obl in configuration:
+        conjunction: Conjunction = conj_obl[0]
+        obligations: Conjunction = conj_obl[1]
+        non_sink_nodes: set[State] = set()
+        true_sinks: set[NodeId] = set()
+        has_false: bool = False
+        for state in conjunction:
+            if isinstance(state, NodeId):
+                node_id: NodeId = state
+                if isinstance(container[node_id], OmegaTrue):
+                    true_sinks.add(node_id)
+                elif isinstance(container[node_id], OmegaFalse):
+                    has_false = True
+                    false_sinks.add(node_id)
+                else:
+                    non_sink_nodes.add(node_id)
+            else:
+                non_sink_nodes.add(state)
+        if not has_false and len(non_sink_nodes) > 0:
+            non_sink_obligations: Conjunction = frozenset({elem for elem in obligations if elem in non_sink_nodes})
+            candidates.add((frozenset(non_sink_nodes), non_sink_obligations))
+        if not has_false and len(non_sink_nodes) == 0:
+            if len(true_sinks) == 0:
+                return EMPTY_OMEGA_CONF
+            return frozenset([(frozenset([true_sinks.pop()]), frozenset())])
+
+    if len(candidates) == 0:
+        return EMPTY_OMEGA_CONF
+
+    filtered_candidates: set[OmegaConjunction] = set()
+    for (conj1, obl1) in candidates:
+        is_proper_superset: bool = False
+        for (conj2, obl2) in candidates:
+            if (conj1, obl1) != (conj2, obl2) and conj1.issuperset(conj2) and obl1.issubset(obl2):
+                is_proper_superset = True
+        if not is_proper_superset:
+            filtered_candidates.add((conj1, obl1))
+
+    return frozenset(filtered_candidates)
+
+
+
+def omega_conf_result(conf: OmegaConfiguration) -> bool | None:
+    """If the OmegaConfiguration already evaluates to True or False because it
+    simplifies to a true-sink or false-sink, that result is returned."""
+
+    logger.debug('omega_conf_result of %s', conf)
+
+    if conf == EMPTY_OMEGA_CONF:
+        return False
+    elif len(conf) == 1:
+        conj_obl: OmegaConjunction = next(iter(conf))
+        if isinstance(conj_obl[0], OmegaTrue):
+            return True
+
+    return None
 
 
 def omega_conf_and(configurations: set[OmegaConfiguration], container: IrContainer) -> OmegaConfiguration:
@@ -482,9 +549,16 @@ def omega_conf_and(configurations: set[OmegaConfiguration], container: IrContain
 
     logger.debug('AND of %s', configurations)
 
-    pairwise_crossproduct: set[tuple[frozenset[State], frozenset[State]]] = {
-        (frozenset().union(*state_selection), frozenset().union(*obligations_selection))
-            for (state_selection, obligations_selection)  in product(*configurations)}
+    pairwise_crossproduct: set[tuple[frozenset[State], frozenset[State]]] = set()
+    for combination in product(*configurations):
+        state_combination = set()
+        obligations_combination = set()
+        for (state_selection, obligations_selection) in combination:
+            state_combination = state_combination.union(state_selection)
+            obligations_combination = obligations_combination.union(obligations_selection)
+        pairwise_crossproduct.add((frozenset(state_combination), frozenset(obligations_combination)))
+
+    logger.debug('omega_conf_and - pairwise_crossproduct %s', pairwise_crossproduct)
 
     return simplify_omega_conf(frozenset(pairwise_crossproduct), container)
 
@@ -512,6 +586,11 @@ def evaluate_omega_automaton_primitive(node_id: NodeId[OmegaAutomaton],
     node_repr: NodeId = container.merged_nodes.find(node_id)
     result_configuration: OmegaConfiguration
 
+    if isinstance(pos.value, tuple):
+        if pos.value[1] >= len(trace.finite_part):
+            pos = FencepostPosition('within_infinite_suffix')
+
+
     #---- SINKS
 
     if isinstance(node, OmegaTrue):
@@ -528,7 +607,7 @@ def evaluate_omega_automaton_primitive(node_id: NodeId[OmegaAutomaton],
 
     elif isinstance(node, (OmegaStrongConsume, OmegaWeakConsume, OmegaStrongConsumeAcc, OmegaWeakConsumeAcc)):
 
-        if isinstance(node, (OmegaWeakConsume, OmegaWeakConsumeAcc)) and trace.suffix == 'end' and pos >= len(trace.finite_part):
+        if isinstance(node, (OmegaWeakConsume, OmegaWeakConsumeAcc)) and trace.suffix == 'end' and pos == FencepostPosition('within_infinite_suffix'):
             bool_result = 'top'
         else:
             bool_result: MaybeBool = evaluate_bool(node.child1, container, trace, pos, {})
@@ -554,7 +633,7 @@ def evaluate_omega_automaton_primitive(node_id: NodeId[OmegaAutomaton],
 
     elif isinstance(node, (OmegaStrongRead, OmegaWeakRead)):
 
-        if isinstance(node, OmegaWeakRead) and trace.suffix == 'end' and pos >= len(trace.finite_part):
+        if isinstance(node, OmegaWeakRead) and trace.suffix == 'end' and pos == FencepostPosition('within_infinite_suffix'):
             bool_result = 'top'
         else:
             bool_result: MaybeBool = evaluate_bool(node.child1, container, trace, pos, {})
@@ -629,7 +708,8 @@ def evaluate_omega_automaton_conf(conf: OmegaConfiguration,
     container: IrContainer,
     trace: Trace,
     pos: FencepostPosition,
-    graph: ConjunctionGraph | None) -> OmegaConfiguration:
+    graph: ConjunctionGraph | None,
+    empty_obligation_nodes: set[OmegaConjunction] | None) -> OmegaConfiguration:
     """Evaluate an OmegaConfiguration on a trace starting at
     FencepostPosition pos. Returns a representation of the new configuration
     after reading one symbol (disjunction of conjunction-obligations pairs).
@@ -638,15 +718,22 @@ def evaluate_omega_automaton_conf(conf: OmegaConfiguration,
 
     # TODO handle delayed states
 
+    logger.debug('evaluate_omega_automaton_conf - conf: %s', conf)
+
     conjunction_results: set[OmegaConfiguration] = set()
 
-    for (conjunction, obligations) in conf:
+    for conj_obl in conf:
+        conjunction: Conjunction = conj_obl[0]
+        obligations: Conjunction = conj_obl[1]
 
         reset_obligations: bool = len(obligations) == 0
         child_results: set[OmegaConfiguration] = set()
 
+        logger.debug('evaluate_omega_automaton_conf - conjunction: %s', conjunction)
+
         for state in conjunction:
 
+            logger.debug('evaluate_omega_automaton_conf - state: %s', state)
             assert(isinstance(state, NodeId))
             node_id: NodeId = state
 
@@ -666,48 +753,55 @@ def evaluate_omega_automaton_conf(conf: OmegaConfiguration,
 
         if graph is not None:
             graph[(conjunction, obligations)] = graph.get((conjunction, obligations), set()) | conjunction_result
+            assert empty_obligation_nodes is not None
+            if len(obligations) == 0:
+                empty_obligation_nodes.add((conjunction, obligations))
 
     return omega_conf_or(conjunction_results, container)
 
 
-def omega_conf_result(conf: OmegaConfiguration) -> bool | None:
-    """If the OmegaConfiguration already evaluates to True or False because it
-    simplifies to a true-sink or false-sink, that result is returned."""
-
-
-    raise NotImplementedError
-
-
-def conjunction_graph_success(graph: ConjunctionGraph) -> bool:
-
-    raise NotImplementedError
 
 
 def evaluate_omega_automaton_conf_infinite_suffix(conf: OmegaConfiguration,
     container: IrContainer,
-    trace: Trace) -> MaybeBool:
+    trace: Trace,
+    abort_point: int = 2000) -> MaybeBool:
     """Evaluate the omega automaton on the infinite suffix.
     Build a graph of conjunction-obligation pairs and check every 2^n steps
     whether there is a cycle containing a conjunction with empty obligations.
-    If yes, return True.
+    That means that the omega-automaton visits accepting states on all
+    conjunctive paths and accepts. In that case, return True.
     Return False if the same configuration is reached without such a cycle,
     or abort after a certain number of steps."""
 
-    graph: ConjunctionGraph = {}
+    logger.debug('evaluate_omega_automaton_conf_infinite_suffix of %s', conf)
 
-    #next_checkpoint: int = 4
-    abort_point: int = 2000
+    graph: ConjunctionGraph = {}
+    empty_obligation_nodes: set[OmegaConjunction] = set()
+
+    next_checkpoint: int = 4
     counter: int = 0
 
     next_conf: OmegaConfiguration = conf
     seen_configurations: set[OmegaConfiguration] = set()
 
-    while next_conf != EMPTY_CONF and next_conf not in seen_configurations and counter < abort_point:
-        seen_configurations.add(conf)
+    while next_conf != EMPTY_OMEGA_CONF and next_conf not in seen_configurations and counter < abort_point:
 
-        # TODO
+        logger.debug('counter %s', counter)
+        logger.debug('next_conf %s', next_conf)
 
-    if conjunction_graph_success(graph):
+        seen_configurations.add(next_conf)
+        next_conf = evaluate_omega_automaton_conf(next_conf, container, trace, FencepostPosition('within_infinite_suffix'), graph, empty_obligation_nodes)
+        counter += 1
+
+        if counter == next_checkpoint:
+            logger.debug('checkpoint reached, check for productive cycle')
+            result: bool = has_productive_cycle(graph, empty_obligation_nodes)
+            if result:
+                return True
+            next_checkpoint *= 2
+
+    if has_productive_cycle(graph, empty_obligation_nodes):
         return True
     elif next_conf in seen_configurations:
         return False
@@ -734,10 +828,10 @@ def evaluate_omega_automaton(node_id: NodeId[OmegaAutomaton],
 
     # evaluate finite part
 
-    while next_conf != EMPTY_CONF and next_pos != FencepostPosition('within_infinite_suffix'):
+    while next_conf != EMPTY_OMEGA_CONF and next_pos != FencepostPosition('within_infinite_suffix'):
         assert isinstance(next_pos.value, tuple)
 
-        next_conf = evaluate_omega_automaton_conf(next_conf, container, trace, next_pos, None)
+        next_conf = evaluate_omega_automaton_conf(next_conf, container, trace, next_pos, None, None)
         next_pos = next_pos.next_pos(trace)
 
         result: bool | None = omega_conf_result(next_conf)
