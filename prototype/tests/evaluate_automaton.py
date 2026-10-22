@@ -471,6 +471,11 @@ EMPTY_OMEGA_CONF: OmegaConfiguration = frozenset()
 # evaluating it 1 step in the infinite suffix
 type ConjunctionGraph = dict[OmegaConjunction, set[OmegaConjunction]]
 
+def print_conf(conf: OmegaConfiguration):
+    conj_obls_list: list[tuple[str, str]] = [('&'.join([str(elem) for elem in conj]), '&'.join(str(elem) for elem in obl)) for (conj, obl) in conf]
+    result_str = ' V '.join([f'{conj_str} OBL: {obl_str}' for (conj_str, obl_str) in conj_obls_list] )
+    return result_str
+
 
 
 def simplify_omega_conf(configuration: OmegaConfiguration, container: IrContainer) -> OmegaConfiguration:
@@ -479,7 +484,7 @@ def simplify_omega_conf(configuration: OmegaConfiguration, container: IrContaine
     and check whether true/false-sinks are contained in a frozenset to simplify
     it."""
 
-    logger.debug('simplify_omega_conf %s', configuration)
+    logger.debug('simplify_omega_conf %s', print_conf(configuration))
 
     candidates: set[OmegaConjunction] = set()
     false_sinks: set[NodeId] = set()
@@ -517,7 +522,7 @@ def simplify_omega_conf(configuration: OmegaConfiguration, container: IrContaine
     for (conj1, obl1) in candidates:
         is_proper_superset: bool = False
         for (conj2, obl2) in candidates:
-            if (conj1, obl1) != (conj2, obl2) and conj1.issuperset(conj2) and obl1.issubset(obl2):
+            if (conj1, obl1) != (conj2, obl2) and conj1.issuperset(conj2) and obl1.issuperset(obl2):
                 is_proper_superset = True
         if not is_proper_superset:
             filtered_candidates.add((conj1, obl1))
@@ -547,7 +552,7 @@ def omega_conf_and(configurations: set[OmegaConfiguration], container: IrContain
     from each OmegaConfiguration. Take the union of the states in the conjunction
     and obligations."""
 
-    logger.debug('AND of %s', configurations)
+    logger.debug('AND of %s',  [print_conf(conf) for conf in configurations])
 
     pairwise_crossproduct: set[tuple[frozenset[State], frozenset[State]]] = set()
     for combination in product(*configurations):
@@ -558,19 +563,24 @@ def omega_conf_and(configurations: set[OmegaConfiguration], container: IrContain
             obligations_combination = obligations_combination.union(obligations_selection)
         pairwise_crossproduct.add((frozenset(state_combination), frozenset(obligations_combination)))
 
-    logger.debug('omega_conf_and - pairwise_crossproduct %s', pairwise_crossproduct)
+    logger.debug('omega_conf_and - pairwise_crossproduct %s', print_conf(frozenset(pairwise_crossproduct)))
 
-    return simplify_omega_conf(frozenset(pairwise_crossproduct), container)
+    simplified: OmegaConfiguration = simplify_omega_conf(frozenset(pairwise_crossproduct), container)
+    logger.debug('simplified: %s', print_conf(simplified))
+    return simplified
+
 
 
 def omega_conf_or(configurations: set[OmegaConfiguration], container: IrContainer) -> OmegaConfiguration:
     """Combine OmegaConfigurations using a disjunction.
     The obligations of each conjunction remain unchanged."""
 
-    logger.debug('OR of %s', configurations)
+    logger.debug('OR of %s',  [print_conf(conf) for conf in configurations])
 
     conf_union: OmegaConfiguration = frozenset().union(*configurations)
-    return simplify_omega_conf(conf_union, container)
+    simplified: OmegaConfiguration = simplify_omega_conf(conf_union, container)
+    logger.debug('simplified: %s', print_conf(simplified))
+    return simplified
 
 
 def evaluate_omega_automaton_primitive(node_id: NodeId[OmegaAutomaton],
@@ -718,7 +728,7 @@ def evaluate_omega_automaton_conf(conf: OmegaConfiguration,
 
     # TODO handle delayed states
 
-    logger.debug('evaluate_omega_automaton_conf - conf: %s', conf)
+    logger.debug('evaluate_omega_automaton_conf - conf: %s', print_conf(conf))
 
     conjunction_results: set[OmegaConfiguration] = set()
 
@@ -756,6 +766,8 @@ def evaluate_omega_automaton_conf(conf: OmegaConfiguration,
             assert empty_obligation_nodes is not None
             if len(obligations) == 0:
                 empty_obligation_nodes.add((conjunction, obligations))
+            logger.debug('Conjunction graph: %s', graph)
+            logger.debug('Empty obligation nodes: %s', empty_obligation_nodes)
 
     return omega_conf_or(conjunction_results, container)
 
@@ -788,7 +800,7 @@ def evaluate_omega_automaton_conf_infinite_suffix(conf: OmegaConfiguration,
     while next_conf != EMPTY_OMEGA_CONF and next_conf not in seen_configurations and counter < abort_point:
 
         logger.debug('counter %s', counter)
-        logger.debug('next_conf %s', next_conf)
+        logger.debug('next_conf %s', print_conf(next_conf))
 
         seen_configurations.add(next_conf)
         next_conf = evaluate_omega_automaton_conf(next_conf, container, trace, FencepostPosition('within_infinite_suffix'), graph, empty_obligation_nodes)

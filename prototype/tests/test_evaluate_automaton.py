@@ -1,10 +1,24 @@
+from logging import getLogger
 from pathlib import Path
 
-from ir.base import IrContainer, NodeId
+from hypothesis import Verbosity, given, settings
+from ir.base import Bool, FiniteAutomaton, IrContainer, NodeId, OmegaAutomaton
 from ir.parsing import parse_document, parse_raw_sexpr
-from ir.primitives.automata_primitives import AutAcc, AutConsume, AutRead
+from ir.primitives.automata_primitives import (
+    AutAcc,
+    AutConsume,
+    AutRead,
+    AutRefuted,
+    AutRepeat,
+    AutRepeatUpTo,
+    OmegaAcceptOn,
+    OmegaCallAll,
+    OmegaCallExStrong,
+    OmegaCallExWeak,
+    OmegaRejectOn,
+)
 
-from tests.evaluate import FencepostPosition, Trace
+from tests.evaluate import FencepostPosition, MaybeBool, Trace
 from tests.evaluate_automaton import (
     Configuration,
     conf_and,
@@ -14,6 +28,9 @@ from tests.evaluate_automaton import (
     evaluate_omega_automaton,
     simplify_conf,
 )
+from tests.strategies import random_ir_with_trace
+
+logger = getLogger(__name__)
 
 
 def test_automaton_aut_consume():
@@ -987,3 +1004,308 @@ def test_automaton_omega_infinite_suffix_cycle():
     assert evaluate_omega_automaton(or1, container, trace1) == False
     assert evaluate_omega_automaton(or1, container, trace2) == True
     assert evaluate_omega_automaton(and1, container, trace2) == False
+
+
+def test_automaton_omega_cycle_and_or():
+
+    doc_str: str = """(document
+        (declare-input a)
+        (declare-input b)
+        (declare-input c)
+
+        (declare-rec (declare always_a
+            (omega-weak-consume-acc a
+                always_a
+                (omega-false)
+            )
+        ))
+
+        (declare omega_a (omega-weak-consume a (omega-true) (omega-false)))
+        (declare omega_b (omega-weak-consume b (omega-true) (omega-false)))
+        (declare omega_b_read (omega-weak-read b (omega-weak-consume (true) (omega-true) (omega-false)) (omega-false)))
+
+        (declare omega_a_strong (omega-strong-consume a (omega-true) (omega-false)))
+        (declare omega_b_strong (omega-strong-consume b (omega-true) (omega-false)))
+
+        (declare-rec
+            (declare a_until_b (omega-or omega_b
+                (omega-and
+                    omega_a
+                    (omega-weak-consume-acc (true) a_until_b (omega-false))))))
+
+        (declare-rec
+            (declare a_strong_until_with_b (omega-and omega_a_strong
+                (omega-or
+                    omega_b_strong
+                    (omega-strong-consume (true) a_strong_until_with_b (omega-false))))))
+
+        (declare-rec
+            (declare a_until_b_read (omega-or omega_b
+                (omega-and
+                    omega_a
+                    (omega-weak-read c (omega-weak-consume-acc (true) a_until_b_read (omega-false)) (omega-false))
+                )
+            ))
+        )
+
+        (declare-rec
+            (declare a_until_b_read_2 (omega-or omega_b
+                (omega-weak-read c
+                    (omega-and
+                        omega_a
+                        (omega-weak-consume-acc (true) a_until_b_read_2 (omega-false))
+                    )
+                (omega-false))
+            ))
+        )
+
+        (declare-rec
+            (declare b_until_always_a (omega-or always_a
+                (omega-and
+                    omega_b_read
+                    (omega-weak-consume-acc (true) b_until_always_a (omega-false))))))
+
+    )"""
+
+    trace1 = Trace(finite_part=(
+        frozenset({'a', 'c'}),
+        frozenset({'b', 'c'}),
+        frozenset({'b'}),
+    ), suffix='end')
+
+    trace1_bot = Trace(finite_part=(
+        frozenset({'a', 'c'}),
+        frozenset({'b', 'c'}),
+        frozenset({'b'}),
+    ), suffix='bot_omega')
+
+    trace2 = Trace(finite_part=(
+        frozenset({'a'}),
+        frozenset(),
+        frozenset({'b'}),
+    ), suffix='end')
+
+    trace2_top = Trace(finite_part=(
+        frozenset({'a'}),
+        frozenset(),
+        frozenset({'b'}),
+    ), suffix='top_omega')
+
+    trace3 = Trace(finite_part=(
+        frozenset({'a'}),
+        frozenset({'a'}),
+        frozenset({'a'}),
+    ), suffix='end')
+
+    trace3_top = Trace(finite_part=(
+        frozenset({'a'}),
+        frozenset({'a'}),
+        frozenset({'a'}),
+    ), suffix='top_omega')
+
+    trace3_bot = Trace(finite_part=(
+        frozenset({'a'}),
+        frozenset({'a'}),
+        frozenset({'a'}),
+    ), suffix='bot_omega')
+
+    trace4 = Trace(finite_part=(
+        frozenset({'a'}),
+        frozenset({'a'}),
+        frozenset({'a', 'b'}),
+    ), suffix='end')
+
+    trace5 = Trace(finite_part=(
+        frozenset({'b'}),
+        frozenset({'a'}),
+        frozenset({'b'}),
+        frozenset({'b'}),
+        frozenset({'b'}),
+    ), suffix='end')
+
+    container: IrContainer = IrContainer()
+    parse_document(parse_raw_sexpr(doc_str), container)
+
+    a_until_b: NodeId = container.get_node_id_by_name('a_until_b')
+    a_strong_until_with_b: NodeId = container.get_node_id_by_name('a_strong_until_with_b')
+    a_until_b_read: NodeId = container.get_node_id_by_name('a_until_b_read')
+    a_until_b_read_2: NodeId = container.get_node_id_by_name('a_until_b_read_2')
+    b_until_always_a: NodeId = container.get_node_id_by_name('b_until_always_a')
+
+    assert evaluate_omega_automaton(a_until_b, container, trace1) == True
+    assert evaluate_omega_automaton(a_until_b, container, trace1_bot) == True
+    assert evaluate_omega_automaton(a_until_b, container, trace2) == False
+    assert evaluate_omega_automaton(a_until_b, container, trace2_top) == False
+    assert evaluate_omega_automaton(a_until_b, container, trace3) == True
+    assert evaluate_omega_automaton(a_until_b, container, trace3_bot) == False
+
+    assert evaluate_omega_automaton(a_strong_until_with_b, container, trace1) == False
+    assert evaluate_omega_automaton(a_strong_until_with_b, container, trace1_bot) == False
+    assert evaluate_omega_automaton(a_strong_until_with_b, container, trace2) == False
+    assert evaluate_omega_automaton(a_strong_until_with_b, container, trace2_top) == False
+    assert evaluate_omega_automaton(a_strong_until_with_b, container, trace3) == False
+    assert evaluate_omega_automaton(a_strong_until_with_b, container, trace3_top) == True
+    assert evaluate_omega_automaton(a_strong_until_with_b, container, trace3_bot) == False
+    assert evaluate_omega_automaton(a_strong_until_with_b, container, trace4) == True
+
+    assert evaluate_omega_automaton(a_until_b_read, container, trace1) == True
+    assert evaluate_omega_automaton(a_until_b_read, container, trace1_bot) == True
+    assert evaluate_omega_automaton(a_until_b_read, container, trace3) == False
+
+    assert evaluate_omega_automaton(a_until_b_read_2, container, trace1) == True
+    assert evaluate_omega_automaton(a_until_b_read_2, container, trace1_bot) == True
+    assert evaluate_omega_automaton(a_until_b_read_2, container, trace3) == False
+
+    assert evaluate_omega_automaton(b_until_always_a, container, trace1) == False
+    assert evaluate_omega_automaton(b_until_always_a, container, trace3) == True
+    assert evaluate_omega_automaton(b_until_always_a, container, trace3_top) == True
+    assert evaluate_omega_automaton(b_until_always_a, container, trace3_bot) == False
+    assert evaluate_omega_automaton(b_until_always_a, container, trace5) == False
+
+
+
+
+def test_automaton_omega_conflicting_obligations():
+
+    doc_str: str = """(document
+        (declare-input a)
+        (declare-input b)
+        (declare-input c)
+        (declare-input d)
+
+        (declare-rec
+            (declare start1 (omega-or and1 and2))
+            (and1 (omega-and path1 path2))
+            (and2 (omega-and path3 path4))
+            (path1 (omega-weak-consume a start1 (omega-false)))
+            (path2 (omega-weak-consume-acc b start1 (omega-false)))
+            (path3 (omega-weak-consume c start1 (omega-false)))
+            (path4 (omega-weak-consume-acc d start1 (omega-false)))
+        )
+
+        (declare-rec
+            (declare start2 (omega-or and1 and2))
+            (and1 (omega-and path1 path2))
+            (and2 (omega-and path3 path4))
+            (path1 (omega-weak-consume-acc a branch1 (omega-false)))
+            (path2 (omega-weak-consume-acc b branch2 (omega-false)))
+            (path3 (omega-weak-consume-acc c branch1 (omega-false)))
+            (path4 (omega-weak-consume-acc d branch2 (omega-false)))
+            (branch1 (omega-weak-consume a start2 (omega-false)))
+            (branch2 (omega-weak-consume b start2 (omega-false)))
+        )
+
+        (declare-rec
+            (declare start3 (omega-and path1 path2))
+            (path1 (omega-weak-consume a start3 (omega-false)))
+            (path2 (omega-weak-consume b start3 (omega-false)))
+        )
+
+        (declare-rec
+            (declare start4 (omega-weak-consume a start4 (omega-false)))
+        )
+
+        (declare-rec
+            (declare start5 (omega-and path1 path2))
+            (path1 (omega-weak-consume a start5 (omega-false)))
+            (path2 (omega-weak-consume b start5 (omega-false)))
+        )
+
+        (declare-rec
+            (declare start6 (omega-or and1 and2))
+            (and1 (omega-and path1 path2))
+            (and2 (omega-and path3 path4))
+            (path1 (omega-weak-consume-acc a branch1 (omega-false)))
+            (path2 (omega-weak-consume-acc b branch2 (omega-false)))
+            (path3 (omega-weak-consume c branch1 (omega-false)))
+            (path4 (omega-weak-consume-acc d branch2 (omega-false)))
+            (branch1 (omega-weak-consume a start6 (omega-false)))
+            (branch2 (omega-weak-consume b start6 (omega-false)))
+        )
+
+        (declare-rec
+            (declare start7 (omega-or and1 and2))
+            (and1 (omega-and path1 path2))
+            (and2 (omega-and path3 path4))
+            (path1 (omega-weak-consume-acc a start7 (omega-false)))
+            (path2 (omega-weak-consume-acc b start7 (omega-false)))
+            (path3 (omega-weak-consume-acc c start7 (omega-false)))
+            (path4 (omega-weak-consume d start7 (omega-false)))
+        )
+
+    )"""
+
+    trace1 = Trace(finite_part=(
+    ), suffix='top_omega')
+
+    container: IrContainer = IrContainer()
+    parse_document(parse_raw_sexpr(doc_str), container)
+
+    start1: NodeId = container.get_node_id_by_name('start1')
+    start2: NodeId = container.get_node_id_by_name('start2')
+    start3: NodeId = container.get_node_id_by_name('start3')
+    start4: NodeId = container.get_node_id_by_name('start4')
+    start5: NodeId = container.get_node_id_by_name('start5')
+    start6: NodeId = container.get_node_id_by_name('start6')
+    start7: NodeId = container.get_node_id_by_name('start7')
+
+    container.bypass_placeholders()
+
+    #output_directory: Path = Path('./output')
+    #container.show_graph(output_directory / 'omega_conflicting.png')
+
+    assert evaluate_omega_automaton(start1, container, trace1) == False
+    assert evaluate_omega_automaton(start2, container, trace1) == True
+    assert evaluate_omega_automaton(start3, container, trace1) == False
+    assert evaluate_omega_automaton(start4, container, trace1) == False
+    assert evaluate_omega_automaton(start5, container, trace1) == False
+    assert evaluate_omega_automaton(start6, container, trace1) == True
+    assert evaluate_omega_automaton(start7, container, trace1) == True
+
+
+
+@settings(verbosity=Verbosity.verbose, max_examples=50, deadline=500)
+@given(random_ir_with_trace(
+    final_node_type=FiniteAutomaton,
+    primitive_filter=lambda node_type:
+        issubclass(node_type, (FiniteAutomaton, Bool)) and
+        not issubclass(node_type, (AutRepeat, AutRepeatUpTo, AutRefuted))))
+def test_automaton_aut_random_no_error(doc_and_trace):
+
+    doc: str = doc_and_trace[0]
+    trace: Trace = doc_and_trace[1]
+
+    container: IrContainer = IrContainer()
+    parse_document(parse_raw_sexpr(doc), container)
+
+    root_node_id: NodeId = container.get_sink_nodes()[0]
+
+    result: list[FencepostPosition] = evaluate_finite_automaton(root_node_id,
+        container, trace, FencepostPosition(('at', 0)))
+
+    logger.debug('doc: %s', doc)
+    logger.debug('trace: %s', trace)
+    logger.debug('result: %s', result)
+
+
+@settings(verbosity=Verbosity.verbose, max_examples=50, deadline=500)
+@given(random_ir_with_trace(
+    final_node_type=OmegaAutomaton,
+    primitive_filter=lambda node_type:
+        issubclass(node_type, (OmegaAutomaton, FiniteAutomaton, Bool)) and
+        not issubclass(node_type, (OmegaAcceptOn, OmegaRejectOn, OmegaCallAll, OmegaCallExStrong, OmegaCallExWeak))))
+def test_automaton_oemga_random_no_error(doc_and_trace):
+
+    doc: str = doc_and_trace[0]
+    trace: Trace = doc_and_trace[1]
+
+    container: IrContainer = IrContainer()
+    parse_document(parse_raw_sexpr(doc), container)
+
+    root_node_id: NodeId = container.get_sink_nodes()[0]
+
+    result: MaybeBool = evaluate_omega_automaton(root_node_id, container, trace)
+
+    logger.debug('doc: %s', doc)
+    logger.debug('trace: %s', trace)
+    logger.debug('result: %s', result)
