@@ -2,7 +2,14 @@ import logging
 from pathlib import Path
 
 from hypothesis import Verbosity, example, given, settings
-from ir.base import ClockedProperty, IrContainer, NodeId, RawSExprList
+from ir.base import (
+    ClockedProperty,
+    FiniteAutomaton,
+    IrContainer,
+    NodeId,
+    OmegaAutomaton,
+    RawSExprList,
+)
 from ir.parsing import parse_document, parse_raw_sexpr
 from ir.primitives.clocked_primitives import (
     ClkPropClocked,
@@ -536,12 +543,13 @@ def check_empty_match_removal_no_error(doc):
         (step2 (clk-seq-concat step1 step0))
         (step3 (clk-seq-clocked (true) step2)) step3)))""")
 @settings(verbosity=Verbosity.verbose, max_examples=50, deadline=500)
-@given(random_ir_clocked(final_node_type=ClkSeqClocked, primitive_filter=lambda node_type: not issubclass(node_type, ClockedProperty)))
+@given(random_ir_clocked(final_node_type=ClkSeqClocked, primitive_filter=lambda node_type: not issubclass(node_type, (ClockedProperty, FiniteAutomaton, OmegaAutomaton))))
 def test_empty_match_removal_random_seq_no_error(doc):
     check_empty_match_removal_no_error(doc)
 
 @settings(verbosity=Verbosity.verbose, max_examples=50, deadline=500)
-@given(random_ir_clocked(final_node_type=ClkPropClocked))
+@given(random_ir_clocked(final_node_type=ClkPropClocked,
+    primitive_filter=lambda node_type: not issubclass(node_type, (FiniteAutomaton, OmegaAutomaton))))
 def test_empty_match_removal_random_prop_no_error(doc):
     check_empty_match_removal_no_error(doc)
 

@@ -2,18 +2,20 @@ from pathlib import Path
 
 import pytest
 from hypothesis import Verbosity, example, given, settings
-from ir.base import ClockedProperty, IrContainer, RawSExprList
+from ir.base import (
+    ClockedProperty,
+    FiniteAutomaton,
+    IrContainer,
+    OmegaAutomaton,
+    RawSExprList,
+)
 from ir.parsing import parse_document, parse_raw_sexpr, unparse_raw_sexpr
 from ir.primitives.clocked_primitives import (
     ClkPropClkSeq,
     ClkPropClocked,
     ClkSeqClocked,
 )
-from ir.rewriting import (
-    reduce_primitives,
-    rewrite_clocks,
-    rewrite_nexttime_primitives,
-)
+from ir.rewriting import reduce_primitives, rewrite_clocks, rewrite_nexttime_primitives
 
 from tests.strategies import random_ir_clocked
 
@@ -604,11 +606,13 @@ def check_clock_rewriting_no_error(doc):
         (step2 (clk-seq-concat step1 step0))
         (step3 (clk-seq-clocked (true) step2)) step3)))""")
 @settings(verbosity=Verbosity.verbose, max_examples=50, deadline=500)
-@given(random_ir_clocked(final_node_type=ClkSeqClocked, primitive_filter=lambda node_type: not issubclass(node_type, ClockedProperty)))
+@given(random_ir_clocked(final_node_type=ClkSeqClocked,
+    primitive_filter=lambda node_type: not issubclass(node_type, (ClockedProperty, FiniteAutomaton, OmegaAutomaton))))
 def test_clock_rewriting_random_seq_no_error(doc):
     check_clock_rewriting_no_error(doc)
 
 @settings(verbosity=Verbosity.verbose, max_examples=50, deadline=500)
-@given(random_ir_clocked(final_node_type=ClkPropClocked))
+@given(random_ir_clocked(final_node_type=ClkPropClocked,
+    primitive_filter=lambda node_type: not issubclass(node_type, (FiniteAutomaton, OmegaAutomaton))))
 def test_clock_rewriting_prop_no_error(doc):
     check_clock_rewriting_no_error(doc)

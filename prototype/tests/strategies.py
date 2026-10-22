@@ -11,7 +11,9 @@ from ir.base import (
     ClockedProperty,
     ClockedSequence,
     Directive,
+    FiniteAutomaton,
     IrContainer,
+    OmegaAutomaton,
     Property,
     PropertyIrNode,
     Range,
@@ -132,7 +134,7 @@ def random_data_for_ir(
 
     primitive_generators = []
     final_primitive_generators = []
-    allowed_types = [Property, Sequence, Bool, ClockedProperty, ClockedSequence]
+    allowed_types = [Property, Sequence, Bool, ClockedProperty, ClockedSequence, FiniteAutomaton, OmegaAutomaton]
 
     for node_type in allowed_types:
         for cls in node_type.__subclasses__():
@@ -262,6 +264,12 @@ def build_ir_from_random_data(strategy_drawn_data: tuple[list[IrGeneratingType],
                 elif issubclass(arg_type, ClockedProperty):
                     candidates_default += [f'(clk-prop-weak-bool {signal})' for signal in signal_list]
                     candidates_default += [f'(clk-prop-strong-bool {signal})' for signal in signal_list]
+
+                elif issubclass(arg_type, FiniteAutomaton):
+                    candidates_default += ['(aut-true)', '(aut-false)']
+
+                elif issubclass(arg_type, OmegaAutomaton):
+                    candidates_default += ['(omega-true)', '(omega-false)']
 
                 # choose candidates to select an argument from (prefer unused nodes over used ones and default values)
                 if random_num % 10 in range(9) and len(candidates_unused_preceding_nodes) > 0:

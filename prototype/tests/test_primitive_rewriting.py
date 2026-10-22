@@ -8,8 +8,10 @@ from ir.base import (
     Bool,
     ClockedProperty,
     ClockedSequence,
+    FiniteAutomaton,
     IrContainer,
     NodeId,
+    OmegaAutomaton,
     PropertyIrNode,
     RawSExprList,
 )
@@ -345,17 +347,19 @@ def check_reduce_primitives(doc):
     check_primitive_absence(container1, forbidden_primitives)
 
 @settings(verbosity=Verbosity.verbose, max_examples=50, deadline=500)
-@given(random_ir(final_node_type=Bool, primitive_filter=lambda node_type: bool(issubclass(node_type, Bool))))
+@given(random_ir(final_node_type=Bool, primitive_filter=lambda node_type: issubclass(node_type, Bool)))
 def test_reduce_primitives_bool(doc):
     check_reduce_primitives(doc)
 
 @settings(verbosity=Verbosity.verbose, max_examples=50, deadline=500)
-@given(random_ir_clocked(final_node_type=ClockedSequence, primitive_filter=lambda node_type: not issubclass(node_type, ClockedProperty)))
+@given(random_ir_clocked(final_node_type=ClockedSequence,
+    primitive_filter=lambda node_type: not issubclass(node_type, (ClockedProperty, FiniteAutomaton, OmegaAutomaton))))
 @example("""(document (declare-input 0) (parse-sexpr (let-rec (step0 (clk-seq-throughout (true) (clk-seq-bool 0))) step0)))""")
 def test_reduce_primitives_seq(doc):
     check_reduce_primitives(doc)
 
 @settings(verbosity=Verbosity.verbose, max_examples=50, deadline=500)
-@given(random_ir_clocked(final_node_type=ClockedProperty))
+@given(random_ir_clocked(final_node_type=ClockedProperty,
+    primitive_filter=lambda node_type: not issubclass(node_type, (FiniteAutomaton, OmegaAutomaton))))
 def test_reduce_primitives_prop(doc):
     check_reduce_primitives(doc)

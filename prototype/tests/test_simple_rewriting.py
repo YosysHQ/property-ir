@@ -2,7 +2,14 @@ import logging
 from pathlib import Path
 
 from hypothesis import Verbosity, example, given, settings
-from ir.base import AssertProperty, CoverProperty, IrContainer, RawSExprList
+from ir.base import (
+    AssertProperty,
+    CoverProperty,
+    FiniteAutomaton,
+    IrContainer,
+    OmegaAutomaton,
+    RawSExprList,
+)
 from ir.parsing import parse_document, parse_raw_sexpr
 from ir.primitives.clocked_primitives import ClkPropClocked
 from ir.rewriting import (
@@ -378,7 +385,9 @@ def check_clocked_to_simple_no_error(doc):
             (step1 (clk-prop-clocked (true) step0))
             step1)))""")
 @settings(verbosity=Verbosity.verbose, max_examples=30, deadline=1000)
-@given(random_ir_clocked(final_node_type=ClkPropClocked, directive=CoverProperty))
+@given(random_ir_clocked(final_node_type=ClkPropClocked,
+    primitive_filter=lambda node_type: not issubclass(node_type, (FiniteAutomaton, OmegaAutomaton)),
+    directive=CoverProperty))
 def test_clocked_to_simple_random_no_error_cover(doc):
     check_clocked_to_simple_no_error(doc)
 
@@ -389,6 +398,8 @@ def test_clocked_to_simple_random_no_error_cover(doc):
         (step1 (clk-prop-clocked (true) step0))
         step1)))""")
 @settings(verbosity=Verbosity.verbose, max_examples=30, deadline=1000)
-@given(random_ir_clocked(final_node_type=ClkPropClocked, directive=AssertProperty))
+@given(random_ir_clocked(final_node_type=ClkPropClocked,
+    primitive_filter=lambda node_type: not issubclass(node_type, (FiniteAutomaton, OmegaAutomaton)),
+    directive=AssertProperty))
 def test_clocked_to_simple_random_no_error(doc):
     check_clocked_to_simple_no_error(doc)

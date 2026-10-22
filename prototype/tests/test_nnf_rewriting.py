@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 from hypothesis import example, given, settings
 from ir import IrContainer, nnf
-from ir.base import NodeId, RawSExprList
+from ir.base import FiniteAutomaton, NodeId, OmegaAutomaton, RawSExprList
 from ir.parsing import parse_document, parse_raw_sexpr, unparse_raw_sexpr
 from ir.primitives.bool_primitives import (
     ChangingGclk,
@@ -468,7 +468,8 @@ def check_nnf_random_property_evaluation(doc_and_trace: tuple[str, Trace], visua
 @settings(max_examples=100, deadline=500)
 @given(random_ir_with_trace_simple(final_node_type=PropNot,
     primitive_filter=lambda node_type:
-        not issubclass(node_type, (Xor, Ite, Eq, ChangingGclk, RisingGclk, FallingGclk, PropRefuted)),
+        not issubclass(node_type, (Xor, Ite, Eq, ChangingGclk, RisingGclk, FallingGclk, PropRefuted,
+            FiniteAutomaton, OmegaAutomaton)),
     trace_min_length=0))
 @example(("""(document (declare-input 0)
     (parse-sexpr (let-rec
@@ -489,7 +490,8 @@ def test_nnf_random_property_evaluation_with_empty_trace(doc_and_trace: tuple[st
 @settings(max_examples=100, deadline=500)
 @given(random_ir_with_trace_simple(final_node_type=PropNot,
     primitive_filter=lambda node_type:
-        not issubclass(node_type, (Xor, Ite, Eq, ChangingGclk, RisingGclk, FallingGclk, PropRefuted)),
+        not issubclass(node_type, (Xor, Ite, Eq, ChangingGclk, RisingGclk, FallingGclk, PropRefuted,
+            FiniteAutomaton, OmegaAutomaton)),
     trace_min_length=5))
 def test_nnf_random_property_evaluation_no_empty_trace(doc_and_trace: tuple[str, Trace]):
     check_nnf_random_property_evaluation(doc_and_trace)
