@@ -601,6 +601,9 @@ def evaluate_omega_automaton_primitive(node_id: NodeId[OmegaAutomaton],
             pos = FencepostPosition('within_infinite_suffix')
 
 
+    logger.debug('Evaluate node %s on %s at %s', node, trace, pos)
+
+
     #---- SINKS
 
     if isinstance(node, OmegaTrue):
@@ -617,8 +620,9 @@ def evaluate_omega_automaton_primitive(node_id: NodeId[OmegaAutomaton],
 
     elif isinstance(node, (OmegaStrongConsume, OmegaWeakConsume, OmegaStrongConsumeAcc, OmegaWeakConsumeAcc)):
 
-        if isinstance(node, (OmegaWeakConsume, OmegaWeakConsumeAcc)) and trace.suffix == 'end' and pos == FencepostPosition('within_infinite_suffix'):
-            bool_result = 'top'
+        if isinstance(node, (OmegaWeakConsume, OmegaWeakConsumeAcc)) and trace.suffix == 'end':
+            modified_trace: Trace = trace.replace_from(FencepostPosition('within_infinite_suffix'), 'top_omega')
+            bool_result: MaybeBool = evaluate_bool(node.child1, container, modified_trace, pos, {})
         else:
             bool_result: MaybeBool = evaluate_bool(node.child1, container, trace, pos, {})
 
@@ -643,8 +647,9 @@ def evaluate_omega_automaton_primitive(node_id: NodeId[OmegaAutomaton],
 
     elif isinstance(node, (OmegaStrongRead, OmegaWeakRead)):
 
-        if isinstance(node, OmegaWeakRead) and trace.suffix == 'end' and pos == FencepostPosition('within_infinite_suffix'):
-            bool_result = 'top'
+        if isinstance(node, OmegaWeakRead) and trace.suffix == 'end':
+            modified_trace: Trace = trace.replace_from(FencepostPosition('within_infinite_suffix'), 'top_omega')
+            bool_result: MaybeBool = evaluate_bool(node.child1, container, modified_trace, pos, {})
         else:
             bool_result: MaybeBool = evaluate_bool(node.child1, container, trace, pos, {})
 
@@ -677,26 +682,26 @@ def evaluate_omega_automaton_primitive(node_id: NodeId[OmegaAutomaton],
     #-----
 
 
-    elif isinstance(node, OmegaAcceptOn): # noqa
-        raise NotImplementedError
-    elif isinstance(node, OmegaRejectOn): # noqa
-        raise NotImplementedError
+    elif isinstance(node, OmegaAcceptOn):
+        raise NotImplementedError('Encountered OmegaAcceptOn')
+    elif isinstance(node, OmegaRejectOn):
+        raise NotImplementedError('Encountered OmegaRejectOn')
 
     #----- SUBCALLS
 
-    elif isinstance(node, OmegaCallAll): # noqa
-        raise NotImplementedError
+    elif isinstance(node, OmegaCallAll):
+        raise NotImplementedError('Encountered OmegaCallAll')
         # end -> bot_omega
         # switch top_omega <-> bot_omega
         # conjunction of delayed states
 
-    elif isinstance(node, OmegaCallExStrong): # noqa
-        raise NotImplementedError
+    elif isinstance(node, OmegaCallExStrong):
+        raise NotImplementedError('Encountered OmegaCallExStrong')
         # end -> bot_omega
         # disjunction of delayed states
 
     elif isinstance(node, OmegaCallExWeak):
-        raise NotImplementedError
+        raise NotImplementedError('Encountered OmegaCallExWeak')
         # end -> top_omega
         # disjunction of delayed states
 

@@ -1294,7 +1294,7 @@ def test_automaton_aut_random_no_error(doc_and_trace):
     primitive_filter=lambda node_type:
         issubclass(node_type, (OmegaAutomaton, FiniteAutomaton, Bool)) and
         not issubclass(node_type, (OmegaAcceptOn, OmegaRejectOn, OmegaCallAll, OmegaCallExStrong, OmegaCallExWeak))))
-def test_automaton_oemga_random_no_error(doc_and_trace):
+def test_automaton_omega_random_no_error(doc_and_trace):
 
     doc: str = doc_and_trace[0]
     trace: Trace = doc_and_trace[1]

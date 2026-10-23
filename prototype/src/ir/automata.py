@@ -44,17 +44,16 @@ def get_split_seq_repeat_rewrite_rule(container: IrContainer, node_id: NodeId) -
 
 def prepare_container_for_automaton_translation(container: IrContainer):
     """Prepare container for simple property to automaton transformation.
-    Splits prop-weak-bool and prop-strong-bool into prop-weak/strong + seq-bool.
     Breaks seq-repeat primitives up into a concatenation of two seq-repeat
     primitives as a preparation for the simple_to_automaton pass.
     Rewrite in-place in the input_container."""
 
     rewrite_dict: dict[type[PropertyIrNode], RewriteRule | RewriteRuleGenerator] = {
         SeqRepeat: get_split_seq_repeat_rewrite_rule,
-        PropWeakBool: (['prop-weak-bool', '<bool>'],
-            ['prop-weak', ['seq-bool', '<bool>']]),
-        PropStrongBool: (['prop-weak-bool', '<bool>'],
-            ['prop-strong', ['seq-bool', '<bool>']])
+        #PropWeakBool: (['prop-weak-bool', '<bool>'],
+        #    ['prop-weak', ['seq-bool', '<bool>']]),
+        #PropStrongBool: (['prop-weak-bool', '<bool>'],
+        #    ['prop-strong', ['seq-bool', '<bool>']])
     }
 
     apply_rules(container, rewrite_dict)
@@ -206,13 +205,9 @@ def simple_to_automaton(input_container: IrContainer) -> IrContainer:
             ['omega-call-ex-weak', '<seq>', ['omega-true']]),
 
         PropStrongBool: (['prop-strong-bool', '<bool>'],
-            ['omega-call-ex-strong',
-            ['aut-read', '<bool>', ['aut-acc', ['aut-false']], ['aut-false']],
-            ['omega-true']]),
-        PropWeakBool: (['prop-weak', '<seq>'],
-            ['omega-call-ex-weak',
-            ['aut-read', '<bool>', ['aut-acc', ['aut-false']], ['aut-false']],
-            ['omega-true']]),
+            ['omega-strong-read', '<bool>', ['omega-true'], ['omega-false']]),
+        PropWeakBool: (['prop-weak-bool', '<bool>'],
+            ['omega-weak-read', '<bool>', ['omega-true'], ['omega-false']]),
 
         PropAnd: (['prop-and', '<prop_list>'],
             ['omega-and', '<prop_list>']),
@@ -233,15 +228,15 @@ def simple_to_automaton(input_container: IrContainer) -> IrContainer:
         PropUntil: (['prop-until', '<prop1>', '<prop2>'],
             ['let-rec',
                 ['start',
-                    ['omega-or', '<prop2>',
-                        ['omega-and', '<prop1>',
+                    ['omega-or', '<prop2>', ['omega-weak-read', ['false'], ['omega-true'], '<prop2>'],
+                        ['omega-and', ['omega-weak-read', ['false'], ['omega-true'], '<prop1>'],
                             ['omega-weak-consume-acc', ['true'], 'start', ['omega-false']]]]],
                 'start']),
         PropStrongUntilWith: (['prop-strong-until-with', '<prop1>', '<prop2>'],
             ['let-rec',
                 ['start',
-                    ['omega-and', '<prop1>',
-                        ['omega-or', '<prop2>',
+                    ['omega-and', ['omega-strong-read', ['true'], '<prop1>', ['omega-false']],
+                        ['omega-or', ['omega-strong-read', ['true'], '<prop2>', ['omega-false']],
                             ['omega-strong-consume', ['true'], 'start', ['omega-false']]]]],
                 'start']),
 
