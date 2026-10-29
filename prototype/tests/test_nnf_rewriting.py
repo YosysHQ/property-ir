@@ -18,6 +18,7 @@ from ir.primitives.simple_primitives import PropNot, PropRefuted
 
 from tests.evaluate import (
     BoolMemoDict,
+    FencepostPosition,
     MaybeBool,
     PropertyMemoDict,
     SequenceMemoDict,
@@ -441,12 +442,12 @@ def check_nnf_random_property_evaluation(doc_and_trace: tuple[str, Trace], visua
     parse_document(parse_raw_sexpr(doc), input_container)
 
     root_node_id1: NodeId = input_container.get_sink_nodes()[0]
-    result1: MaybeBool = evaluate_property(root_node_id1, input_container, trace, bool_results1, seq_results1, prop_results1)
+    result1: MaybeBool = evaluate_property(root_node_id1, input_container, trace, FencepostPosition(('at', 0)), bool_results1, seq_results1, prop_results1)
 
     output_container: IrContainer = nnf(container=input_container)
 
     root_node_id2: NodeId = output_container.get_sink_nodes()[0]
-    result2: MaybeBool = evaluate_property(root_node_id2, output_container, trace, bool_results2, seq_results2, prop_results2)
+    result2: MaybeBool = evaluate_property(root_node_id2, output_container, trace, FencepostPosition(('at', 0)), bool_results2, seq_results2, prop_results2)
 
     logger.debug('input_doc: %s', doc)
     logger.debug('output_doc: %s', unparse_raw_sexpr(output_container.output_container()))

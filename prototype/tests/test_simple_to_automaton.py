@@ -25,6 +25,7 @@ from ir.primitives.bool_primitives import (
 from ir.primitives.clocked_primitives import ClkPropOmega
 from ir.primitives.simple_primitives import (
     PropAcceptOn,
+    PropFalse,
     PropNexttime,
     PropNot,
     PropOverlappedFollowedBy,
@@ -33,16 +34,17 @@ from ir.primitives.simple_primitives import (
     PropRejectOn,
     PropStrong,
     PropStrongNexttime,
+    PropTrue,
     PropWeak,
     SeqConcat,
     SeqFirstMatch,
     SeqFusion,
     SeqRepeat,
 )
-from pytest import mark
 
 from tests.evaluate import (
     BoolMemoDict,
+    FencepostPosition,
     MaybeBool,
     PropertyMemoDict,
     SequenceMemoDict,
@@ -266,7 +268,7 @@ def check_automaton_random_property_evaluation(doc_and_trace: tuple[str, Trace],
     parse_document(parse_raw_sexpr(doc), input_container)
 
     root_node_id1: NodeId = input_container.get_sink_nodes()[0]
-    result1: MaybeBool = evaluate_property(root_node_id1, input_container, trace, bool_results1, seq_results1, prop_results1)
+    result1: MaybeBool = evaluate_property(root_node_id1, input_container, trace, FencepostPosition(('at', 0)), bool_results1, seq_results1, prop_results1)
 
     prepare_container_for_automaton_translation(input_container)
     output_container: IrContainer = simple_to_automaton(input_container)
@@ -311,15 +313,27 @@ def check_automaton_random_property_evaluation(doc_and_trace: tuple[str, Trace],
             Xor, Ite, Eq, ChangingGclk, RisingGclk, FallingGclk,
             PropRefuted,
             PropNot,
+            PropTrue, PropFalse,
             PropNexttime, PropStrongNexttime,
             PropAcceptOn, PropRejectOn,
             PropOverlappedImplication, PropOverlappedFollowedBy,
             SeqConcat, SeqFusion, PropStrong, PropWeak, SeqRepeat, SeqFirstMatch,
             FiniteAutomaton, OmegaAutomaton)),
     trace_min_length=5))
-@mark.xfail(reason="working on this")
 def test_automaton_random_property_evaluation_no_empty_trace(doc_and_trace: tuple[str, Trace]):
     check_automaton_random_property_evaluation(doc_and_trace, visualize=False)
+
+
+# NOTE the following examples fail, but are explicitly forbidden by the SV standard
+# because of unintuitive semantics
+# the prop-false and prop-true primitives do not exist in SVA
+# but they coulb be the result of degenerate sequences used as properties (prop-false)
+# or as overlapped implication antecedent (prop-true)
+#@example(doc_and_trace=('(document (declare-input 0) (parse-sexpr (let-rec (step0 (prop-false )) (step1 (prop-until step0 step0)) step1)))',
+#     Trace(finite_part=(), suffix='top_omega')))
+#@example(doc_and_trace=('(document (declare-input 0) (parse-sexpr (let-rec (step0 (prop-true )) (step1 (prop-false )) (step2 (prop-until step0 step1)) step2)))',
+#     Trace(finite_part=(), suffix='bot_omega')))
+
 
 @example(doc_and_trace=('(document (declare-input 0) (parse-sexpr (let-rec (step0 (prop-until (prop-strong-bool 0) (prop-strong-bool 0))) step0)))',
      Trace(finite_part=(), suffix='end')))
@@ -327,30 +341,31 @@ def test_automaton_random_property_evaluation_no_empty_trace(doc_and_trace: tupl
      Trace(finite_part=(), suffix='end')))
 @example(doc_and_trace=('(document (declare-input 0) (parse-sexpr (let-rec (step0 (prop-true )) (step1 (prop-until step0 step0)) step1)))',
      Trace(finite_part=(), suffix='bot_omega')))
-@example(doc_and_trace=('(document (declare-input 0) (parse-sexpr (let-rec (step0 (prop-true )) (step1 (prop-false )) (step2 (prop-until step0 step1)) step2)))',
-     Trace(finite_part=(), suffix='bot_omega')))
 @example(doc_and_trace=('(document (declare-input 0) (parse-sexpr (let-rec (step0 (future-gclk (true))) (step1 (prop-weak-bool step0)) step1)))',
      Trace(finite_part=(frozenset(),), suffix='end')))
 @example(doc_and_trace=('(document (declare-input 0) (declare-input 1) (parse-sexpr (let-rec (step0 (prop-until (prop-strong-bool 1) (prop-weak-bool 0))) step0)))',
      Trace(finite_part=(frozenset({'1'}),), suffix='end')))
-@example(doc_and_trace=('(document (declare-input 0) (parse-sexpr (let-rec (step0 (prop-false )) (step1 (prop-until step0 step0)) step1)))',
-     Trace(finite_part=(), suffix='top_omega')))
-@example(doc_and_trace=('(document (declare-input 0) (parse-sexpr (let-rec (step0 (prop-weak-bool (true))) (step1 (initial )) (step2 (prop-weak-bool step1)) (step3 (prop-and step0 (prop-strong-bool 0))) (step4 (prop-until step2 step3)) step4)))',
-     Trace(finite_part=(frozenset(), frozenset()), suffix='end')))
-@settings(max_examples=1, deadline=500)
+@example(doc_and_trace=("""(document (declare-input 0) (parse-sexpr (let-rec
+        (step0 (prop-weak-bool (true)))
+        (step1 (initial ))
+        (step2 (prop-weak-bool step1))
+        (step3 (prop-and step0 (prop-strong-bool 0)))
+        (step4 (prop-until step2 step3))
+        step4)))""",
+    Trace(finite_part=(frozenset(), frozenset()), suffix='end')))
+@settings(max_examples=100, deadline=500)
 @given(random_ir_with_trace_simple(final_node_type=Property,
     primitive_filter=lambda node_type:
         not issubclass(node_type, (
             Xor, Ite, Eq, ChangingGclk, RisingGclk, FallingGclk,
             PropRefuted,
             PropNot,
-            #PropTrue, PropFalse,
+            PropTrue, PropFalse,
             PropNexttime, PropStrongNexttime,
             PropAcceptOn, PropRejectOn,
             PropOverlappedImplication, PropOverlappedFollowedBy,
             SeqConcat, SeqFusion, PropStrong, PropWeak, SeqRepeat, SeqFirstMatch,
             FiniteAutomaton, OmegaAutomaton)),
     trace_min_length=0))
-@mark.xfail(reason="working on this")
 def test_automaton_random_property_evaluation_with_empty_trace(doc_and_trace: tuple[str, Trace]):
     check_automaton_random_property_evaluation(doc_and_trace, visualize=False)
