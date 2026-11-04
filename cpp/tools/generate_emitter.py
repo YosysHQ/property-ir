@@ -69,11 +69,7 @@ def generate(schema: dict) -> tuple[str, str]:
         header.append(f"using {name}Id = Identifier<Type::{name}>;")
     header.append("")
 
-    for primitive in schema["primitives"]:
-        ir_name = primitive["name"]
-        name = PRIMITIVE_RENAMES.get(ir_name, ir_name.replace("-", "_"))
-        result = cpp_types[primitive["result"]]
-        arguments = primitive["arguments"]
+    def generate_single(ir_name: str, name: str, result: str, arguments: list[dict]) -> None:
         signature = (
             f"{result} {name}({parameters(arguments, cpp_types, 'std::vector')})"
         )
@@ -118,6 +114,18 @@ def generate(schema: dict) -> tuple[str, str]:
                         "}\n",
                     ]
                 )
+
+    for category in ["primitives", "statements"]:
+        for instance in schema[category]:
+            ir_name: str = instance["name"]
+            name = ir_name.replace("-", "_")
+            if category == "primitives":
+                name = PRIMITIVE_RENAMES.get(ir_name, name)
+                result = cpp_types[instance["result"]]
+            else:
+                result = "Statement"
+            arguments = instance["arguments"]
+            generate_single(ir_name, name, result, arguments)
 
     for name in expression_types:
         source.append(f"template Statement declare({name}Id name, {name}Expr value);")
