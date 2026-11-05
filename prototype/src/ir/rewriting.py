@@ -1667,13 +1667,20 @@ def construct_rewritten_container_process_node(
     output_container: IrContainer,
     rules: dict[type[PropertyIrNode], RewriteRule | RewriteRuleGenerator],
     corresponding_nodes: dict[NodeId, NodeId],
-    type_classes_to_copy: list[type]):
+    type_classes_to_copy: list[type],
+    designated_nodes: dict[str, NodeId] | None = None):
+    """The nodes in designated_nodes can be used as names in the rewrite rules
+    to bind specific nodes. They must not start with 'child' because that naming
+    schema is reserved for all non-designated child nodes in rewriting rules."""
 
     repr_id = input_container.merged_nodes.find(node_id)
     current_node = input_container[repr_id]
 
     current_cls: type[PropertyIrNode] = current_node.node_type()
     current_type_class: type[PropertyIrNode] = current_node.type_class()
+
+    if designated_nodes is None:
+        designated_nodes = {}
 
     rhs: RawSExpr | None = None
 
@@ -1742,8 +1749,13 @@ def construct_rewritten_container_process_node(
         expression_to_add = prepare_rhs(rhs=rhs, literals_to_replace=literals_to_replace, child_name_mapping=child_name_mapping,\
             children_list_to_expand=(children_list_identifier, expanded_children_list))
 
+    # check designated_nodes and local_nodes for duplicate names
+    if(len(local_nodes.keys() & designated_nodes.keys()) > 0):
+        raise ValueError('Duplicate local node names %s encountered while rewriting', local_nodes.keys() & designated_nodes.keys())
+
     # add rhs of rule to output container
-    added_node_id: NodeId = parse_expression(expression_to_add, None, local_nodes, output_container)
+    logger.debug('Expression to add: %s', expression_to_add)
+    added_node_id: NodeId = parse_expression(expression_to_add, None, local_nodes | designated_nodes, output_container)
     added_node: PropertyIrNode = output_container[added_node_id]
 
     # add to corresponding_nodes or instantiate if placeholder
@@ -1773,7 +1785,8 @@ def construct_rewritten_container(
     rules: dict[type[PropertyIrNode], RewriteRule | RewriteRuleGenerator],
     type_classes_to_copy: list[type]) -> IrContainer:
     """Takes a container and constructs a new container based on the given rewriting rules.
-    Every node type that is encountered must exist in the rewrite_rules.
+    Every node type that is encountered must exist in the rewrite rules.
+    An exception are nodes of the types in type_classes_to_copy.
     This approach needs to be taken when rewriting rules change the types of replaced nodes
     to ensure that the expression graph is always well-typed."""
 

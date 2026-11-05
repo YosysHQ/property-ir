@@ -1,7 +1,7 @@
 
 from typing import Literal
 
-from .base import IrContainer, PropertyIrNode, RawSExpr, RawSExprList
+from .base import IrContainer, PlaceholderNode, PropertyIrNode, RawSExpr, RawSExprList
 from .primitives.automata_primitives import *
 from .primitives.clocked_primitives import ClkPropProp, ClkSeqSeq
 from .primitives.simple_primitives import *
@@ -10,6 +10,7 @@ from .rewriting import (
     RewriteRuleGenerator,
     apply_rules,
     construct_rewritten_container,
+    construct_rewritten_container_process_node,
 )
 
 
@@ -262,3 +263,101 @@ def simple_to_automaton(input_container: IrContainer) -> IrContainer:
     output_container: IrContainer = construct_rewritten_container(input_container, rewrite_rules, type_classes_to_copy = [Bool, FiniteAutomaton, OmegaAutomaton])
 
     return output_container
+
+
+
+def unroll_aut_repeat(container: IrContainer):
+    pass
+    # TODO
+
+
+
+def get_aut_acc_rule_omega_call_all(container: IrContainer, node_id: NodeId) -> RewriteRule:
+    """Rewriting rule for aut-acc when removing omega-call-all.
+    It is rewritten to omega-and of the successor state and the successor
+    automaton initial state. If the successor is aut-true or aut-false,
+    it is simplified to either the successor state or the successor automaton.
+    Because part of the removal of omega-call-all is the transformation from NFA
+    to dual UFA, note that the polarity of aut-true and aut-false changes."""
+
+    node: PropertyIrNode = container[node_id]
+    assert(isinstance(node, AutAcc))
+
+    child_node_id: NodeId = node.child
+    child_node = container[child_node_id]
+
+    # switched because true/false need be be inverted for the dual UFA
+    if isinstance(child_node, AutTrue):
+        return (['aut-acc', '<aut>'], ['omega-false'])
+    elif isinstance(child_node, AutFalse):
+        return (['aut-acc', '<aut>'], '<aut>')
+
+    return (['aut-acc', '<aut>'], ['omega-and', '<aut>', '<successor>'])
+
+
+def remove_omega_call_all(node_id: NodeId, container: IrContainer):
+    """Rewrites an instance of an omega-call-all primitive.
+    The subcall automaton must be an NFA, no aut-refuted, aut-repeat,
+    aut-repeat-up-to, or subcall primitives are allowed.
+    This transformation entails converting the subcall automaton into its
+    dual UFA (universal finite automaton), by exchanging or/and and true/false."""
+
+    node: PropertyIrNode = container[node_id]
+    assert(isinstance(node, OmegaCallAll))
+
+    subcall_initial_state: NodeId = node.child1
+    successor_initial_state: NodeId = node.child2
+
+    # rewriting rules
+    rules: dict[type[PropertyIrNode], RewriteRule | RewriteRuleGenerator] = {
+        AutOr: (['aut-or', '<aut_list>'], ['omega-and', '<aut_list>']),
+        AutAnd: (['aut-and', '<aut_list>'], ['omega-or', '<aut_list>']),
+        AutFalse: (['aut-false'], ['omega-true']),
+        AutTrue: (['aut-true'], ['omega-false']),
+        AutConsume: (['aut-consume', '<bool>', '<aut1>', '<aut2>'], ['omega-weak-consume-acc', '<bool>', '<aut1>', '<aut2>']),
+        AutRead: (['aut-read', '<bool>', '<aut1>', '<aut2>'], ['omega-weak-read', '<bool>', '<aut1>', '<aut2>']),
+        AutAcc: get_aut_acc_rule_omega_call_all
+    }
+
+
+    # successor automaton initial state is given to rewriting method
+    # to be usable inside the rewriting rule for aut-acc
+    designated_nodes: dict[str, NodeId] = {'<successor>': successor_initial_state}
+
+    # add signal nodes to corresponding_nodes
+    corresponding_nodes: dict[NodeId, NodeId] = {}
+
+    for signal_id in container.source_nodes.values():
+        signal_repr_id = container.merged_nodes.find(signal_id)
+        corresponding_nodes[signal_repr_id] = signal_repr_id
+
+    # apply rewriting rules
+    root_node_id: NodeId = construct_rewritten_container_process_node(subcall_initial_state, container, container, rules, corresponding_nodes, [Bool], designated_nodes)
+    root_node = container[root_node_id]
+
+    # replace subcall node in container by root of the rewritten subcall automaton
+    # for this, add new placeholder that has the node_id of the node to replace
+    # then instantiate/merge this new placeholder with root of the rewritten subcall automaton
+    # (no references need to be rewritten this way)
+    node_id_repr: NodeId = node.node_id
+    new_placeholder_node: PropertyIrNode = PlaceholderNode(ir_container=container, node_id=node_id_repr, expected_type=OmegaAutomaton)
+    container.nodes[node_id_repr] = new_placeholder_node
+    new_placeholder_node.instantiate_placeholder(root_node)
+
+
+
+def remove_omega_call_ex_weak(node_id: NodeId, container: IrContainer):
+    """Rewrites an instance of an omega-call-ex-weak primitive.
+    The subcall automaton must be an NFA."""
+
+def remove_omega_call_ex_strong(node_id: NodeId, container: IrContainer):
+    """Rewrites an instance of an omega-call-ex-strong primitive.
+    The subcall automaton must be an NFA."""
+
+def remove_aut_call_ex(node_id: NodeId, container: IrContainer):
+    """Rewrites an instance of an aut-call-ex primitive.
+    The subcall automaton must be an NFA."""
+
+def remove_aut_call_first(node_id: NodeId, container: IrContainer):
+    """Rewrites an instance of an aut-call-first primitive.
+    The subcall automaton must be a DFA."""
