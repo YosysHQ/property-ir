@@ -43,6 +43,10 @@ struct RangeLiteral {
     if (lower < 0 || (upper >= 0 && upper < lower) || upper < -1)
       throw std::invalid_argument("invalid range");
   }
+
+  bool single() const { return lower == upper; }
+  bool single(int test) const { return single() && lower == test; }
+  bool unbounded() const { return lower < 0; }
 };
 
 struct BoundedRangeLiteral {
@@ -53,6 +57,9 @@ struct BoundedRangeLiteral {
     if (lower < 0 || upper < lower)
       throw std::invalid_argument("invalid bounded range");
   }
+
+  bool single() const { return lower == upper; }
+  bool single(int test) const { return single() && lower == test; }
 };
 
 template <Type T> class Identifier;
