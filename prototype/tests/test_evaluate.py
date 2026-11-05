@@ -962,6 +962,10 @@ def test_evaluate_prop_overlapped_followed_by():
             (prop-weak (seq-concat (seq-bool b) (seq-bool a) (seq-bool a) (seq-bool c)))
         ))
 
+        (declare prop6 (prop-overlapped-followed-by
+            (seq-bool a) (prop-strong-bool (true))
+        ))
+
     )"""
 
     container: IrContainer = IrContainer()
@@ -974,6 +978,7 @@ def test_evaluate_prop_overlapped_followed_by():
     prop3: NodeId = container.get_node_id_by_name('prop3')
     prop4: NodeId = container.get_node_id_by_name('prop4')
     prop5: NodeId = container.get_node_id_by_name('prop5')
+    prop6: NodeId = container.get_node_id_by_name('prop6')
 
     trace1: Trace = Trace(finite_part=(
         frozenset(['a', 'b']),
@@ -995,6 +1000,11 @@ def test_evaluate_prop_overlapped_followed_by():
         frozenset(['a']),
         frozenset(['a', 'b', 'c']),
     ), suffix='bot_omega')
+
+    trace4: Trace = Trace(finite_part=(
+        frozenset(),
+        frozenset(['a']),
+    ), suffix='end')
 
     bool_results: BoolMemoDict = {}
     seq_results: SequenceMemoDict = {}
@@ -1027,6 +1037,9 @@ def test_evaluate_prop_overlapped_followed_by():
     assert evaluate_property(prop5, container, trace1, FencepostPosition(('at', 0)), bool_results, seq_results, prop_results) == True
     assert evaluate_property(prop5, container, trace2, FencepostPosition(('at', 0)), bool_results, seq_results, prop_results) == True
     assert evaluate_property(prop5, container, trace3, FencepostPosition(('at', 0)), bool_results, seq_results, prop_results) == False
+
+    assert evaluate_property(prop6, container, trace4, FencepostPosition(('at', 0)), bool_results, seq_results, prop_results) == False
+    assert evaluate_property(prop6, container, trace4, FencepostPosition(('at', 1)), bool_results, seq_results, prop_results) == True
 
 
 def test_evaluate_weak_unknown():
@@ -1197,6 +1210,20 @@ def test_evaluate_prop_strong_until_with():
         (declare prop5 (prop-strong-until-with (prop-weak seq_rep) prop_unknown))
         (declare prop6 (prop-strong-until-with prop_unknown (prop-weak seq_rep)))
 
+        (declare prop7 (prop-strong-until-with
+            (prop-strong-bool (true))
+            (prop-strong-bool a)
+        ))
+
+        (declare prop_followed (prop-overlapped-followed-by
+            (seq-bool a) (prop-strong-bool (true))
+        ))
+
+        (declare prop8 (prop-strong-until-with
+            (prop-strong-bool (true))
+            prop_followed
+        ))
+
     )"""
 
     container: IrContainer = IrContainer()
@@ -1208,6 +1235,8 @@ def test_evaluate_prop_strong_until_with():
     prop4: NodeId = container.get_node_id_by_name('prop4')
     prop5: NodeId = container.get_node_id_by_name('prop5')
     prop6: NodeId = container.get_node_id_by_name('prop6')
+    prop7: NodeId = container.get_node_id_by_name('prop7')
+    prop8: NodeId = container.get_node_id_by_name('prop8')
 
     trace1: Trace = Trace(finite_part=(
         frozenset(['a', 'b']),
@@ -1233,6 +1262,11 @@ def test_evaluate_prop_strong_until_with():
     trace4: Trace = Trace(finite_part=(
         frozenset(['a', 'b']),
     ), suffix='top_omega')
+
+    trace5: Trace = Trace(finite_part=(
+        frozenset(),
+        frozenset(['a']),
+    ), suffix='end')
 
     bool_results: BoolMemoDict = {}
     seq_results: SequenceMemoDict = {}
@@ -1267,6 +1301,9 @@ def test_evaluate_prop_strong_until_with():
     assert evaluate_property(prop6, container, trace2, FencepostPosition(('at', 0)), bool_results, seq_results, prop_results) == 'unknown'
     assert evaluate_property(prop6, container, trace3, FencepostPosition(('at', 0)), bool_results, seq_results, prop_results) == False
     assert evaluate_property(prop6, container, trace4, FencepostPosition(('at', 0)), bool_results, seq_results, prop_results) == 'unknown'
+
+    assert evaluate_property(prop7, container, trace5, FencepostPosition(('at', 0)), bool_results, seq_results, prop_results) == True
+    assert evaluate_property(prop8, container, trace5, FencepostPosition(('at', 0)), bool_results, seq_results, prop_results) == True
 
 
 def test_evaluate_prop_not():

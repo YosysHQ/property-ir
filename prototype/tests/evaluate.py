@@ -793,7 +793,7 @@ def evaluate_property_primitive(node: PropertyIrNode,
 
     elif isinstance(node, PropOverlappedFollowedBy):
         all_matches: frozenset[FencepostPosition] = sequence_matches(
-            node.child1, container, trace, FencepostPosition(('at', 0)), bool_results, seq_results)
+            node.child1, container, trace, pos, bool_results, seq_results)
         logger.debug('PropOverlappedFollowedBy all_matches: %s', all_matches)
         unknown_result: bool = False
         for match in all_matches:

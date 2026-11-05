@@ -488,6 +488,29 @@ def check_nnf_random_property_evaluation(doc_and_trace: tuple[str, Trace], visua
 def test_nnf_random_property_evaluation_with_empty_trace(doc_and_trace: tuple[str, Trace]):
     check_nnf_random_property_evaluation(doc_and_trace, visualize=False)
 
+# (prop-true and prop-false can never actually occur in the input)
+@example(doc_and_trace=("""(document (declare-input 0)
+    (parse-sexpr (let-rec
+        (step2 (prop-false ))
+        (step3 (prop-true ))
+        (step6 (prop-overlapped-followed-by (seq-bool 0) step3))
+        (step7 (seq-concat (seq-bool 0) (seq-bool 0)))
+        (step8 (prop-false ))
+        (step9 (prop-until step6 step2))
+        (step10 (prop-not step9)) step10)))""",
+            Trace(finite_part=(frozenset({'0'}),
+              frozenset(),
+              frozenset(),
+              frozenset(),
+              frozenset()),
+             suffix='end')))
+@example(doc_and_trace=("""(document (declare-input 0) (declare-input 1)
+    (parse-sexpr (let-rec
+        (step0 (prop-weak-bool (false)))
+        (step1 (prop-overlapped-implication (seq-bool 1) step0))
+        (step2 (prop-until step1 step0))
+        (step3 (prop-not step2)) step3)))""",
+            Trace(finite_part=(frozenset(), frozenset({'1'})), suffix='end')))
 @settings(max_examples=100, deadline=500)
 @given(random_ir_with_trace_simple(final_node_type=PropNot,
     primitive_filter=lambda node_type:
@@ -495,4 +518,4 @@ def test_nnf_random_property_evaluation_with_empty_trace(doc_and_trace: tuple[st
             FiniteAutomaton, OmegaAutomaton)),
     trace_min_length=5))
 def test_nnf_random_property_evaluation_no_empty_trace(doc_and_trace: tuple[str, Trace]):
-    check_nnf_random_property_evaluation(doc_and_trace)
+    check_nnf_random_property_evaluation(doc_and_trace, visualize=False)
