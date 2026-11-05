@@ -29,9 +29,29 @@ void emit_argument(SExprPrinter &printer, bool value) {
   printer.identifier(value ? "true" : "false");
 }
 
-void emit_argument(SExprPrinter &, IntLiteral) { std::abort(); } // TODO
-void emit_argument(SExprPrinter &, RangeLiteral) { std::abort(); } // TODO
-void emit_argument(SExprPrinter &, BoundedRangeLiteral) { std::abort(); } // TODO
+void emit_argument(SExprPrinter &printer, int value) {
+  printer.identifier(value < 0 ? "$" : std::to_string(value));
+}
+
+void emit_argument(SExprPrinter &printer, IntLiteral value) {
+  emit_argument(printer, value.value);
+}
+
+void emit_argument(SExprPrinter &printer, RangeLiteral range) {
+  printer.list([&] {
+    printer.identifier("range");
+    emit_argument(printer, range.lower);
+    emit_argument(printer, range.upper);
+  });
+}
+
+void emit_argument(SExprPrinter &printer, BoundedRangeLiteral range) {
+  printer.list([&] {
+    printer.identifier("bounded-range");
+    emit_argument(printer, range.lower);
+    emit_argument(printer, range.upper);
+  });
+}
 
 template <typename T>
 void emit_argument(SExprPrinter &printer, const std::vector<T> &values) {

@@ -9,6 +9,7 @@
 #include <type_traits>
 #include <utility>
 #include <vector>
+#include <stdexcept>
 
 namespace property_ir {
 
@@ -26,15 +27,32 @@ EmitterPtr identifier(std::string name);
 enum class Type;
 
 struct IntLiteral {
-  explicit IntLiteral() = delete;
+  const int value;
+
+  IntLiteral(int value) : value{value} {
+    if (value < 0)
+      throw std::invalid_argument("invalid range");
+  }
 };
 
 struct RangeLiteral {
-  explicit RangeLiteral() = delete;
+  const int lower;
+  const int upper;
+
+  RangeLiteral(int lower, int upper = -1) : lower{lower}, upper{upper} {
+    if (lower < 0 || (upper >= 0 && upper < lower) || upper < -1)
+      throw std::invalid_argument("invalid range");
+  }
 };
 
 struct BoundedRangeLiteral {
-  explicit BoundedRangeLiteral() = delete;
+  const int lower;
+  const int upper;
+
+  BoundedRangeLiteral(int lower, int upper) : lower{lower}, upper{upper} {
+    if (lower < 0 || upper < lower)
+      throw std::invalid_argument("invalid bounded range");
+  }
 };
 
 template <Type T> class Identifier;
