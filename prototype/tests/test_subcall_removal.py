@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from ir.automata import remove_omega_call_all
+from ir.automata import remove_single_subcall
 from ir.base import IrContainer, NodeId, RawSExprList
 from ir.parsing import parse_document, parse_raw_sexpr
 
@@ -26,7 +26,7 @@ def check_subcall_removal(input_document_str: str, expected_output_document_str:
         container2.show_graph(output_directory / 'check_subcall_removal_expected_output.png')
 
     root_id: NodeId = container1.directives[0].node_id
-    remove_omega_call_all(root_id, container1)
+    remove_single_subcall(root_id, container1)
 
     container1.canonical_id_renaming(remove_unreachable_declared_nodes=True)
 
@@ -39,7 +39,7 @@ def check_subcall_removal(input_document_str: str, expected_output_document_str:
 
 
 
-def test_remove_omega_call_all():
+def test_remove_subcall_omega_call_all():
 
     input_document: str = """(document
         (declare-input a)
@@ -57,6 +57,175 @@ def test_remove_omega_call_all():
 
         (parse-sexpr
             (omega-weak-read a (omega-true) (omega-true))
+        )
+    )"""
+
+    check_subcall_removal(input_document, expected_output, visualize=False)
+
+
+def test_remove_subcall_omega_call_ex_weak():
+
+    input_document: str = """(document
+        (declare-input a)
+        (declare-input b)
+
+        (parse-sexpr (omega-call-ex-weak
+            (aut-consume a
+                (aut-acc
+                    (aut-consume b
+                        (aut-acc (aut-false))
+                        (aut-false)
+                    )
+                )
+                (aut-false)
+            )
+            (omega-true)
+        ))
+    )"""
+
+    expected_output: str = """(document
+        (declare-input a)
+        (declare-input b)
+
+        (parse-sexpr
+            (let-rec
+                (successor (omega-true))
+                (main
+                    (omega-weak-consume a
+                        (omega-or
+                            (omega-weak-consume b successor (omega-false))
+                            successor
+                        )
+                        (omega-false)
+                    )
+                )
+                main)
+        )
+    )"""
+
+    check_subcall_removal(input_document, expected_output, visualize=False)
+
+
+def test_remove_subcall_omega_call_ex_strong():
+
+    input_document: str = """(document
+        (declare-input a)
+        (declare-input b)
+
+        (parse-sexpr (omega-call-ex-strong
+            (aut-consume a
+                (aut-acc
+                    (aut-consume b
+                        (aut-acc (aut-false))
+                        (aut-false)
+                    )
+                )
+                (aut-false)
+            )
+            (omega-true)
+        ))
+    )"""
+
+    expected_output: str = """(document
+        (declare-input a)
+        (declare-input b)
+
+        (parse-sexpr
+            (let-rec
+                (successor (omega-true))
+                (main
+                    (omega-strong-consume a
+                        (omega-or
+                            (omega-strong-consume b successor (omega-false))
+                            successor
+                        )
+                        (omega-false)
+                    )
+                )
+                main)
+        )
+    )"""
+
+    check_subcall_removal(input_document, expected_output, visualize=False)
+
+
+def test_remove_subcall_aut_call_ex():
+
+    input_document: str = """(document
+        (declare-input a)
+        (declare-input b)
+
+        (parse-sexpr (aut-call-ex
+            (aut-consume a
+                (aut-acc
+                    (aut-consume b
+                        (aut-acc (aut-false))
+                        (aut-false)
+                    )
+                )
+                (aut-false)
+            )
+            (aut-true)
+        ))
+    )"""
+
+    expected_output: str = """(document
+        (declare-input a)
+        (declare-input b)
+
+        (parse-sexpr
+            (let-rec
+                (successor (aut-true))
+                (main
+                    (aut-consume a
+                        (aut-or
+                            (aut-consume b successor (aut-false))
+                            successor
+                        )
+                        (aut-false)
+                    )
+                )
+                main)
+        )
+    )"""
+
+    check_subcall_removal(input_document, expected_output, visualize=False)
+
+
+def test_remove_subcall_aut_call_first():
+
+    input_document: str = """(document
+        (declare-input a)
+        (declare-input b)
+
+        (parse-sexpr (aut-call-first
+            (aut-consume a
+                (aut-acc
+                    (aut-consume b
+                        (aut-acc (aut-false))
+                        (aut-false)
+                    )
+                )
+                (aut-false)
+            )
+            (aut-true)
+        ))
+    )"""
+
+    expected_output: str = """(document
+        (declare-input a)
+        (declare-input b)
+
+        (parse-sexpr
+            (let-rec
+                (successor (aut-true))
+                (main
+                    (aut-consume a
+                        successor
+                        (aut-false)
+                    )
+                )
+                main)
         )
     )"""
 

@@ -117,6 +117,8 @@ type RewriteRule = tuple[RawSExprList, RawSExpr]
 
 type RewriteRuleGenerator = Callable[[IrContainer, NodeId], RewriteRule]
 
+type RewriteDict = dict[type[PropertyIrNode], RewriteRule | RewriteRuleGenerator]
+
 
 # Boolean primitives
 
@@ -299,12 +301,12 @@ def get_seq_and_rewrite_rule(container: IrContainer, node_id: NodeId) -> Rewrite
 
 
 
-def prepare_primitive_rewrite_rule_dict() -> dict[type[PropertyIrNode], RewriteRule | RewriteRuleGenerator]:
+def prepare_primitive_rewrite_rule_dict() -> RewriteDict:
     """Returns the dict associating primitives with rewrite rules to apply in order to remove derived primitives.
     If the rewrite rule depends on the specific children of the primitive, the dict references the function that can be used
     to generate the rewrite rule when given the container and node id."""
 
-    rule_dict: dict[type[PropertyIrNode], RewriteRule | RewriteRuleGenerator] = {}
+    rule_dict: RewriteDict = {}
 
     rewrite_rules: list[RewriteRule] = [xor_rule, eq_rule, ite_rule, rising_gclk_rule, falling_gclk_rule, changing_gclk, delay_rule, goto_repeat_rule,
         nonconsecutive_repeat_rule, throughout_rule, within_rule, if_rule, if_else_rule, non_overlapped_implication_rule,
@@ -520,7 +522,7 @@ def get_lhs_primitive_and_identifiers(rule: RewriteRule) -> tuple[type[PropertyI
 
 
 
-def apply_rules(container: IrContainer, rules: dict[type[PropertyIrNode], RewriteRule | RewriteRuleGenerator]):
+def apply_rules(container: IrContainer, rules: RewriteDict):
     """Apply the provided rules to the expression graph in the container in a greedy way
     in-place until none of the rules can be applied anymore. Use a seminaive approach,
     where only nodes are considered for rewriting that changed in the previous pass
@@ -581,7 +583,7 @@ def reduce_primitives(container: IrContainer):
     """Replace all primitives that do not exist in simple sequences and simple
     properties."""
 
-    rule_dict: dict[type[PropertyIrNode], RewriteRule | RewriteRuleGenerator] = prepare_primitive_rewrite_rule_dict()
+    rule_dict: RewriteDict = prepare_primitive_rewrite_rule_dict()
     apply_rules(container, rule_dict)
 
 
@@ -641,7 +643,7 @@ def rewrite_nexttime_primitives(container: IrContainer):
     It is not performed as part of clock rewriting to separate the part that
     happens in-place (unrolling) and the one creating a new container (clock rewriting)."""
 
-    nexttime_rule_dict: dict[type[PropertyIrNode], RewriteRule | RewriteRuleGenerator] = {}
+    nexttime_rule_dict: RewriteDict = {}
     nexttime_rule_dict[ClkPropNexttime] = get_nexttime_rewrite_rule
     nexttime_rule_dict[ClkPropStrongNexttime] = get_nexttime_rewrite_rule
     apply_rules(container, nexttime_rule_dict)
@@ -1665,7 +1667,7 @@ def construct_rewritten_container_process_node(
     node_id: NodeId,
     input_container: IrContainer,
     output_container: IrContainer,
-    rules: dict[type[PropertyIrNode], RewriteRule | RewriteRuleGenerator],
+    rules: RewriteDict,
     corresponding_nodes: dict[NodeId, NodeId],
     type_classes_to_copy: list[type],
     designated_nodes: dict[str, NodeId] | None = None):
@@ -1679,6 +1681,7 @@ def construct_rewritten_container_process_node(
     current_cls: type[PropertyIrNode] = current_node.node_type()
     current_type_class: type[PropertyIrNode] = current_node.type_class()
 
+    logger.debug('Designated nodes: %s', designated_nodes)
     if designated_nodes is None:
         designated_nodes = {}
 
@@ -1755,6 +1758,8 @@ def construct_rewritten_container_process_node(
 
     # add rhs of rule to output container
     logger.debug('Expression to add: %s', expression_to_add)
+    logger.debug('Named nodes: %s', local_nodes | designated_nodes)
+    logger.debug('Designated nodes: %s', designated_nodes)
     added_node_id: NodeId = parse_expression(expression_to_add, None, local_nodes | designated_nodes, output_container)
     added_node: PropertyIrNode = output_container[added_node_id]
 
@@ -1772,7 +1777,7 @@ def construct_rewritten_container_process_node(
     # make subcalls for children - if it was already processed, the child node will be immediately returned
     for index, child_id in enumerate(subcall_children):
         logger.debug('Make subcall for child_id %s', child_id)
-        construct_rewritten_container_process_node(child_id, input_container, output_container, rules, corresponding_nodes, type_classes_to_copy)
+        construct_rewritten_container_process_node(child_id, input_container, output_container, rules, corresponding_nodes, type_classes_to_copy, designated_nodes)
 
 
     return added_node_id
@@ -1782,7 +1787,7 @@ def construct_rewritten_container_process_node(
 
 def construct_rewritten_container(
     input_container: IrContainer,
-    rules: dict[type[PropertyIrNode], RewriteRule | RewriteRuleGenerator],
+    rules: RewriteDict,
     type_classes_to_copy: list[type]) -> IrContainer:
     """Takes a container and constructs a new container based on the given rewriting rules.
     Every node type that is encountered must exist in the rewrite rules.
@@ -1873,7 +1878,7 @@ def clocked_to_simple_pass(input_container: IrContainer):
     For this transformation, all preparation step must already have been performed:
     reduce_primitives, rewrite_nexttime_primitives, rewrite_clocks, remove_empty_matches, add_weak_strong, reduce_primitives (removes strong-until)"""
 
-    rewrite_rules: dict[type[PropertyIrNode], RewriteRule | RewriteRuleGenerator] = {
+    rewrite_rules: RewriteDict = {
         ClkSeqNoMatch: (['clk-seq-no-match'], ['seq-no-match']),
         ClkSeqBool: (['clk-seq-bool', '<bool>'], ['seq-bool', '<bool>']),
         ClkSeqRepeat: (['clk-seq-repeat', '<range>', '<clk_seq>'], ['seq-repeat', '<range>', '<clk_seq>']),
