@@ -162,7 +162,7 @@ def seq_fusion_rule_rhs(children_identifiers: list[str]) -> RawSExpr:
     elif len(children_identifiers) == 1:
         return children_identifiers[0]
     else:
-        return ['aut-call-ex', children_identifiers[0], seq_concat_rule_rhs(children_identifiers[1:])]
+        return ['aut-call-ex', children_identifiers[0], seq_fusion_rule_rhs(children_identifiers[1:])]
 
 
 def simple_to_automaton(input_container: IrContainer) -> IrContainer:
@@ -273,6 +273,10 @@ def unroll_aut_repeat(container: IrContainer):
     # TODO
 
 
+#------------------+
+# SUBCALL REMOVAL  |
+#------------------+
+
 
 def remove_single_subcall(node_id: NodeId, container: IrContainer):
     """Rewrites a subcall primitive.
@@ -289,7 +293,6 @@ def remove_single_subcall(node_id: NodeId, container: IrContainer):
 
         rules: RewriteDict = {
             AutOr: (['aut-or', '<aut_list>'], ['omega-and', '<aut_list>']),
-            AutAnd: (['aut-and', '<aut_list>'], ['omega-or', '<aut_list>']),
             AutFalse: (['aut-false'], ['omega-true']),
             AutTrue: (['aut-true'], ['omega-false']),
             AutConsume: (['aut-consume', '<bool>', '<aut1>', '<aut2>'], ['omega-weak-consume-acc', '<bool>', '<aut1>', '<aut2>']),
@@ -301,7 +304,6 @@ def remove_single_subcall(node_id: NodeId, container: IrContainer):
 
         rules: RewriteDict = {
             AutOr: (['aut-or', '<aut_list>'], ['omega-or', '<aut_list>']),
-            AutAnd: (['aut-and', '<aut_list>'], ['omega-and', '<aut_list>']),
             AutFalse: (['aut-false'], ['omega-false']),
             AutTrue: (['aut-true'], ['omega-true']),
             AutAcc: get_aut_acc_rule_omega_call_ex
@@ -319,7 +321,6 @@ def remove_single_subcall(node_id: NodeId, container: IrContainer):
 
         rules: RewriteDict = {
             AutOr: (['aut-or', '<aut_list>'], ['aut-or', '<aut_list>']),
-            AutAnd: (['aut-and', '<aut_list>'], ['aut-and', '<aut_list>']),
             AutFalse: (['aut-false'], ['aut-false']),
             AutTrue: (['aut-true'], ['aut-true']),
             AutConsume: (['aut-consume', '<bool>', '<aut1>', '<aut2>'], ['aut-consume', '<bool>', '<aut1>', '<aut2>']),
@@ -426,3 +427,44 @@ def get_aut_acc_rule_aut_call_ex(container: IrContainer, node_id: NodeId) -> Rew
         return (['aut-acc', '<aut>'], '<successor>')
 
     return (['aut-acc', '<aut>'], ['aut-or', '<aut>', '<successor>'])
+
+
+def topological_order_of_subcalls(node_id: NodeId, container: IrContainer, encountered_nodes: set[NodeId]) -> list[NodeId]:
+    """Determine the topological order of subcall nodes starting from node_id.
+    For this, perform a DFS through the graph and add a subcall node to the
+    order after its child nodes have been processed."""
+
+    order: list[NodeId] = []
+
+    current_node = container[node_id]
+    current_id_repr: NodeId = current_node.node_id
+    encountered_nodes.add(current_id_repr)
+
+    child_ids: list[NodeId] = current_node.get_child_ids()
+
+    for child_id in child_ids:
+        child_repr = container.merged_nodes.find(child_id)
+        if child_repr not in encountered_nodes:
+            encountered_nodes.add(child_repr)
+            child_order = topological_order_of_subcalls(child_repr, container, encountered_nodes)
+            order += child_order
+
+    if isinstance(current_node, (OmegaCallExStrong, OmegaCallExWeak, OmegaCallAll, AutCallEx, AutCallFirst)):
+        order.append(current_id_repr)
+
+    return order
+
+
+def remove_all_subcalls(container: IrContainer):
+    """Rewrite all subcall primitives in the given container.
+    For this determine the topological order of subcall nodes per sink nodes."""
+
+    for sink_node_id in container.get_sink_nodes():
+
+        nodes_to_rewrite = topological_order_of_subcalls(sink_node_id, container, set())
+
+        logger.debug('sink_node: %s', sink_node_id)
+        logger.debug('nodes_to_rewrite: %s', nodes_to_rewrite)
+        for subcall_id in nodes_to_rewrite:
+            logger.debug('Subcall removal subcall_id %s', subcall_id)
+            remove_single_subcall(subcall_id, container)

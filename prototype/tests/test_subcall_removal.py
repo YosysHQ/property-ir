@@ -1,11 +1,72 @@
+from logging import getLogger
 from pathlib import Path
 
-from ir.automata import remove_single_subcall
-from ir.base import IrContainer, NodeId, RawSExprList
-from ir.parsing import parse_document, parse_raw_sexpr
+from hypothesis import example, given, settings
+from ir.automata import (
+    prepare_container_for_automaton_translation,
+    remove_all_subcalls,
+    remove_single_subcall,
+    simple_to_automaton,
+)
+from ir.base import (
+    ClockedProperty,
+    ClockedSequence,
+    FiniteAutomaton,
+    IrContainer,
+    NodeId,
+    OmegaAutomaton,
+    Property,
+    PropertyIrNode,
+    RawSExprList,
+)
+from ir.parsing import parse_document, parse_raw_sexpr, unparse_raw_sexpr
+from ir.primitives.bool_primitives import (
+    ChangingGclk,
+    Eq,
+    FallingGclk,
+    Ite,
+    RisingGclk,
+    Xor,
+)
+from ir.primitives.clocked_primitives import ClkPropOmega
+from ir.primitives.simple_primitives import (
+    PropAcceptOn,
+    PropFalse,
+    PropNexttime,
+    PropNot,
+    PropOverlappedImplication,
+    PropRefuted,
+    PropRejectOn,
+    PropStrongNexttime,
+    PropTrue,
+    SeqFirstMatch,
+    SeqIntersect,
+    SeqNoMatch,
+    SeqOr,
+    SeqRepeat,
+)
+
+from tests.evaluate import (
+    BoolMemoDict,
+    FencepostPosition,
+    MaybeBool,
+    PropertyMemoDict,
+    SequenceMemoDict,
+    Trace,
+    evaluate_property,
+)
+from tests.evaluate_automaton import evaluate_omega_automaton
+from tests.strategies import random_ir_with_trace_simple
+
+logger = getLogger(__name__)
 
 
-def check_subcall_removal(input_document_str: str, expected_output_document_str: str, visualize: bool = False) -> IrContainer:
+
+def check_subcall_removal(
+    input_document_str: str,
+    expected_output_document_str: str,
+    single: bool = False,
+    visualize: bool = False) -> IrContainer:
 
     input_document: RawSExprList = parse_raw_sexpr(input_document_str)
     expected_output_document: RawSExprList = parse_raw_sexpr(expected_output_document_str)
@@ -25,8 +86,11 @@ def check_subcall_removal(input_document_str: str, expected_output_document_str:
     if visualize:
         container2.show_graph(output_directory / 'check_subcall_removal_expected_output.png')
 
-    root_id: NodeId = container1.directives[0].node_id
-    remove_single_subcall(root_id, container1)
+    if single:
+        root_id: NodeId = container1.directives[0].node_id
+        remove_single_subcall(root_id, container1)
+    else:
+        remove_all_subcalls(container1)
 
     container1.canonical_id_renaming(remove_unreachable_declared_nodes=True)
 
@@ -43,7 +107,6 @@ def test_remove_subcall_omega_call_all():
 
     input_document: str = """(document
         (declare-input a)
-        (declare-input b)
 
         (parse-sexpr (omega-call-all
             (aut-read a (aut-acc (aut-false)) (aut-false) )
@@ -53,14 +116,14 @@ def test_remove_subcall_omega_call_all():
 
     expected_output: str = """(document
         (declare-input a)
-        (declare-input b)
 
         (parse-sexpr
             (omega-weak-read a (omega-true) (omega-true))
         )
     )"""
 
-    check_subcall_removal(input_document, expected_output, visualize=False)
+    check_subcall_removal(input_document, expected_output, single=True, visualize=False)
+    check_subcall_removal(input_document, expected_output, single=False, visualize=False)
 
 
 def test_remove_subcall_omega_call_ex_weak():
@@ -103,7 +166,8 @@ def test_remove_subcall_omega_call_ex_weak():
         )
     )"""
 
-    check_subcall_removal(input_document, expected_output, visualize=False)
+    check_subcall_removal(input_document, expected_output, single=True, visualize=False)
+    check_subcall_removal(input_document, expected_output, single=False, visualize=False)
 
 
 def test_remove_subcall_omega_call_ex_strong():
@@ -146,7 +210,8 @@ def test_remove_subcall_omega_call_ex_strong():
         )
     )"""
 
-    check_subcall_removal(input_document, expected_output, visualize=False)
+    check_subcall_removal(input_document, expected_output, single=True, visualize=False)
+    check_subcall_removal(input_document, expected_output, single=False, visualize=False)
 
 
 def test_remove_subcall_aut_call_ex():
@@ -189,7 +254,8 @@ def test_remove_subcall_aut_call_ex():
         )
     )"""
 
-    check_subcall_removal(input_document, expected_output, visualize=False)
+    check_subcall_removal(input_document, expected_output, single=True, visualize=False)
+    check_subcall_removal(input_document, expected_output, single=False, visualize=False)
 
 
 def test_remove_subcall_aut_call_first():
@@ -229,4 +295,350 @@ def test_remove_subcall_aut_call_first():
         )
     )"""
 
-    check_subcall_removal(input_document, expected_output, visualize=False)
+    check_subcall_removal(input_document, expected_output, single=True, visualize=False)
+    check_subcall_removal(input_document, expected_output, single=False, visualize=False)
+
+
+def test_remove_subcalls_simple():
+
+    input_document: str = """(document
+        (declare-input a)
+
+        (declare subcall (omega-call-all
+            (aut-read a (aut-acc (aut-false)) (aut-false) )
+            (omega-true)
+        ))
+
+        (parse-sexpr (omega-or subcall (omega-false)))
+    )"""
+
+    expected_output: str = """(document
+        (declare-input a)
+        (declare subcall (omega-weak-read a (omega-true) (omega-true)))
+        (parse-sexpr (omega-or subcall (omega-false)) )
+    )"""
+
+    check_subcall_removal(input_document, expected_output, single=False, visualize=False)
+
+
+def test_remove_subcalls_nested():
+
+    input_document: str = """(document
+        (declare-input a)
+
+        (declare subcall2
+            (aut-call-ex
+                (aut-read a (aut-acc (aut-false)) (aut-false) )
+                (aut-acc (aut-false))
+            )
+        )
+
+        (declare subcall1 (omega-call-all
+            subcall2
+            (omega-true)
+        ))
+
+        (parse-sexpr (omega-or subcall1 (omega-false)))
+    )"""
+
+    expected_output: str = """(document
+        (declare-input a)
+        (declare subcall1 (omega-weak-read a (omega-true) (omega-true)))
+        (parse-sexpr (omega-or subcall1 (omega-false)) )
+    )"""
+
+    check_subcall_removal(input_document, expected_output, single=False, visualize=False)
+
+
+def test_remove_subcalls_doubly_nested():
+
+    input_document: str = """(document
+        (declare-input a)
+
+        (declare subcall3
+            (aut-call-ex
+                (aut-read a (aut-acc (aut-false)) (aut-false) )
+                (aut-acc (aut-false))
+            )
+        )
+
+        (declare subcall2
+            (aut-call-ex
+                subcall3
+                (aut-acc (aut-false))
+            )
+        )
+
+        (declare subcall1 (omega-call-all
+            subcall2
+            (omega-true)
+        ))
+
+        (parse-sexpr (omega-or subcall1 (omega-false)))
+    )"""
+
+    expected_output: str = """(document
+        (declare-input a)
+        (declare subcall1 (omega-weak-read a (omega-true) (omega-true)))
+        (parse-sexpr (omega-or subcall1 (omega-false)) )
+    )"""
+
+    check_subcall_removal(input_document, expected_output, single=False, visualize=False)
+
+
+def test_remove_subcalls_multiple_sinks():
+
+    input_document: str = """(document
+        (declare-input a)
+
+        (declare subcall3
+            (aut-call-ex
+                (aut-read a (aut-acc (aut-false)) (aut-false) )
+                (aut-acc (aut-false))
+            )
+        )
+
+        (declare subcall2
+            (aut-call-ex subcall3 (aut-acc (aut-false)) )
+        )
+
+        (declare subcall1 (omega-call-all
+            subcall2
+            (omega-true)
+        ))
+
+        (declare subcall4
+            (aut-call-ex subcall3 (aut-acc (aut-false)) )
+        )
+
+        (parse-sexpr subcall2)
+        (parse-sexpr subcall3)
+        (parse-sexpr subcall4)
+        (parse-sexpr (omega-or subcall1 (omega-false)))
+    )"""
+
+    expected_output: str = """(document
+        (declare-input a)
+        (declare subcall1 (omega-weak-read a (omega-true) (omega-true)))
+        (declare subcall2 (aut-read a (aut-acc (aut-false)) (aut-false)))
+        (declare subcall3 (aut-read a (aut-acc (aut-false)) (aut-false)))
+        (declare subcall4 (aut-read a (aut-acc (aut-false)) (aut-false)))
+        (parse-sexpr subcall2)
+        (parse-sexpr subcall3)
+        (parse-sexpr subcall4)
+        (parse-sexpr (omega-or subcall1 (omega-false)) )
+    )"""
+
+    check_subcall_removal(input_document, expected_output, single=False, visualize=False)
+
+def test_remove_subcalls_reused_automaton():
+
+    input_document: str = """(document
+        (declare-input a)
+
+        (declare subcall
+            (aut-read a (aut-acc (aut-false)) (aut-false) )
+        )
+
+        (parse-sexpr (omega-call-all
+            subcall
+            (omega-true)
+        ))
+
+        (parse-sexpr (omega-call-ex-strong
+            (aut-consume a
+                (aut-acc
+                    subcall
+                )
+                (aut-false)
+            )
+            (omega-true)
+        ))
+
+    )"""
+
+    expected_output: str = """(document
+        (declare-input a)
+
+        (parse-sexpr
+            (omega-weak-read a (omega-true) (omega-true))
+        )
+
+        (parse-sexpr
+            (let-rec
+                (successor (omega-true))
+                (main
+                    (omega-strong-consume a
+                        (omega-or
+                            (omega-strong-read a successor (omega-false))
+                            successor
+                        )
+                        (omega-false)
+                    )
+                )
+                main)
+        )
+    )"""
+
+    check_subcall_removal(input_document, expected_output, single=False, visualize=False)
+
+
+def test_remove_subcalls_graph_with_cycle():
+
+    input_document: str = """(document
+        (declare-input a)
+
+        (declare-rec
+            (subcall (omega-call-all
+                (aut-read a (aut-acc (aut-false)) (aut-false) )
+                succ)
+            )
+            (declare succ
+                (omega-weak-consume (true)
+                    subcall
+                    (omega-false)
+                )
+            )
+        )
+
+        (parse-sexpr succ)
+    )"""
+
+    expected_output: str = """(document
+        (declare-input a)
+
+        (declare-rec
+            (subcall (omega-weak-read a succ (omega-true)))
+            (declare succ
+                (omega-weak-consume (true)
+                    subcall
+                    (omega-false)
+                )
+            )
+        )
+
+        (parse-sexpr succ)
+    )"""
+
+    check_subcall_removal(input_document, expected_output, single=False, visualize=False)
+
+
+def check_remove_subcalls_random_property_evaluation(doc_and_trace: tuple[str, Trace], visualize=False):
+
+    doc: str = doc_and_trace[0]
+    trace: Trace = doc_and_trace[1]
+
+    bool_results1: BoolMemoDict = {}
+    seq_results1: SequenceMemoDict = {}
+    prop_results1: PropertyMemoDict = {}
+
+    input_container: IrContainer = IrContainer()
+    parse_document(parse_raw_sexpr(doc), input_container)
+
+    root_node_id1: NodeId = input_container.get_sink_nodes()[0]
+    result1: MaybeBool = evaluate_property(root_node_id1, input_container, trace, FencepostPosition(('at', 0)), bool_results1, seq_results1, prop_results1)
+
+    output_directory: Path = Path('./output')
+    if visualize:
+        input_container.canonical_id_renaming(remove_unreachable_declared_nodes=True)
+        input_container.show_graph(output_directory / 'simple_property_input.png')
+
+    prepare_container_for_automaton_translation(input_container)
+    output_container: IrContainer = simple_to_automaton(input_container)
+
+    if visualize:
+        output_container.canonical_id_renaming(remove_unreachable_declared_nodes=True)
+        output_container.show_graph(output_directory / 'automaton_input.png')
+
+    remove_all_subcalls(output_container)
+
+    logger.debug('input_doc: %s', doc)
+    logger.debug('output_doc: %s', unparse_raw_sexpr(output_container.output_container()))
+
+    if visualize:
+        output_container.canonical_id_renaming(remove_unreachable_declared_nodes=True)
+        output_container.show_graph(output_directory / 'automaton_output.png')
+
+    root_node_id2: NodeId = output_container.get_sink_nodes()[0]
+    root_node2: PropertyIrNode = output_container[root_node_id2]
+    assert isinstance(root_node2, ClkPropOmega)
+    omega_root_id: NodeId = root_node2.child
+    result2: MaybeBool = evaluate_omega_automaton(omega_root_id, output_container, trace)
+
+    logger.debug('input_doc: %s', doc)
+    logger.debug('output_doc: %s', unparse_raw_sexpr(output_container.output_container()))
+    logger.debug('trace: %s', trace)
+    logger.debug('result1: %s', result1)
+    logger.debug('result2: %s', result2)
+
+    assert result1 == result2 or result1 == 'unknown' or result2 == 'unknown'
+
+
+forbidden_primitives = (
+    Xor, Ite, Eq, ChangingGclk, RisingGclk, FallingGclk, # rewritten in earlier steps
+    PropTrue, PropFalse, SeqNoMatch, # cannot occur in the input
+    PropNot, # rewritten in nnf rewriting
+    PropRefuted, # test this when aut-refuted is implemented
+    PropNexttime, PropStrongNexttime, # rewritten in clocked properties
+    PropAcceptOn, PropRejectOn, # TODO: test this when prop-accept-on/reject-on are handeld
+    SeqIntersect, # TODO: test this when alternation removal is implemented
+    SeqFirstMatch, # TODO: test this when determinization is implemented
+    SeqRepeat, # TODO: test this when repeat is rewritten
+    FiniteAutomaton, OmegaAutomaton, ClockedProperty, ClockedSequence)
+
+# these are the primitives that could not be checked before, because they require subcalls:
+# SeqConcat, SeqFusion, PropStrong, PropWeak, PropOverlappedFollowedBy,
+# PropOverlappedImplication -> this still requires that there is no seq-or in the subcall automaton
+# because it gets converted to aut-and
+
+
+@example(doc_and_trace=("""(document (declare-input 0)
+    (parse-sexpr (let-rec
+        (step0 (seq-concat (seq-bool 0) (seq-bool 0)))
+        (step1 (seq-concat step0 step0))
+        (step2 (seq-concat step1 step0))
+        (step3 (prop-strong step2)) step3)))""",
+     Trace(finite_part=(), suffix='end')))
+@example(doc_and_trace=("""(document (declare-input 0)
+    (parse-sexpr (let-rec
+        (step0 (seq-concat (seq-bool 0) (seq-bool 0)))
+        (step1 (seq-concat step0 step0 step0))
+        (step2 (prop-strong step1)) step2)))""",
+     Trace(finite_part=(), suffix='end')))
+@example(doc_and_trace=("""(document (declare-input 0)
+    (parse-sexpr (let-rec
+        (step0 (seq-fusion (seq-bool 0) (seq-bool 0) (seq-bool 0)))
+        (step1 (prop-strong step0))
+        step1)))""",
+     Trace(finite_part=(frozenset({'0'}), frozenset()), suffix='end')))
+@settings(max_examples=50, deadline=1000)
+@given(random_ir_with_trace_simple(final_node_type=Property,
+    primitive_filter=lambda node_type:
+        not issubclass(node_type, forbidden_primitives + (PropOverlappedImplication,)),
+    trace_min_length=0))
+def test_remove_subcalls_random_property_with_empty_trace(doc_and_trace: tuple[str, Trace]):
+    check_remove_subcalls_random_property_evaluation(doc_and_trace, visualize=False)
+
+@settings(max_examples=50, deadline=1000)
+@given(random_ir_with_trace_simple(final_node_type=Property,
+    primitive_filter=lambda node_type:
+        not issubclass(node_type, forbidden_primitives + (PropOverlappedImplication,)),
+    trace_min_length=5))
+def test_remove_subcalls_random_property_no_empty_trace(doc_and_trace: tuple[str, Trace]):
+    check_remove_subcalls_random_property_evaluation(doc_and_trace, visualize=False)
+
+@settings(max_examples=50, deadline=1000)
+@given(random_ir_with_trace_simple(final_node_type=PropOverlappedImplication,
+    primitive_filter=lambda node_type:
+        not issubclass(node_type, forbidden_primitives + (SeqOr,)),
+    trace_min_length=5))
+def test_remove_subcalls_random_property_implication_no_empty_trace(doc_and_trace: tuple[str, Trace]):
+    check_remove_subcalls_random_property_evaluation(doc_and_trace, visualize=False)
+
+@settings(max_examples=50, deadline=1000)
+@given(random_ir_with_trace_simple(final_node_type=PropOverlappedImplication,
+    primitive_filter=lambda node_type:
+        not issubclass(node_type, forbidden_primitives + (SeqOr,)),
+    trace_min_length=0))
+def test_remove_subcalls_random_property_implication_with_empty_trace(doc_and_trace: tuple[str, Trace]):
+    check_remove_subcalls_random_property_evaluation(doc_and_trace, visualize=False)
