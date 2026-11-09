@@ -16,6 +16,11 @@ from .rewriting import (
 logger = getLogger(__name__)
 
 
+#------------------------------------+
+# PREPARE FOR AUTOMATON TRANSLATION  |
+#------------------------------------+
+
+
 def get_split_seq_repeat_rewrite_rule(container: IrContainer, node_id: NodeId) -> RewriteRule:
     """Get the rewrite rule to break seq-repeat primitives up into a concatenation
     of two seq-repeat primitives."""
@@ -60,6 +65,11 @@ def prepare_container_for_automaton_translation(container: IrContainer):
     }
 
     apply_rules(container, rewrite_dict)
+
+
+#-------------------------------+
+# SIMPLE PROPERTY TO AUTOMATON  |
+#-------------------------------+
 
 
 def get_seq_repeat_to_aut_rewrite_rule(container: IrContainer, node_id: NodeId) -> RewriteRule:
@@ -267,12 +277,6 @@ def simple_to_automaton(input_container: IrContainer) -> IrContainer:
     return output_container
 
 
-
-def unroll_aut_repeat(container: IrContainer):
-    pass
-    # TODO
-
-
 #------------------+
 # SUBCALL REMOVAL  |
 #------------------+
@@ -468,3 +472,68 @@ def remove_all_subcalls(container: IrContainer):
         for subcall_id in nodes_to_rewrite:
             logger.debug('Subcall removal subcall_id %s', subcall_id)
             remove_single_subcall(subcall_id, container)
+
+
+
+#---------------------------+
+# UNROLL REPEAT PRIMITIVES  |
+#---------------------------+
+
+
+def get_aut_repeat_rewrite_rule(container: IrContainer, node_id: NodeId) -> RewriteRule:
+    """Get the rewrite rule for unrolling an aut-repeat primitive.
+    The int parameter must be greater or equal to 1. """
+
+    node: PropertyIrNode = container[node_id]
+    assert(isinstance(node, AutRepeat))
+    num: int = node.child1
+    return (['aut-repeat', '<int>', '<aut>'], unrolled_aut_repeat_rhs(num))
+
+
+def unrolled_aut_repeat_rhs(num: int) -> RawSExprList:
+    """Get the RHS of a rewrite rule for unrolling an aut-repeat primitive.
+    The int parameter must be greater or equal to 1. """
+
+    if num == 1:
+        return ['aut-call-ex', '<aut>', ['aut-acc', ['aut-false']]]
+    elif num >= 2:
+        return ['aut-call-ex', '<aut>',
+            ['aut-consume', ['true'], unrolled_aut_repeat_rhs(num-1), ['aut-false']]]
+    else:
+        raise ValueError('Encountered aut-repeat primitive with int parameter < 1')
+
+
+def get_aut_repeat_up_to_rewrite_rule(container: IrContainer, node_id: NodeId) -> RewriteRule:
+    """Get the rewrite rule for unrolling an aut-repeat-up-to primitive.
+    The int parameter must be greater or equal to 1. """
+
+    node: PropertyIrNode = container[node_id]
+    assert(isinstance(node, AutRepeatUpTo))
+    num: int = node.child1
+    return (['aut-repeat-up-to', '<int>', '<aut>'], unrolled_aut_repeat_up_to_rhs(num))
+
+
+def unrolled_aut_repeat_up_to_rhs(num: int) -> RawSExprList:
+    """Get the RHS of a rewrite rule for unrolling an aut-repeat-up-to primitive.
+    The int parameter must be greater or equal to 1. """
+
+    if num == 1:
+        return ['aut-call-ex', '<aut>', ['aut-acc', ['aut-false']]]
+    elif num >= 2:
+        return ['aut-call-ex', '<aut>',
+            ['aut-or', ['aut-acc', ['aut-false']],
+                ['aut-consume', ['true'], unrolled_aut_repeat_up_to_rhs(num-1), ['aut-false']]]]
+    else:
+        raise ValueError('Encountered aut-repeat-up-to primitive with int parameter < 1')
+
+
+def unroll_aut_repeat_primitives(container: IrContainer):
+    """Rewrite all aut-repeat and aut-repeat-up-to primitive instances in the
+    container by unrolling them in-place."""
+
+    rules: RewriteDict = {
+        AutRepeat: get_aut_repeat_rewrite_rule,
+        AutRepeatUpTo: get_aut_repeat_up_to_rewrite_rule
+    }
+
+    apply_rules(container, rules)

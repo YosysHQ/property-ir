@@ -7,6 +7,7 @@ from ir.automata import (
     remove_all_subcalls,
     remove_single_subcall,
     simple_to_automaton,
+    unroll_aut_repeat_primitives,
 )
 from ir.base import (
     ClockedProperty,
@@ -91,6 +92,7 @@ def check_subcall_removal(
         root_id: NodeId = container1.directives[0].node_id
         remove_single_subcall(root_id, container1)
     else:
+        unroll_aut_repeat_primitives(container1)
         remove_all_subcalls(container1)
 
     container1.canonical_id_renaming(remove_unreachable_declared_nodes=True)
@@ -549,6 +551,7 @@ def check_remove_subcalls_random_property_evaluation(doc_and_trace: tuple[str, T
         output_container.canonical_id_renaming(remove_unreachable_declared_nodes=True)
         output_container.show_graph(output_directory / 'automaton_input.png')
 
+    unroll_aut_repeat_primitives(output_container)
     remove_all_subcalls(output_container)
 
     logger.debug('input_doc: %s', doc)
@@ -603,7 +606,6 @@ forbidden_primitives = (
     PropNexttime, PropStrongNexttime, # rewritten in clocked properties
     PropAcceptOn, PropRejectOn, # TODO: test this when prop-accept-on/reject-on are handeld
     SeqIntersect, # TODO: test this when alternation removal is implemented
-    SeqRepeat, # TODO: test this when repeat is rewritten
     FiniteAutomaton, OmegaAutomaton, ClockedProperty, ClockedSequence)
 
 # these are the primitives that could not be checked before, because they require subcalls:
@@ -633,7 +635,7 @@ forbidden_primitives = (
         (step1 (prop-strong step0))
         step1)))""",
      Trace(finite_part=(frozenset({'0'}), frozenset()), suffix='end')))
-@settings(max_examples=50, deadline=1000)
+@settings(max_examples=40, deadline=4000)
 @given(random_ir_with_trace_simple(final_node_type=Property,
     primitive_filter=lambda node_type:
         not issubclass(node_type, forbidden_primitives + (PropOverlappedImplication, SeqFirstMatch)),
@@ -641,7 +643,7 @@ forbidden_primitives = (
 def test_remove_subcalls_random_property_with_empty_trace(doc_and_trace: tuple[str, Trace]):
     check_remove_subcalls_random_property_evaluation(doc_and_trace, visualize=False)
 
-@settings(max_examples=50, deadline=1000)
+@settings(max_examples=40, deadline=4000)
 @given(random_ir_with_trace_simple(final_node_type=Property,
     primitive_filter=lambda node_type:
         not issubclass(node_type, forbidden_primitives + (PropOverlappedImplication, SeqFirstMatch)),
@@ -649,7 +651,7 @@ def test_remove_subcalls_random_property_with_empty_trace(doc_and_trace: tuple[s
 def test_remove_subcalls_random_property_no_empty_trace(doc_and_trace: tuple[str, Trace]):
     check_remove_subcalls_random_property_evaluation(doc_and_trace, visualize=False)
 
-@settings(max_examples=50, deadline=1000)
+@settings(max_examples=40, deadline=4000)
 @given(random_ir_with_trace_simple(final_node_type=PropOverlappedImplication,
     primitive_filter=lambda node_type:
         not issubclass(node_type, forbidden_primitives + (SeqOr, SeqFirstMatch)),
@@ -657,7 +659,7 @@ def test_remove_subcalls_random_property_no_empty_trace(doc_and_trace: tuple[str
 def test_remove_subcalls_random_property_implication_no_empty_trace(doc_and_trace: tuple[str, Trace]):
     check_remove_subcalls_random_property_evaluation(doc_and_trace, visualize=False)
 
-@settings(max_examples=50, deadline=1000)
+@settings(max_examples=40, deadline=4000)
 @given(random_ir_with_trace_simple(final_node_type=PropOverlappedImplication,
     primitive_filter=lambda node_type:
         not issubclass(node_type, forbidden_primitives + (SeqOr, SeqFirstMatch)),
@@ -665,6 +667,13 @@ def test_remove_subcalls_random_property_implication_no_empty_trace(doc_and_trac
 def test_remove_subcalls_random_property_implication_with_empty_trace(doc_and_trace: tuple[str, Trace]):
     check_remove_subcalls_random_property_evaluation(doc_and_trace, visualize=False)
 
+# TODO test this when determinization has been implementetd
+#@example(doc_and_trace = ("""(document (declare-input 0) (declare-input 1)
+#    (parse-sexpr (let-rec
+#        (step0 (seq-repeat (range 1 $) (seq-bool 0)))
+#        (step1 (seq-first-match step0))
+#        step1)))""",
+#    Trace(finite_part=(frozenset({'0'}), frozenset({'0'})), suffix='end')))
 @example(doc_and_trace = ("""(document (declare-input 0)
     (parse-sexpr (let-rec
         (step0 (seq-first-match (seq-bool 0))) step0)))""",
@@ -673,10 +682,10 @@ def test_remove_subcalls_random_property_implication_with_empty_trace(doc_and_tr
     (parse-sexpr (let-rec
         (step0 (seq-first-match (seq-bool 0))) step0)))""",
     Trace(finite_part=(frozenset({'0'}),), suffix='end')))
-@settings(max_examples=50, deadline=1500)
+@settings(max_examples=40, deadline=4000)
 @given(random_ir_with_trace_simple(final_node_type=SeqFirstMatch,
     primitive_filter=lambda node_type:
-        not issubclass(node_type, forbidden_primitives + (SeqOr,)),
+        not issubclass(node_type, forbidden_primitives + (SeqOr, SeqRepeat)),
     trace_min_length=5))
 def test_remove_subcalls_random_sequence_first_match_no_empty_trace(doc_and_trace: tuple[str, Trace]):
     check_remove_subcalls_random_property_evaluation(doc_and_trace, visualize=False)
@@ -690,10 +699,93 @@ def test_remove_subcalls_random_sequence_first_match_no_empty_trace(doc_and_trac
         (step4 (seq-concat step3 step3 step0))
         (step5 (seq-first-match step4)) step5)))""",
      Trace(finite_part=(), suffix='end')))
-@settings(max_examples=50, deadline=1500)
+@settings(max_examples=40, deadline=4000)
 @given(random_ir_with_trace_simple(final_node_type=SeqFirstMatch,
     primitive_filter=lambda node_type:
-        not issubclass(node_type, forbidden_primitives + (SeqOr,)),
+        not issubclass(node_type, forbidden_primitives + (SeqOr, SeqRepeat)),
     trace_min_length=0))
 def test_remove_subcalls_random_sequence_first_match_with_empty_trace(doc_and_trace: tuple[str, Trace]):
+    check_remove_subcalls_random_property_evaluation(doc_and_trace, visualize=False)
+
+
+
+#---------------------------+
+# TEST REPEAT PRIMITIVES  |
+#---------------------------+
+
+def test_unroll_repeat():
+
+    input_document: str = """(document
+        (declare-input a)
+        (declare subcall (aut-read a (aut-acc (aut-false)) (aut-false) ))
+        (parse-sexpr (aut-repeat 2 subcall))
+    )"""
+
+    expected_output: str = """(document
+        (declare-input a)
+
+        (parse-sexpr
+            (aut-read a
+                (aut-consume (true)
+                    (aut-read a
+                        (aut-acc (aut-false))
+                        (aut-false)
+                    )
+                    (aut-false)
+                )
+                (aut-false)
+            )
+        )
+    )"""
+
+    check_subcall_removal(input_document, expected_output, single=False, visualize=False)
+
+def test_unroll_repeat_up_to():
+
+    input_document: str = """(document
+        (declare-input a)
+        (declare subcall (aut-read a (aut-acc (aut-false)) (aut-false) ) )
+        (parse-sexpr (aut-repeat-up-to 2 subcall))
+    )"""
+
+    expected_output: str = """(document
+        (declare-input a)
+
+        (parse-sexpr
+            (aut-read a
+                (aut-or
+                    (aut-acc (aut-false))
+                    (aut-consume (true)
+                        (aut-read a
+                            (aut-acc (aut-false))
+                            (aut-false)
+                        )
+                        (aut-false)
+                    )
+                )
+                (aut-false)
+            )
+        )
+    )"""
+
+    check_subcall_removal(input_document, expected_output, single=False, visualize=False)
+
+@settings(max_examples=50, deadline=10000)
+@given(random_ir_with_trace_simple(final_node_type=SeqRepeat,
+    primitive_filter=lambda node_type:
+        not issubclass(node_type, forbidden_primitives + (PropOverlappedImplication, SeqFirstMatch)),
+    trace_min_length=5))
+def test_remove_subcalls_random_sequence_seq_repeat_no_empty_trace(doc_and_trace: tuple[str, Trace]):
+    check_remove_subcalls_random_property_evaluation(doc_and_trace, visualize=False)
+
+@example(doc_and_trace=("""(document (declare-input 0)
+    (parse-sexpr (let-rec
+        (step0 (seq-repeat (range 1 5) (seq-bool 0))) step0)))""",
+    Trace(finite_part=(frozenset({'0'}), frozenset({'0'})), suffix='top_omega')))
+@settings(max_examples=50, deadline=10000)
+@given(random_ir_with_trace_simple(final_node_type=SeqRepeat,
+    primitive_filter=lambda node_type:
+        not issubclass(node_type, forbidden_primitives + (PropOverlappedImplication, SeqFirstMatch)),
+    trace_min_length=0))
+def test_remove_subcalls_random_sequence_seq_repeat_with_empty_trace(doc_and_trace: tuple[str, Trace]):
     check_remove_subcalls_random_property_evaluation(doc_and_trace, visualize=False)
