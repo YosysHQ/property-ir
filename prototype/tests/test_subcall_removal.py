@@ -28,7 +28,7 @@ from ir.primitives.bool_primitives import (
     RisingGclk,
     Xor,
 )
-from ir.primitives.clocked_primitives import ClkPropOmega
+from ir.primitives.clocked_primitives import ClkPropOmega, ClkSeqAut
 from ir.primitives.simple_primitives import (
     PropAcceptOn,
     PropFalse,
@@ -54,8 +54,9 @@ from tests.evaluate import (
     SequenceMemoDict,
     Trace,
     evaluate_property,
+    sequence_matches,
 )
-from tests.evaluate_automaton import evaluate_omega_automaton
+from tests.evaluate_automaton import evaluate_finite_automaton, evaluate_omega_automaton
 from tests.strategies import random_ir_with_trace_simple
 
 logger = getLogger(__name__)
@@ -535,8 +536,6 @@ def check_remove_subcalls_random_property_evaluation(doc_and_trace: tuple[str, T
     input_container: IrContainer = IrContainer()
     parse_document(parse_raw_sexpr(doc), input_container)
 
-    root_node_id1: NodeId = input_container.get_sink_nodes()[0]
-    result1: MaybeBool = evaluate_property(root_node_id1, input_container, trace, FencepostPosition(('at', 0)), bool_results1, seq_results1, prop_results1)
 
     output_directory: Path = Path('./output')
     if visualize:
@@ -559,19 +558,41 @@ def check_remove_subcalls_random_property_evaluation(doc_and_trace: tuple[str, T
         output_container.canonical_id_renaming(remove_unreachable_declared_nodes=True)
         output_container.show_graph(output_directory / 'automaton_output.png')
 
+    root_node_id1: NodeId = input_container.get_sink_nodes()[0]
+
     root_node_id2: NodeId = output_container.get_sink_nodes()[0]
     root_node2: PropertyIrNode = output_container[root_node_id2]
-    assert isinstance(root_node2, ClkPropOmega)
-    omega_root_id: NodeId = root_node2.child
-    result2: MaybeBool = evaluate_omega_automaton(omega_root_id, output_container, trace)
 
     logger.debug('input_doc: %s', doc)
     logger.debug('output_doc: %s', unparse_raw_sexpr(output_container.output_container()))
     logger.debug('trace: %s', trace)
-    logger.debug('result1: %s', result1)
-    logger.debug('result2: %s', result2)
 
-    assert result1 == result2 or result1 == 'unknown' or result2 == 'unknown'
+    if isinstance(root_node2, ClkPropOmega):
+        omega_root_id: NodeId = root_node2.child
+        prop_result1: MaybeBool = evaluate_property(root_node_id1, input_container, trace, FencepostPosition(('at', 0)), bool_results1, seq_results1, prop_results1)
+        prop_result2: MaybeBool = evaluate_omega_automaton(omega_root_id, output_container, trace)
+
+        logger.debug('result1: %s', prop_result1)
+        logger.debug('result2: %s', prop_result2)
+
+        assert prop_result1 == prop_result2 or prop_result1 == 'unknown' or prop_result2 == 'unknown'
+
+    elif isinstance(root_node2, ClkSeqAut):
+        omega_root_id: NodeId = root_node2.child
+        seq_result1: frozenset[FencepostPosition] = sequence_matches(root_node_id1, input_container, trace, FencepostPosition(('at', 0)), bool_results1, seq_results1)
+        seq_result2: list[FencepostPosition] = evaluate_finite_automaton(omega_root_id, output_container, trace, FencepostPosition(('at', 0)))
+        seq_result2_adjusted: frozenset[FencepostPosition] = frozenset([match.next_pos(trace) for match in seq_result2])
+        # the automaton accepts 1 step earlier than the sequence match - adjust matches for that
+
+        logger.debug('result1: %s', seq_result1)
+        logger.debug('result2: %s', seq_result2_adjusted)
+
+        assert seq_result1 == seq_result2_adjusted or \
+            FencepostPosition('unknown') in seq_result1 or \
+            FencepostPosition('unknown') in seq_result2_adjusted
+    else:
+        raise ValueError('Cannot evaluate root node other than ClkPropOmega or ClkSeqAut')
+
 
 
 forbidden_primitives = (
@@ -582,7 +603,6 @@ forbidden_primitives = (
     PropNexttime, PropStrongNexttime, # rewritten in clocked properties
     PropAcceptOn, PropRejectOn, # TODO: test this when prop-accept-on/reject-on are handeld
     SeqIntersect, # TODO: test this when alternation removal is implemented
-    SeqFirstMatch, # TODO: test this when determinization is implemented
     SeqRepeat, # TODO: test this when repeat is rewritten
     FiniteAutomaton, OmegaAutomaton, ClockedProperty, ClockedSequence)
 
@@ -590,6 +610,8 @@ forbidden_primitives = (
 # SeqConcat, SeqFusion, PropStrong, PropWeak, PropOverlappedFollowedBy,
 # PropOverlappedImplication -> this still requires that there is no seq-or in the subcall automaton
 # because it gets converted to aut-and
+# TODO: test PropOverlappedImplication more when alternation removal is implemented
+# TODO: test SeqFirstMatch more when determinization is implemented
 
 
 @example(doc_and_trace=("""(document (declare-input 0)
@@ -614,7 +636,7 @@ forbidden_primitives = (
 @settings(max_examples=50, deadline=1000)
 @given(random_ir_with_trace_simple(final_node_type=Property,
     primitive_filter=lambda node_type:
-        not issubclass(node_type, forbidden_primitives + (PropOverlappedImplication,)),
+        not issubclass(node_type, forbidden_primitives + (PropOverlappedImplication, SeqFirstMatch)),
     trace_min_length=0))
 def test_remove_subcalls_random_property_with_empty_trace(doc_and_trace: tuple[str, Trace]):
     check_remove_subcalls_random_property_evaluation(doc_and_trace, visualize=False)
@@ -622,7 +644,7 @@ def test_remove_subcalls_random_property_with_empty_trace(doc_and_trace: tuple[s
 @settings(max_examples=50, deadline=1000)
 @given(random_ir_with_trace_simple(final_node_type=Property,
     primitive_filter=lambda node_type:
-        not issubclass(node_type, forbidden_primitives + (PropOverlappedImplication,)),
+        not issubclass(node_type, forbidden_primitives + (PropOverlappedImplication, SeqFirstMatch)),
     trace_min_length=5))
 def test_remove_subcalls_random_property_no_empty_trace(doc_and_trace: tuple[str, Trace]):
     check_remove_subcalls_random_property_evaluation(doc_and_trace, visualize=False)
@@ -630,7 +652,7 @@ def test_remove_subcalls_random_property_no_empty_trace(doc_and_trace: tuple[str
 @settings(max_examples=50, deadline=1000)
 @given(random_ir_with_trace_simple(final_node_type=PropOverlappedImplication,
     primitive_filter=lambda node_type:
-        not issubclass(node_type, forbidden_primitives + (SeqOr,)),
+        not issubclass(node_type, forbidden_primitives + (SeqOr, SeqFirstMatch)),
     trace_min_length=5))
 def test_remove_subcalls_random_property_implication_no_empty_trace(doc_and_trace: tuple[str, Trace]):
     check_remove_subcalls_random_property_evaluation(doc_and_trace, visualize=False)
@@ -638,7 +660,40 @@ def test_remove_subcalls_random_property_implication_no_empty_trace(doc_and_trac
 @settings(max_examples=50, deadline=1000)
 @given(random_ir_with_trace_simple(final_node_type=PropOverlappedImplication,
     primitive_filter=lambda node_type:
-        not issubclass(node_type, forbidden_primitives + (SeqOr,)),
+        not issubclass(node_type, forbidden_primitives + (SeqOr, SeqFirstMatch)),
     trace_min_length=0))
 def test_remove_subcalls_random_property_implication_with_empty_trace(doc_and_trace: tuple[str, Trace]):
+    check_remove_subcalls_random_property_evaluation(doc_and_trace, visualize=False)
+
+@example(doc_and_trace = ("""(document (declare-input 0)
+    (parse-sexpr (let-rec
+        (step0 (seq-first-match (seq-bool 0))) step0)))""",
+    Trace(finite_part=(frozenset({'0'}), frozenset(), frozenset(), frozenset(), frozenset()), suffix='end')))
+@example(doc_and_trace = ("""(document (declare-input 0)
+    (parse-sexpr (let-rec
+        (step0 (seq-first-match (seq-bool 0))) step0)))""",
+    Trace(finite_part=(frozenset({'0'}),), suffix='end')))
+@settings(max_examples=50, deadline=1500)
+@given(random_ir_with_trace_simple(final_node_type=SeqFirstMatch,
+    primitive_filter=lambda node_type:
+        not issubclass(node_type, forbidden_primitives + (SeqOr,)),
+    trace_min_length=5))
+def test_remove_subcalls_random_sequence_first_match_no_empty_trace(doc_and_trace: tuple[str, Trace]):
+    check_remove_subcalls_random_property_evaluation(doc_and_trace, visualize=False)
+
+@example(doc_and_trace=("""(document (declare-input 0)
+    (parse-sexpr (let-rec
+        (step0 (seq-concat (seq-bool 0) (seq-bool 0) (seq-bool 0) (seq-bool 0) (seq-bool 0)))
+        (step1 (seq-concat step0 step0))
+        (step2 (seq-concat step1 step1 step0 step1 step1))
+        (step3 (seq-concat step2 step0 step0 step0))
+        (step4 (seq-concat step3 step3 step0))
+        (step5 (seq-first-match step4)) step5)))""",
+     Trace(finite_part=(), suffix='end')))
+@settings(max_examples=50, deadline=1500)
+@given(random_ir_with_trace_simple(final_node_type=SeqFirstMatch,
+    primitive_filter=lambda node_type:
+        not issubclass(node_type, forbidden_primitives + (SeqOr,)),
+    trace_min_length=0))
+def test_remove_subcalls_random_sequence_first_match_with_empty_trace(doc_and_trace: tuple[str, Trace]):
     check_remove_subcalls_random_property_evaluation(doc_and_trace, visualize=False)
