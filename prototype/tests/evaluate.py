@@ -446,10 +446,13 @@ def sequence_matches_evaluate_primitive(node: Sequence,
                 for start_pos in start_positions:
                     next_start_positions = next_start_positions.union(
                         sequence_matches(node.child2, container, trace, start_pos, bool_results, seq_results))
+
+                if start_positions == next_start_positions:
+                    result_positions = result_positions.union(next_start_positions)
+                    return frozenset(result_positions)
+
                 start_positions = next_start_positions
                 result_positions = result_positions.union(start_positions)
-                if start_positions == next_start_positions:
-                    return frozenset(result_positions)
 
         return frozenset(result_positions)
 

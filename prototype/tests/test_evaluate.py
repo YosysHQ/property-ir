@@ -515,8 +515,10 @@ def test_evaluate_sequence_matches():
     assert sequence_matches(seq3, container, trace3, FencepostPosition(('at', 0)), bool_results, seq_results) == \
         frozenset([FencepostPosition(('at', 1)), FencepostPosition(('at', 2)), FencepostPosition(('at', 3))])
 
+    # in the following example, positions 2 and 3 are also valid matches because each of the earlier matches
+    # did only match because of the presence of the top symbol
     assert sequence_matches(seq11, container, trace3, FencepostPosition(('at', 0)), bool_results, seq_results) == \
-        frozenset([FencepostPosition(('at', 1)), FencepostPosition(('at', 2))])
+        frozenset([FencepostPosition(('at', 1)), FencepostPosition(('at', 2)), FencepostPosition(('at', 3))])
 
 
 
