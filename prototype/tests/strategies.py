@@ -222,9 +222,9 @@ def build_ir_from_random_data(strategy_drawn_data: tuple[list[IrGeneratingType],
 
             if issubclass(arg_type, Range) or issubclass(arg_type, BoundedRange):
                 range_bounds = []
-                range_bounds.append((random_num % 5) + 1) # add 1 because empty matches are not allowed
+                range_bounds.append((random_num % 3) + 1) # add 1 because empty matches are not allowed
+                range_bounds.append((random_num % 5) + 1)
                 range_bounds.append((random_num % 7) + 1)
-                range_bounds.append((random_num % 13) + 1)
                 if issubclass(arg_type, BoundedRange):
                     candidates.append(f'(bounded-range {min(range_bounds) } {max(range_bounds)})')
                 elif issubclass(arg_type, Range):
@@ -232,9 +232,9 @@ def build_ir_from_random_data(strategy_drawn_data: tuple[list[IrGeneratingType],
                     candidates.append(f'(range {min(range_bounds) } $)')
 
             elif arg_type is int:
+                candidates.append(str(random_num % 3))
                 candidates.append(str(random_num % 5))
                 candidates.append(str(random_num % 7))
-                candidates.append(str(random_num % 13))
 
             elif arg_type is bool:
                 candidates = ['true', 'false']
