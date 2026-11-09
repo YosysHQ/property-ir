@@ -10,6 +10,8 @@
 #include <utility>
 #include <vector>
 #include <stdexcept>
+#include <optional>
+#include <limits>
 
 namespace property_ir {
 
@@ -37,16 +39,17 @@ struct IntLiteral {
 
 struct RangeLiteral {
   const int lower;
-  const int upper;
+  const std::optional<int> upper;
 
-  RangeLiteral(int lower, int upper = -1) : lower{lower}, upper{upper} {
-    if (lower < 0 || (upper >= 0 && upper < lower) || upper < -1)
+  RangeLiteral(int lower, std::optional<int> upper = std::nullopt) : lower{lower}, upper{upper} {
+
+    if (lower < 0 || upper.value_or(std::numeric_limits<int>::max()) < lower)
       throw std::invalid_argument("invalid range");
   }
 
-  bool single() const { return lower == upper; }
+  bool single() const { return upper.has_value() && lower == upper; }
   bool single(int test) const { return single() && lower == test; }
-  bool unbounded() const { return lower < 0; }
+  bool unbounded() const { return !upper.has_value(); }
 };
 
 struct BoundedRangeLiteral {

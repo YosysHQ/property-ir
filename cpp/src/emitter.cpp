@@ -30,7 +30,11 @@ void emit_argument(SExprPrinter &printer, bool value) {
 }
 
 void emit_argument(SExprPrinter &printer, int value) {
-  printer.identifier(value < 0 ? "$" : std::to_string(value));
+  printer.identifier(std::to_string(value));
+}
+
+void emit_argument(SExprPrinter &printer, std::optional<int> value) {
+  printer.identifier(value.has_value() ? std::to_string(value.value()) : "$");
 }
 
 void emit_argument(SExprPrinter &printer, IntLiteral value) {
