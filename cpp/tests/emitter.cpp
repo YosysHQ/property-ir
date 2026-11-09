@@ -112,5 +112,26 @@ TEST_F(EmitterTest, FullDocument) {
             output.str());
 }
 
+// Statements taking named options
+TEST_F(EmitterTest, StatementOptions) {
+  BoolId a("a");
+  ClkPropId p("p");
+
+  printer.begin_list();
+  printer.identifier("document");
+  printer.lines();
+
+  emit(printer,
+       assert_property(p, {option::DisableIff{a}, option::Negated{true},
+                           option::EvaluationScope{EvaluationScope::Always}}));
+
+  printer.end_list();
+
+  EXPECT_EQ("(document\n"
+            "  (assert-property p :disable-iff a :negated true :evaluation-scope always)\n"
+            ")",
+            output.str());
+}
+
 } // namespace
 } // namespace property_ir

@@ -57,6 +57,11 @@ void emit_argument(SExprPrinter &printer, BoundedRangeLiteral range) {
   });
 }
 
+template <typename... Ts>
+void emit_argument(SExprPrinter &printer, const std::variant<Ts...> &value) {
+  std::visit([&](const auto &option) { emit_argument(printer, option); }, value);
+}
+
 template <typename T>
 void emit_argument(SExprPrinter &printer, const std::vector<T> &values) {
   for (const auto &value : values)
