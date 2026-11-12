@@ -133,5 +133,29 @@ TEST_F(EmitterTest, StatementOptions) {
             output.str());
 }
 
+// Statements taking optional options
+TEST_F(EmitterTest, StatementOptionals) {
+  BoolId a("a");
+  ClkPropId p("p");
+
+  printer.begin_list();
+  printer.identifier("document");
+  printer.lines();
+
+  option::DisableIff disable_iff;
+  option::Enable enable{a};
+
+  emit(printer,
+       assert_property(p, {disable_iff, enable,
+                           option::EvaluationScope{EvaluationScope::Always}}));
+
+  printer.end_list();
+
+  EXPECT_EQ("(document\n"
+            "  (assert-property p :enable a :evaluation-scope always)\n"
+            ")",
+            output.str());
+}
+
 } // namespace
 } // namespace property_ir

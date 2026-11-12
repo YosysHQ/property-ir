@@ -114,26 +114,42 @@ class CodeGenerator:
             cpp_type = self.cpp_types[option["type"]]
             if option["type"] != "bool-literal":
                 cpp_type = f"property_ir::{cpp_type}"
-            self.header.extend(
-                [
-                    f"struct {type_name(option['name'])} {{",
-                    f"  {cpp_type} value;",
-                    "};",
-                ]
-            )
+            struct_name = type_name(option['name'])
+            self.header.append(f"struct {struct_name} {{")
+            if option["default"] == None:
+                cpp_type = f"std::optional<{cpp_type}>"
+                self.header.extend([
+                    f"  const {cpp_type} value;",
+                    f"  {struct_name}({cpp_type} value = std::nullopt) : value{{value}} {{}}",
+                ])
+            else:
+                self.header.append(f"  const {cpp_type} value;")
+            self.header.append("};")
         self.header.append("}\n")
         for option in self.collected_options.values():
             cpp_name = f"option::{type_name(option['name'])}"
             signature = f"void emit(SExprPrinter &printer, const {cpp_name} &value)"
             self.header.append(signature + ";")
-            self.source.extend(
-                [
-                    signature + " {",
-                    f"  printer.identifier({json.dumps(option['keyword'])});",
-                    "  detail::emit_argument(printer, value.value);",
-                    "}\n",
-                ]
-            )
+            if option["default"] == None:
+                self.source.extend(
+                    [
+                        signature + " {",
+                        "  if (value.value.has_value()) {",
+                        f"    printer.identifier({json.dumps(option['keyword'])});",
+                        "    detail::emit_argument(printer, value.value.value());",
+                        "  }",
+                        "}\n",
+                    ]
+                )
+            else:
+                self.source.extend(
+                    [
+                        signature + " {",
+                        f"  printer.identifier({json.dumps(option['keyword'])});",
+                        "  detail::emit_argument(printer, value.value);",
+                        "}\n",
+                    ]
+                )
         self.header.append("")
 
     def generate_primitives(self):
