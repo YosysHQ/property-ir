@@ -788,6 +788,7 @@ def test_evaluate_prop_accept_reject_on():
         (declare-input a)
         (declare-input b)
         (declare-input c)
+        (declare-input d)
 
         (declare prop1 (prop-strong (seq-concat (seq-bool a) (seq-bool b) (seq-bool a) (seq-bool b) (seq-bool a) ) ))
         (declare prop2 (prop-strong (seq-concat (seq-bool a) (seq-bool b) (seq-bool a) (seq-bool b) ) ))
@@ -802,6 +803,36 @@ def test_evaluate_prop_accept_reject_on():
         (declare prop_acc_unknown (prop-accept-on c prop_unknown) )
         (declare prop_rej_unknown (prop-reject-on c prop_unknown) )
 
+        (declare prop_acc_nexttime (prop-nexttime 2 prop_acc_1))
+        (declare prop_rej_nexttime (prop-nexttime 2 prop_rej_1))
+
+        (declare prop_acc_not (prop-not prop_acc_1))
+        (declare prop_rej_not (prop-not prop_rej_1))
+
+        (declare-rec (declare prop_acc_rec1
+            (prop-and
+                (prop-weak (seq-bool a))
+                (prop-overlapped-implication
+                    (seq-concat (seq-bool (true)) (seq-bool (true)))
+                    (prop-accept-on c
+                       (prop-reject-on d prop_acc_rec1)
+                    )
+                )
+            )
+        ))
+
+        (declare-rec (declare prop_acc_rec2
+            (prop-and
+                (prop-weak (seq-bool a))
+                (prop-overlapped-implication
+                    (seq-concat (seq-bool (true)) (seq-bool (true)))
+                    (prop-reject-on d
+                       (prop-accept-on c prop_acc_rec2)
+                    )
+                )
+            )
+        ))
+
     )"""
 
     container: IrContainer = IrContainer()
@@ -811,6 +842,12 @@ def test_evaluate_prop_accept_reject_on():
     prop_rej_1: NodeId = container.get_node_id_by_name('prop_rej_1')
     prop_acc_unknown: NodeId = container.get_node_id_by_name('prop_acc_unknown')
     prop_rej_unknown: NodeId = container.get_node_id_by_name('prop_rej_unknown')
+    prop_acc_nexttime: NodeId = container.get_node_id_by_name('prop_acc_nexttime')
+    prop_rej_nexttime: NodeId = container.get_node_id_by_name('prop_rej_nexttime')
+    prop_acc_not: NodeId = container.get_node_id_by_name('prop_acc_not')
+    prop_rej_not: NodeId = container.get_node_id_by_name('prop_rej_not')
+    prop_acc_rec1: NodeId = container.get_node_id_by_name('prop_acc_rec1')
+    prop_acc_rec2: NodeId = container.get_node_id_by_name('prop_acc_rec2')
 
     trace1: Trace = Trace(finite_part=(
         frozenset(['a', 'b']),
@@ -826,6 +863,58 @@ def test_evaluate_prop_accept_reject_on():
         frozenset(['a', 'b']),
     ), suffix='top_omega')
 
+    trace3: Trace = Trace(finite_part=(
+        frozenset(['a', 'b', 'c']),
+        frozenset(['b']),
+        frozenset(['a']),
+        frozenset(['a', 'b']),
+        frozenset(['a']),
+    ), suffix='bot_omega')
+
+    trace4: Trace = Trace(finite_part=(
+        frozenset(['a', 'b', 'c']),
+        frozenset(['b']),
+        frozenset(['a']),
+        frozenset(['a', 'b']),
+        frozenset(['a']),
+        frozenset(['a', 'b']),
+    ), suffix='bot_omega')
+
+    trace5: Trace = Trace(finite_part=(
+        frozenset(['a', 'b', 'c']),
+        frozenset(['b']),
+        frozenset(['a']),
+        frozenset(['a', 'b', 'c']),
+        frozenset(['a']),
+    ), suffix='bot_omega')
+
+    trace6: Trace = Trace(finite_part=(
+        frozenset(['a', 'b', 'c']),
+        frozenset(['b']),
+        frozenset(['a']),
+        frozenset(['a', 'b', 'c']),
+        frozenset(['a']),
+        frozenset(['a', 'b']),
+    ), suffix='bot_omega')
+
+    trace7: Trace = Trace(finite_part=(
+        frozenset(['a']),
+        frozenset(['a']),
+        frozenset(['c', 'd']),
+    ), suffix='end')
+
+    trace8: Trace = Trace(finite_part=(
+        frozenset(['a']),
+        frozenset(['a']),
+        frozenset(['a', 'd']),
+    ), suffix='end')
+
+    trace9: Trace = Trace(finite_part=(
+        frozenset(['a']),
+        frozenset(['a']),
+        frozenset(['c']),
+    ), suffix='end')
+
     bool_results: BoolMemoDict = {}
     seq_results: SequenceMemoDict = {}
     prop_results: PropertyMemoDict = {}
@@ -839,6 +928,22 @@ def test_evaluate_prop_accept_reject_on():
     assert evaluate_property(prop_rej_1, container, trace2, FencepostPosition(('at', 0)), bool_results, seq_results, prop_results) == True
     assert evaluate_property(prop_acc_unknown, container, trace2, FencepostPosition(('at', 0)), bool_results, seq_results, prop_results) == 'unknown'
     assert evaluate_property(prop_rej_unknown, container, trace2, FencepostPosition(('at', 0)), bool_results, seq_results, prop_results) == 'unknown'
+
+    assert evaluate_property(prop_acc_nexttime, container, trace3, FencepostPosition(('at', 0)), bool_results, seq_results, prop_results) == False
+    assert evaluate_property(prop_rej_nexttime, container, trace4, FencepostPosition(('at', 0)), bool_results, seq_results, prop_results) == True
+    assert evaluate_property(prop_acc_nexttime, container, trace5, FencepostPosition(('at', 0)), bool_results, seq_results, prop_results) == True
+    assert evaluate_property(prop_rej_nexttime, container, trace6, FencepostPosition(('at', 0)), bool_results, seq_results, prop_results) == False
+
+    assert evaluate_property(prop_acc_not, container, trace1, FencepostPosition(('at', 0)), bool_results, seq_results, prop_results) == False
+    assert evaluate_property(prop_rej_not, container, trace1, FencepostPosition(('at', 0)), bool_results, seq_results, prop_results) == True
+    assert evaluate_property(prop_acc_not, container, trace2, FencepostPosition(('at', 0)), bool_results, seq_results, prop_results) == True
+    assert evaluate_property(prop_rej_not, container, trace2, FencepostPosition(('at', 0)), bool_results, seq_results, prop_results) == False
+
+    assert evaluate_property(prop_acc_rec1, container, trace7, FencepostPosition(('at', 0)), bool_results, seq_results, prop_results) == True
+    assert evaluate_property(prop_acc_rec1, container, trace8, FencepostPosition(('at', 0)), bool_results, seq_results, prop_results) == False
+    assert evaluate_property(prop_acc_rec2, container, trace7, FencepostPosition(('at', 0)), bool_results, seq_results, prop_results) == False
+    assert evaluate_property(prop_acc_rec2, container, trace8, FencepostPosition(('at', 0)), bool_results, seq_results, prop_results) == False
+    assert evaluate_property(prop_acc_rec2, container, trace9, FencepostPosition(('at', 0)), bool_results, seq_results, prop_results) == True
 
 
 def test_evaluate_prop_overlapped_implication():

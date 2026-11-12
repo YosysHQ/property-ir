@@ -610,7 +610,12 @@ def evaluate_accept_reject_on(node: PropertyIrNode,
 
     earliest_bool: int | None = None
     earliest_unknown: int | None = None
-    for index in range(len(trace.finite_part) + 1):
+    # look only at finite part, because abort conditions have no effect in infinite suffix
+    for index in range(len(trace.finite_part)):
+        # the replacement starting from the bool should only happen at pos or later
+        if index != len(trace.finite_part) and FencepostPosition(('at', index)) < pos:
+            continue
+
         bool_result: MaybeBool = evaluate_bool(node.child1, container, trace_for_bool, FencepostPosition(('at', index)), bool_results)
         if bool_result == True:
             earliest_bool = index
