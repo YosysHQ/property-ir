@@ -1,6 +1,7 @@
 from collections.abc import Callable
 from itertools import product
 from logging import getLogger
+from typing import Literal
 
 from ir.base import IrContainer, NodeId, PropertyIrNode
 from ir.primitives.automata_primitives import (
@@ -466,6 +467,9 @@ type OmegaConfiguration = frozenset[OmegaConjunction]
 
 EMPTY_OMEGA_CONF: OmegaConfiguration = frozenset()
 
+EMPTY_OMEGA_CONJUNCTION: OmegaConfiguration = frozenset([(frozenset(), frozenset())]) # equivalent to true
+EMPTY_OMEGA_DISJUNCTION: OmegaConfiguration = frozenset() # equivalent to false
+
 # graph of OmegaConjunctions that connects each OmegaConjunctions with each
 # successor OmegaConjunction in the disjunction of OmegaConjunctions after
 # evaluating it 1 step in the infinite suffix
@@ -511,9 +515,8 @@ def simplify_omega_conf(configuration: OmegaConfiguration, container: IrContaine
             non_sink_obligations: Conjunction = frozenset({elem for elem in obligations if elem in non_sink_nodes})
             candidates.add((frozenset(non_sink_nodes), non_sink_obligations))
         if not has_false and len(non_sink_nodes) == 0:
-            if len(true_sinks) == 0:
-                return EMPTY_OMEGA_CONF
-            return frozenset([(frozenset([true_sinks.pop()]), frozenset())])
+            logger.debug('simplified to EMPTY_OMEGA_CONJUNCTION')
+            return EMPTY_OMEGA_CONJUNCTION
 
     if len(candidates) == 0:
         return EMPTY_OMEGA_CONF
@@ -539,6 +542,8 @@ def omega_conf_result(conf: OmegaConfiguration) -> bool | None:
 
     if conf == EMPTY_OMEGA_CONF:
         return False
+    if conf == EMPTY_OMEGA_CONJUNCTION:
+        return True
     elif len(conf) == 1:
         conj_obl: OmegaConjunction = next(iter(conf))
         if isinstance(conj_obl[0], OmegaTrue):
@@ -566,7 +571,7 @@ def omega_conf_and(configurations: set[OmegaConfiguration], container: IrContain
     logger.debug('omega_conf_and - pairwise_crossproduct %s', print_conf(frozenset(pairwise_crossproduct)))
 
     simplified: OmegaConfiguration = simplify_omega_conf(frozenset(pairwise_crossproduct), container)
-    logger.debug('simplified: %s', print_conf(simplified))
+    logger.debug('simplified: %s --- %s', print_conf(simplified), simplified)
     return simplified
 
 
@@ -579,14 +584,15 @@ def omega_conf_or(configurations: set[OmegaConfiguration], container: IrContaine
 
     conf_union: OmegaConfiguration = frozenset().union(*configurations)
     simplified: OmegaConfiguration = simplify_omega_conf(conf_union, container)
-    logger.debug('simplified: %s', print_conf(simplified))
+    logger.debug('simplified: %s --- %s', print_conf(simplified), simplified)
     return simplified
 
 
 def evaluate_omega_automaton_primitive(node_id: NodeId[OmegaAutomaton],
     container: IrContainer,
     trace: Trace,
-    pos: FencepostPosition) -> OmegaConfiguration:
+    pos: FencepostPosition,
+    abort_condition_nodes: set[NodeId]) -> OmegaConfiguration:
     """Evaluate a single OmegaAutomaton node on a trace starting at
     FencepostPosition pos. Returns a representation of the new configuration
     after reading one symbol (disjunction of conjunction-obligations pairs)."""
@@ -654,15 +660,15 @@ def evaluate_omega_automaton_primitive(node_id: NodeId[OmegaAutomaton],
             bool_result: MaybeBool = evaluate_bool(node.child1, container, trace, pos, {})
 
         if bool_result == 'top':
-            child1_result = evaluate_omega_automaton_primitive(node.child2, container, trace, pos)
-            child2_result = evaluate_omega_automaton_primitive(node.child3, container, trace, pos)
+            child1_result = evaluate_omega_automaton_primitive(node.child2, container, trace, pos, abort_condition_nodes)
+            child2_result = evaluate_omega_automaton_primitive(node.child3, container, trace, pos, abort_condition_nodes)
             result_configuration = omega_conf_or({child1_result, child2_result}, container)
         elif bool_result == 'bot':
             result_configuration = frozenset() # empty disjunction
         elif bool_result == True:
-            result_configuration = evaluate_omega_automaton_primitive(node.child2, container, trace, pos)
+            result_configuration = evaluate_omega_automaton_primitive(node.child2, container, trace, pos, abort_condition_nodes)
         elif bool_result == False:
-            result_configuration = evaluate_omega_automaton_primitive(node.child3, container, trace, pos)
+            result_configuration = evaluate_omega_automaton_primitive(node.child3, container, trace, pos, abort_condition_nodes)
         else:
             raise ValueError('Encountered unknown bool result in %s evaluation with trace %s at position %s', node.node_type(), trace, pos)
 
@@ -672,7 +678,7 @@ def evaluate_omega_automaton_primitive(node_id: NodeId[OmegaAutomaton],
 
         child_results: set[OmegaConfiguration] = set()
         for child in node.children:
-            child_results.add(evaluate_omega_automaton_primitive(child, container, trace, pos))
+            child_results.add(evaluate_omega_automaton_primitive(child, container, trace, pos, abort_condition_nodes))
 
         if isinstance(node, OmegaAnd):
             result_configuration = omega_conf_and(child_results, container)
@@ -681,11 +687,74 @@ def evaluate_omega_automaton_primitive(node_id: NodeId[OmegaAutomaton],
 
     #-----
 
+    elif isinstance(node, (OmegaAcceptOn, OmegaRejectOn)):
 
-    elif isinstance(node, OmegaAcceptOn):
-        raise NotImplementedError('Encountered OmegaAcceptOn')
-    elif isinstance(node, OmegaRejectOn):
-        raise NotImplementedError('Encountered OmegaRejectOn')
+        # if the same abort property primitive has already been encountered
+        # it has already been taken into account and can be ignored
+        if node_repr in abort_condition_nodes:
+            logger.debug('Skip abort property node %s because already encountered', node)
+            result_configuration = evaluate_omega_automaton_primitive(node.child2, container, trace, pos, abort_condition_nodes)
+
+        else:
+
+            # create copy because only recursive calls from here should be affected
+            # but not disjunctive/conjunctive runs
+            abort_nodes_copy = abort_condition_nodes.copy()
+            abort_nodes_copy.add(node_repr)
+
+            if isinstance(node, OmegaAcceptOn):
+                suffix: Literal['top_omega', 'bot_omega'] = 'top_omega'
+            elif isinstance(node, OmegaRejectOn):
+                suffix: Literal['top_omega', 'bot_omega'] = 'bot_omega'
+
+            # find earliest position where the bool holds, replace suffix from that position on
+            # evaluate child property as-is and with replaced suffix
+            p_result: MaybeBool = evaluate_omega_automaton(node.child2, container, trace, pos, abort_nodes_copy)
+            earliest_bool_result: MaybeBool | None = None
+            earliest_bool: int | None = None
+
+            # look only at finite part, because abort conditions have no effect in infinite suffix
+            for index in range(len(trace.finite_part)):
+                # the replacement starting from the bool should only happen at pos or later
+                if index != len(trace.finite_part) and FencepostPosition(('at', index)) < pos:
+                    continue
+
+                # assume that top/bot symbols do only appear as the suffix
+                # (else for reject-on, they must be inverted for the bool evaluation)
+                logger.debug('Evaluate bool %s at index %s', node.child1, index)
+                bool_result: MaybeBool = evaluate_bool(node.child1, container, trace, FencepostPosition(('at', index)), {})
+                if bool_result == True:
+                    earliest_bool = index
+                    break
+                elif bool_result == 'unknown':
+                    # assume that there can not be an unknown bool result, because that can only happen at an unknown position
+                    # (which we do not have here) or in the infinite suffix (if that is a mixed suffix)
+                    raise ValueError('Encountered unknown bool result in OmegaAccept/RejectOn evaluation with trace %s at position %s', trace, pos)
+            if earliest_bool is not None:
+                logger.debug('earliest_bool: %s', earliest_bool)
+                earliest_bool_result = evaluate_omega_automaton(node.child2, container,
+                    trace.replace_from(FencepostPosition(('at', earliest_bool)), suffix), pos, abort_nodes_copy)
+
+            logger.debug('p_result: %s   earliest_bool_result: %s', p_result, earliest_bool_result)
+
+            if p_result == 'unknown' or earliest_bool_result == 'unknown':
+                raise ValueError('Encountered unknown result of recursive call while evaluating %s', node)
+
+            if isinstance(node, OmegaAcceptOn):
+                if p_result == True or earliest_bool_result == True:
+                    logger.debug('return EMPTY_OMEGA_CONJUNCTION')
+                    result_configuration = EMPTY_OMEGA_CONJUNCTION # true
+                else:
+                    logger.debug('return EMPTY_OMEGA_DISJUNCTION')
+                    result_configuration = EMPTY_OMEGA_DISJUNCTION # false
+
+            elif isinstance(node, OmegaRejectOn):
+                if p_result == False or earliest_bool_result == False:
+                    logger.debug('return EMPTY_OMEGA_DISJUNCTION')
+                    result_configuration = EMPTY_OMEGA_DISJUNCTION # false
+                else:
+                    logger.debug('return EMPTY_OMEGA_CONJUNCTION')
+                    result_configuration = EMPTY_OMEGA_CONJUNCTION # true
 
     #----- SUBCALLS
 
@@ -708,7 +777,7 @@ def evaluate_omega_automaton_primitive(node_id: NodeId[OmegaAutomaton],
     else:
         raise ValueError('Unexpected primitive %s in omega automaton evaluation', node.node_type())
 
-
+    logger.debug('result_configuration: %s', result_configuration)
     return result_configuration
 
 
@@ -724,7 +793,8 @@ def evaluate_omega_automaton_conf(conf: OmegaConfiguration,
     trace: Trace,
     pos: FencepostPosition,
     graph: ConjunctionGraph | None,
-    empty_obligation_nodes: set[OmegaConjunction] | None) -> OmegaConfiguration:
+    empty_obligation_nodes: set[OmegaConjunction] | None,
+    abort_condition_nodes: set[NodeId]) -> OmegaConfiguration:
     """Evaluate an OmegaConfiguration on a trace starting at
     FencepostPosition pos. Returns a representation of the new configuration
     after reading one symbol (disjunction of conjunction-obligations pairs).
@@ -752,7 +822,7 @@ def evaluate_omega_automaton_conf(conf: OmegaConfiguration,
             assert(isinstance(state, NodeId))
             node_id: NodeId = state
 
-            child_result: OmegaConfiguration = evaluate_omega_automaton_primitive(node_id, container, trace, pos)
+            child_result: OmegaConfiguration = evaluate_omega_automaton_primitive(node_id, container, trace, pos, abort_condition_nodes)
 
             if state not in obligations and not reset_obligations:
                 child_result = remove_obligations(child_result)
@@ -782,6 +852,7 @@ def evaluate_omega_automaton_conf(conf: OmegaConfiguration,
 def evaluate_omega_automaton_conf_infinite_suffix(conf: OmegaConfiguration,
     container: IrContainer,
     trace: Trace,
+    abort_condition_nodes: set[NodeId],
     abort_point: int = 2000) -> MaybeBool:
     """Evaluate the omega automaton on the infinite suffix.
     Build a graph of conjunction-obligation pairs and check every 2^n steps
@@ -808,7 +879,8 @@ def evaluate_omega_automaton_conf_infinite_suffix(conf: OmegaConfiguration,
         logger.debug('next_conf %s', print_conf(next_conf))
 
         seen_configurations.add(next_conf)
-        next_conf = evaluate_omega_automaton_conf(next_conf, container, trace, FencepostPosition('within_infinite_suffix'), graph, empty_obligation_nodes)
+        next_conf = evaluate_omega_automaton_conf(next_conf, container, trace,
+            FencepostPosition('within_infinite_suffix'), graph, empty_obligation_nodes, abort_condition_nodes)
         counter += 1
 
         if counter == next_checkpoint:
@@ -820,7 +892,7 @@ def evaluate_omega_automaton_conf_infinite_suffix(conf: OmegaConfiguration,
 
     if has_productive_cycle(graph, empty_obligation_nodes):
         return True
-    elif next_conf in seen_configurations:
+    elif next_conf in seen_configurations or next_conf == EMPTY_OMEGA_CONF:
         return False
 
     return 'unknown'
@@ -829,26 +901,38 @@ def evaluate_omega_automaton_conf_infinite_suffix(conf: OmegaConfiguration,
 
 def evaluate_omega_automaton(node_id: NodeId[OmegaAutomaton],
     container: IrContainer,
-    trace: Trace) -> MaybeBool:
+    trace: Trace,
+    pos: FencepostPosition | None = None,
+    abort_condition_nodes: set[NodeId] | None = None) -> MaybeBool:
     """Evaluate the omega automaton by first evaluating the finite part,
     and then starting from the configuration at the beginning of the suffix,
     detecting an accepting cycle in the infinite suffix.
     A result can already be returned in the finite part if the configuration
-    is a true-/false-sink."""
+    is a true-/false-sink.
+    The abort_condition_nodes are omega-accept-on or omega-reject-on node ids
+    that have already triggered a recursive call of this method and should
+    therefore not trigger one again, as their abort condition has already been
+    taken into account."""
+
+    if abort_condition_nodes is None:
+        abort_condition_nodes = set()
 
     node: PropertyIrNode = container[node_id]
     assert(isinstance(node, OmegaAutomaton))
     node_repr: NodeId = container.merged_nodes.find(node_id)
 
     next_conf: OmegaConfiguration = frozenset([(frozenset([node_repr]), frozenset([node_repr]))])
-    next_pos: FencepostPosition = FencepostPosition(('at', 0))
+    if pos is not None:
+        next_pos: FencepostPosition = pos
+    else:
+        next_pos: FencepostPosition = FencepostPosition(('at', 0))
 
     # evaluate finite part
 
-    while next_conf != EMPTY_OMEGA_CONF and next_pos != FencepostPosition('within_infinite_suffix'):
+    while next_conf != EMPTY_OMEGA_CONF and next_conf != EMPTY_OMEGA_CONJUNCTION and next_pos != FencepostPosition('within_infinite_suffix'):
         assert isinstance(next_pos.value, tuple)
 
-        next_conf = evaluate_omega_automaton_conf(next_conf, container, trace, next_pos, None, None)
+        next_conf = evaluate_omega_automaton_conf(next_conf, container, trace, next_pos, None, None, abort_condition_nodes)
         next_pos = next_pos.next_pos(trace)
 
         result: bool | None = omega_conf_result(next_conf)
@@ -857,4 +941,4 @@ def evaluate_omega_automaton(node_id: NodeId[OmegaAutomaton],
 
     # evaluate infinite suffix
 
-    return evaluate_omega_automaton_conf_infinite_suffix(next_conf, container, trace)
+    return evaluate_omega_automaton_conf_infinite_suffix(next_conf, container, trace, abort_condition_nodes)

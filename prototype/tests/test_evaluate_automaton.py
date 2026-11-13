@@ -11,11 +11,9 @@ from ir.primitives.automata_primitives import (
     AutRefuted,
     AutRepeat,
     AutRepeatUpTo,
-    OmegaAcceptOn,
     OmegaCallAll,
     OmegaCallExStrong,
     OmegaCallExWeak,
-    OmegaRejectOn,
 )
 
 from tests.evaluate import FencepostPosition, MaybeBool, Trace
@@ -1264,6 +1262,155 @@ def test_automaton_omega_conflicting_obligations():
 
 
 
+def test_automaton_omega_accept_reject_on():
+
+    doc_str: str = """(document
+        (declare-input a)
+        (declare-input b)
+        (declare-input c)
+
+        (declare omega1 (omega-strong-consume a (omega-strong-consume b (omega-true) (omega-false)) (omega-false)))
+
+        (declare omega_acc (omega-accept-on c omega1))
+        (declare omega_rej (omega-reject-on c omega1))
+
+        (declare-rec (declare omega_rec_acc
+            (omega-strong-consume-acc a
+                omega_rec_acc
+                (omega-false)
+            )
+        ))
+
+        (declare-rec (declare omega_rec_no_acc
+            (omega-strong-consume a
+                omega_rec_no_acc
+                (omega-false)
+            )
+        ))
+
+        (declare omega_acc_rec_acc (omega-accept-on c omega_rec_acc))
+        (declare omega_acc_rec_no_acc (omega-accept-on c omega_rec_no_acc))
+        (declare omega_rej_rec_acc (omega-reject-on c omega_rec_acc))
+        (declare omega_rej_rec_no_acc (omega-reject-on c omega_rec_no_acc))
+
+
+        (declare omega_a (omega-weak-consume a (omega-true) (omega-false)))
+        (declare omega_b (omega-weak-consume b (omega-true) (omega-false)))
+
+        (declare-rec
+            (declare a_until_b (omega-or omega_b
+                (omega-and
+                    omega_a
+                    (omega-weak-consume-acc (true) a_until_b (omega-false))))))
+
+        (declare omega_acc_until (omega-accept-on c a_until_b))
+        (declare omega_rej_until (omega-reject-on c a_until_b))
+
+        (declare omega_acc_until_nested (omega-accept-on c (omega-reject-on c a_until_b)))
+        (declare omega_rej_until_nested (omega-reject-on c (omega-accept-on c a_until_b)))
+
+        (declare-rec (declare omega_accept_cycle
+            (omega-accept-on c
+                (omega-strong-consume-acc a
+                    omega_accept_cycle
+                    (omega-false)
+                )
+            )
+        ))
+
+        (declare-rec (declare omega_reject_cycle
+            (omega-reject-on c
+                (omega-strong-consume-acc a
+                    omega_reject_cycle
+                    (omega-false)
+                )
+            )
+        ))
+
+        (declare omega_disjunction (omega-or omega_accept_cycle omega_reject_cycle))
+
+    )"""
+
+    trace1 = Trace(finite_part=(
+        frozenset({'a'}),
+        frozenset({'b'}),
+    ), suffix='end')
+
+    trace2 = Trace(finite_part=(
+        frozenset({'a'}),
+        frozenset({'b', 'c'}),
+    ), suffix='end')
+
+    trace3 = Trace(finite_part=(
+        frozenset({'a'}),
+        frozenset({'c'}),
+    ), suffix='end')
+
+    trace4 = Trace(finite_part=(
+        frozenset({'a'}),
+        frozenset({}),
+        frozenset({'c'}),
+    ), suffix='end')
+
+    trace5 = Trace(finite_part=(
+        frozenset({'a'}),
+        frozenset({'b'}),
+        frozenset({'c'}),
+    ), suffix='end')
+
+    trace6 = Trace(finite_part=(
+        frozenset({'a'}),
+        frozenset({'a', 'c'}),
+    ), suffix='top_omega')
+
+    container: IrContainer = IrContainer()
+    parse_document(parse_raw_sexpr(doc_str), container)
+
+    omega_acc: NodeId = container.get_node_id_by_name('omega_acc')
+    omega_rej: NodeId = container.get_node_id_by_name('omega_rej')
+    omega_acc_rec_acc: NodeId = container.get_node_id_by_name('omega_acc_rec_acc')
+    omega_acc_rec_no_acc: NodeId = container.get_node_id_by_name('omega_acc_rec_no_acc')
+    omega_rej_rec_acc: NodeId = container.get_node_id_by_name('omega_rej_rec_acc')
+    omega_rej_rec_no_acc: NodeId = container.get_node_id_by_name('omega_rej_rec_no_acc')
+    omega_acc_until: NodeId = container.get_node_id_by_name('omega_acc_until')
+    omega_rej_until: NodeId = container.get_node_id_by_name('omega_rej_until')
+    omega_acc_until_nested: NodeId = container.get_node_id_by_name('omega_acc_until_nested')
+    omega_rej_until_nested: NodeId = container.get_node_id_by_name('omega_rej_until_nested')
+    omega_accept_cycle: NodeId = container.get_node_id_by_name('omega_accept_cycle')
+    omega_reject_cycle: NodeId = container.get_node_id_by_name('omega_reject_cycle')
+    omega_disjunction: NodeId = container.get_node_id_by_name('omega_disjunction')
+
+    assert evaluate_omega_automaton(omega_acc, container, trace1) == True
+    assert evaluate_omega_automaton(omega_acc, container, trace2) == True
+    assert evaluate_omega_automaton(omega_acc, container, trace3) == True
+    assert evaluate_omega_automaton(omega_acc, container, trace4) == False
+    assert evaluate_omega_automaton(omega_acc, container, trace5) == True
+
+    assert evaluate_omega_automaton(omega_rej, container, trace1) == True
+    assert evaluate_omega_automaton(omega_rej, container, trace2) == False
+    assert evaluate_omega_automaton(omega_rej, container, trace3) == False
+    assert evaluate_omega_automaton(omega_rej, container, trace4) == False
+    assert evaluate_omega_automaton(omega_rej, container, trace5) == True
+
+    assert evaluate_omega_automaton(omega_acc_rec_acc, container, trace3) == True
+    assert evaluate_omega_automaton(omega_acc_rec_no_acc, container, trace3) == False
+
+    assert evaluate_omega_automaton(omega_rej_rec_acc, container, trace6) == False
+    assert evaluate_omega_automaton(omega_rej_rec_no_acc, container, trace6) == False
+
+    assert evaluate_omega_automaton(omega_acc_until, container, trace3) == True
+    assert evaluate_omega_automaton(omega_rej_until, container, trace6) == False
+
+    assert evaluate_omega_automaton(omega_acc_until_nested, container, trace3) == True
+    assert evaluate_omega_automaton(omega_rej_until_nested, container, trace6) == False
+
+    assert evaluate_omega_automaton(omega_accept_cycle, container, trace3) == True
+    assert evaluate_omega_automaton(omega_reject_cycle, container, trace6) == False
+    assert evaluate_omega_automaton(omega_disjunction, container, trace3) == True
+    assert evaluate_omega_automaton(omega_disjunction, container, trace6) == True
+
+
+
 @settings(verbosity=Verbosity.verbose, max_examples=50, deadline=500)
 @given(random_ir_with_trace(
     final_node_type=FiniteAutomaton,
@@ -1293,7 +1440,7 @@ def test_automaton_aut_random_no_error(doc_and_trace):
     final_node_type=OmegaAutomaton,
     primitive_filter=lambda node_type:
         issubclass(node_type, (OmegaAutomaton, FiniteAutomaton, Bool)) and
-        not issubclass(node_type, (OmegaAcceptOn, OmegaRejectOn, OmegaCallAll, OmegaCallExStrong, OmegaCallExWeak))))
+        not issubclass(node_type, (OmegaCallAll, OmegaCallExStrong, OmegaCallExWeak))))
 def test_automaton_omega_random_no_error(doc_and_trace):
 
     doc: str = doc_and_trace[0]

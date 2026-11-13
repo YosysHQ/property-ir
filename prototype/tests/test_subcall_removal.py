@@ -31,13 +31,11 @@ from ir.primitives.bool_primitives import (
 )
 from ir.primitives.clocked_primitives import ClkPropOmega, ClkSeqAut
 from ir.primitives.simple_primitives import (
-    PropAcceptOn,
     PropFalse,
     PropNexttime,
     PropNot,
     PropOverlappedImplication,
     PropRefuted,
-    PropRejectOn,
     PropStrongNexttime,
     PropTrue,
     SeqFirstMatch,
@@ -604,7 +602,6 @@ forbidden_primitives = (
     PropNot, # rewritten in nnf rewriting
     PropRefuted, # test this when aut-refuted is implemented
     PropNexttime, PropStrongNexttime, # rewritten in clocked properties
-    PropAcceptOn, PropRejectOn, # TODO: test this when prop-accept-on/reject-on are handeld
     SeqIntersect, # TODO: test this when alternation removal is implemented
     FiniteAutomaton, OmegaAutomaton, ClockedProperty, ClockedSequence)
 
@@ -635,7 +632,7 @@ forbidden_primitives = (
         (step1 (prop-strong step0))
         step1)))""",
      Trace(finite_part=(frozenset({'0'}), frozenset()), suffix='end')))
-@settings(max_examples=40, deadline=4000)
+@settings(max_examples=40, deadline=10000)
 @given(random_ir_with_trace_simple(final_node_type=Property,
     primitive_filter=lambda node_type:
         not issubclass(node_type, forbidden_primitives + (PropOverlappedImplication, SeqFirstMatch)),
@@ -643,7 +640,17 @@ forbidden_primitives = (
 def test_remove_subcalls_random_property_with_empty_trace(doc_and_trace: tuple[str, Trace]):
     check_remove_subcalls_random_property_evaluation(doc_and_trace, visualize=False)
 
-@settings(max_examples=40, deadline=4000)
+@example(doc_and_trace=("""(document (declare-input 0)
+    (parse-sexpr (let-rec
+        (step0 (prop-accept-on (true) (prop-weak-bool 0)))
+        (step1 (prop-and step0 step0)) step1)))""",
+                Trace(finite_part=(frozenset(),
+                  frozenset(),
+                  frozenset(),
+                  frozenset(),
+                  frozenset()),
+                 suffix='end')))
+@settings(max_examples=40, deadline=10000)
 @given(random_ir_with_trace_simple(final_node_type=Property,
     primitive_filter=lambda node_type:
         not issubclass(node_type, forbidden_primitives + (PropOverlappedImplication, SeqFirstMatch)),
@@ -651,7 +658,7 @@ def test_remove_subcalls_random_property_with_empty_trace(doc_and_trace: tuple[s
 def test_remove_subcalls_random_property_no_empty_trace(doc_and_trace: tuple[str, Trace]):
     check_remove_subcalls_random_property_evaluation(doc_and_trace, visualize=False)
 
-@settings(max_examples=40, deadline=4000)
+@settings(max_examples=40, deadline=10000)
 @given(random_ir_with_trace_simple(final_node_type=PropOverlappedImplication,
     primitive_filter=lambda node_type:
         not issubclass(node_type, forbidden_primitives + (SeqOr, SeqFirstMatch)),
@@ -659,7 +666,7 @@ def test_remove_subcalls_random_property_no_empty_trace(doc_and_trace: tuple[str
 def test_remove_subcalls_random_property_implication_no_empty_trace(doc_and_trace: tuple[str, Trace]):
     check_remove_subcalls_random_property_evaluation(doc_and_trace, visualize=False)
 
-@settings(max_examples=40, deadline=4000)
+@settings(max_examples=40, deadline=10000)
 @given(random_ir_with_trace_simple(final_node_type=PropOverlappedImplication,
     primitive_filter=lambda node_type:
         not issubclass(node_type, forbidden_primitives + (SeqOr, SeqFirstMatch)),
@@ -699,7 +706,7 @@ def test_remove_subcalls_random_sequence_first_match_no_empty_trace(doc_and_trac
         (step4 (seq-concat step3 step3 step0))
         (step5 (seq-first-match step4)) step5)))""",
      Trace(finite_part=(), suffix='end')))
-@settings(max_examples=40, deadline=4000)
+@settings(max_examples=40, deadline=10000)
 @given(random_ir_with_trace_simple(final_node_type=SeqFirstMatch,
     primitive_filter=lambda node_type:
         not issubclass(node_type, forbidden_primitives + (SeqOr, SeqRepeat)),
@@ -780,7 +787,8 @@ def test_remove_subcalls_random_sequence_seq_repeat_no_empty_trace(doc_and_trace
 
 @example(doc_and_trace=("""(document (declare-input 0)
     (parse-sexpr (let-rec
-        (step0 (seq-repeat (range 1 5) (seq-bool 0))) step0)))""",
+        (step0 (seq-repeat (range 1 5) (seq-bool 0)))
+        step0)))""",
     Trace(finite_part=(frozenset({'0'}), frozenset({'0'})), suffix='top_omega')))
 @settings(max_examples=50, deadline=10000)
 @given(random_ir_with_trace_simple(final_node_type=SeqRepeat,

@@ -24,14 +24,12 @@ from ir.primitives.bool_primitives import (
 )
 from ir.primitives.clocked_primitives import ClkPropOmega
 from ir.primitives.simple_primitives import (
-    PropAcceptOn,
     PropFalse,
     PropNexttime,
     PropNot,
     PropOverlappedFollowedBy,
     PropOverlappedImplication,
     PropRefuted,
-    PropRejectOn,
     PropStrong,
     PropStrongNexttime,
     PropTrue,
@@ -315,7 +313,6 @@ def check_automaton_random_property_evaluation(doc_and_trace: tuple[str, Trace],
             PropNot,
             PropTrue, PropFalse,
             PropNexttime, PropStrongNexttime,
-            PropAcceptOn, PropRejectOn,
             PropOverlappedImplication, PropOverlappedFollowedBy,
             SeqConcat, SeqFusion, PropStrong, PropWeak, SeqRepeat, SeqFirstMatch,
             FiniteAutomaton, OmegaAutomaton)),
@@ -353,6 +350,12 @@ def test_automaton_random_property_evaluation_no_empty_trace(doc_and_trace: tupl
         (step4 (prop-until step2 step3))
         step4)))""",
     Trace(finite_part=(frozenset(), frozenset()), suffix='end')))
+@example(doc_and_trace=("""(document (declare-input 0)
+    (parse-sexpr (let-rec
+        (step0 (prop-strong-bool (true)))
+        (step1 (prop-reject-on (true) step0))
+        step1)))""",
+            Trace(finite_part=(), suffix='end')))
 @settings(max_examples=100, deadline=500)
 @given(random_ir_with_trace_simple(final_node_type=Property,
     primitive_filter=lambda node_type:
@@ -362,7 +365,6 @@ def test_automaton_random_property_evaluation_no_empty_trace(doc_and_trace: tupl
             PropNot,
             PropTrue, PropFalse,
             PropNexttime, PropStrongNexttime,
-            PropAcceptOn, PropRejectOn,
             PropOverlappedImplication, PropOverlappedFollowedBy,
             SeqConcat, SeqFusion, PropStrong, PropWeak, SeqRepeat, SeqFirstMatch,
             FiniteAutomaton, OmegaAutomaton)),
