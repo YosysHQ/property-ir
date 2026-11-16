@@ -49,7 +49,11 @@ from tests.evaluate import (
     Trace,
     evaluate_property,
 )
-from tests.evaluate_automaton import evaluate_omega_automaton
+from tests.evaluate_automaton import (
+    FiniteMemoDict,
+    OmegaMemoDict,
+    evaluate_omega_automaton,
+)
 from tests.strategies import random_ir_simple, random_ir_with_trace_simple
 
 logger = logging.getLogger(__name__)
@@ -262,11 +266,16 @@ def check_automaton_random_property_evaluation(doc_and_trace: tuple[str, Trace],
     seq_results1: SequenceMemoDict = {}
     prop_results1: PropertyMemoDict = {}
 
+    bool_results2: BoolMemoDict = {}
+    finite_results: FiniteMemoDict = {}
+    omega_results: OmegaMemoDict = {}
+
     input_container: IrContainer = IrContainer()
     parse_document(parse_raw_sexpr(doc), input_container)
 
     root_node_id1: NodeId = input_container.get_sink_nodes()[0]
-    result1: MaybeBool = evaluate_property(root_node_id1, input_container, trace, FencepostPosition(('at', 0)), bool_results1, seq_results1, prop_results1)
+    result1: MaybeBool = evaluate_property(root_node_id1, input_container, trace,
+        FencepostPosition(('at', 0)), bool_results1, seq_results1, prop_results1)
 
     prepare_container_for_automaton_translation(input_container)
     output_container: IrContainer = simple_to_automaton(input_container)
@@ -276,8 +285,8 @@ def check_automaton_random_property_evaluation(doc_and_trace: tuple[str, Trace],
 
     if visualize:
         output_directory: Path = Path('./output')
-        input_container.bypass_placeholders()
-        output_container.bypass_placeholders()
+        #input_container.bypass_placeholders()
+        #output_container.bypass_placeholders()
         input_container.show_graph(output_directory / 'simple_property_input.png')
         output_container.show_graph(output_directory / 'automaton_output.png')
 
@@ -285,7 +294,8 @@ def check_automaton_random_property_evaluation(doc_and_trace: tuple[str, Trace],
     root_node2: PropertyIrNode = output_container[root_node_id2]
     assert isinstance(root_node2, ClkPropOmega)
     omega_root_id: NodeId = root_node2.child
-    result2: MaybeBool = evaluate_omega_automaton(omega_root_id, output_container, trace)
+    result2: MaybeBool = evaluate_omega_automaton(omega_root_id, output_container, trace,
+        FencepostPosition(('at', 0)), frozenset(), bool_results2, finite_results, omega_results)
 
     logger.debug('input_doc: %s', doc)
     logger.debug('output_doc: %s', unparse_raw_sexpr(output_container.output_container()))
@@ -356,6 +366,12 @@ def test_automaton_random_property_evaluation_no_empty_trace(doc_and_trace: tupl
         (step1 (prop-reject-on (true) step0))
         step1)))""",
             Trace(finite_part=(), suffix='end')))
+@example(doc_and_trace=("""(document (declare-input 0)
+    (parse-sexpr (let-rec (step0 (and (true) (false)))
+        (step1 (prop-strong-bool step0))
+        (step2 (prop-accept-on (true) step1))
+        step2)))""",
+     Trace(finite_part=(frozenset(),), suffix='end')))
 @settings(max_examples=100, deadline=500)
 @given(random_ir_with_trace_simple(final_node_type=Property,
     primitive_filter=lambda node_type:

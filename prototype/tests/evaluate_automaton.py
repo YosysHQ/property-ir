@@ -38,6 +38,7 @@ from ir.primitives.automata_primitives import (
 from ir.utils import has_productive_cycle
 
 from tests.evaluate import (
+    BoolMemoDict,
     FencepostPosition,
     MaybeBool,
     Trace,
@@ -60,6 +61,18 @@ EMPTY_CONF: Configuration = frozenset()
 # that is necessary to enter those states with the correct boolean combination
 type NodeIdWithPos = tuple[NodeId, FencepostPosition]
 type State = NodeId | NodeIdWithPos
+
+
+# the last key element is used to disambiguate between results for a single step vs the whole trace
+# node_id | conf, trace, pos, single_step
+type FiniteMemoDict = dict[tuple[NodeId | Configuration, Trace, FencepostPosition, bool],
+    MaybeBool | tuple[Configuration, bool] | list[FencepostPosition]]
+
+# the last key element is used to disambiguate between results for a single step vs the whole trace
+# node_id | conf, trace, pos, abort_condition_nodes, single_step
+type OmegaMemoDict = dict[tuple[NodeId | OmegaConfiguration, Trace, FencepostPosition, frozenset[NodeId], bool],
+    MaybeBool | OmegaConfiguration]
+
 
 
 #------------------+
@@ -118,9 +131,6 @@ def simplify_conf(configuration: Configuration, container: IrContainer) -> Confi
     # choose one False-sink as a representative of the whole configuration
     if len(candidates) == 0:
         return EMPTY_CONF
-        #return frozenset([frozenset([false_sinks.pop()])])
-        # TODO choose here the right (empty or False-singleton?)
-        #return frozenset([frozenset()])
 
     # remove supersets from the remaining candidates
     filtered_candidates: set[frozenset[State]] = set()
@@ -160,7 +170,9 @@ def conf_or(configurations: set[Configuration], container: IrContainer) -> Confi
 def evaluate_finite_automaton_primitive(node_id: NodeId[FiniteAutomaton],
     container: IrContainer,
     trace: Trace,
-    pos: FencepostPosition) -> tuple[Configuration, bool]:
+    pos: FencepostPosition,
+    bool_results: BoolMemoDict,
+    finite_results: FiniteMemoDict) -> tuple[Configuration, bool]:
     """Evaluate a single FiniteAutomaton node on a trace starting at
     FencepostPosition pos. Returns a representation of the new configuration
     after reading one symbol as a frozenset of frozensets (disjunction of
@@ -176,11 +188,15 @@ def evaluate_finite_automaton_primitive(node_id: NodeId[FiniteAutomaton],
     # it is also assumed that after aut-acc there is no aut-read that can change that result
     # (because the automaton construction can not produce such automata)
 
-    # TODO add memoization
-
     node: PropertyIrNode = container[node_id]
     assert(isinstance(node, FiniteAutomaton))
     node_repr: NodeId = container.merged_nodes.find(node_id)
+
+    if (node_repr, trace, pos, True) in finite_results:
+        memo_result = finite_results[node_repr, trace, pos, True]
+        assert(type(memo_result) is tuple)
+        logger.debug('Found result in finite_results: %s', memo_result)
+        return memo_result
 
     result_set: Configuration = frozenset()
     acceptance_result: bool = False
@@ -193,7 +209,7 @@ def evaluate_finite_automaton_primitive(node_id: NodeId[FiniteAutomaton],
         result_set = frozenset([frozenset([node_repr])])
 
     elif isinstance(node, AutConsume):
-        bool_result: MaybeBool = evaluate_bool(node.child1, container, trace, pos, {})
+        bool_result: MaybeBool = evaluate_bool(node.child1, container, trace, pos, bool_results)
         if bool_result == 'top':
             result_set = frozenset([
                 frozenset([container.merged_nodes.find(node.child2)]),
@@ -208,30 +224,36 @@ def evaluate_finite_automaton_primitive(node_id: NodeId[FiniteAutomaton],
             raise ValueError('Encountered unknown bool result in AutConsume evaluation with trace %s at position %s', trace, pos)
 
     elif isinstance(node, AutRead):
-        bool_result: MaybeBool = evaluate_bool(node.child1, container, trace, pos, {})
+        bool_result: MaybeBool = evaluate_bool(node.child1, container, trace, pos, bool_results)
         if bool_result == 'top':
-            result_set1, acc1 = evaluate_finite_automaton_primitive(node.child2, container, trace, pos)
-            result_set2, acc2 = evaluate_finite_automaton_primitive(node.child3, container, trace, pos)
+            result_set1, acc1 = evaluate_finite_automaton_primitive(
+                node.child2, container, trace, pos, bool_results, finite_results)
+            result_set2, acc2 = evaluate_finite_automaton_primitive(
+                node.child3, container, trace, pos, bool_results, finite_results)
             result_set = conf_or({result_set1, result_set2}, container)
             acceptance_result = acc1 or acc2
         elif bool_result == 'bot':
             result_set = frozenset()
         elif bool_result == True:
-            result_set, acceptance_result = evaluate_finite_automaton_primitive(node.child2, container, trace, pos)
+            result_set, acceptance_result = evaluate_finite_automaton_primitive(
+                node.child2, container, trace, pos, bool_results, finite_results)
         elif bool_result == False:
-            result_set, acceptance_result = evaluate_finite_automaton_primitive(node.child3, container, trace, pos)
+            result_set, acceptance_result = evaluate_finite_automaton_primitive(
+                node.child3, container, trace, pos, bool_results, finite_results)
         else:
             raise ValueError('Encountered unknown bool result in AutRead evaluation with trace %s at position %s', trace, pos)
 
     elif isinstance(node, AutAcc): # accept at pos
-        result_set, _ = evaluate_finite_automaton_primitive(node.child, container, trace, pos)
+        result_set, _ = evaluate_finite_automaton_primitive(node.child, container,
+            trace, pos, bool_results, finite_results)
         acceptance_result = True
 
     elif isinstance(node, (AutOr, AutAnd)):
         result_set_set: set[Configuration] = set()
         acc_set: set[bool] = set()
         for child in node.children:
-            result_set_temp, acc_temp = evaluate_finite_automaton_primitive(child, container, trace, pos)
+            result_set_temp, acc_temp = evaluate_finite_automaton_primitive(
+                child, container, trace, pos, bool_results, finite_results)
             result_set_set.add(result_set_temp)
             acc_set.add(acc_temp)
         if isinstance(node, AutOr):
@@ -249,7 +271,8 @@ def evaluate_finite_automaton_primitive(node_id: NodeId[FiniteAutomaton],
 
         subcall_init: NodeId = node.child1
         successor_init: NodeId = container.merged_nodes.find(node.child2)
-        subcall_matches: list[FencepostPosition] = evaluate_finite_automaton(subcall_init, container, trace, pos)
+        subcall_matches: list[FencepostPosition] = evaluate_finite_automaton(
+            subcall_init, container, trace, pos, bool_results, finite_results)
 
         logger.debug('-- subcall_matches: %s', subcall_matches)
 
@@ -267,7 +290,8 @@ def evaluate_finite_automaton_primitive(node_id: NodeId[FiniteAutomaton],
                 successor_states: frozenset[frozenset[tuple[NodeId, FencepostPosition]]] = frozenset([
                     frozenset([(successor_init, match)]) for match in subcall_matches])
                 if first_match == pos:
-                    current_step_next_conf, acceptance_result = evaluate_finite_automaton_primitive(successor_init, container, trace, pos)
+                    current_step_next_conf, acceptance_result = evaluate_finite_automaton_primitive(
+                        successor_init, container, trace, pos, bool_results, finite_results)
                     result_set = conf_or({current_step_next_conf, successor_states}, container)
                 else:
                     result_set =  successor_states
@@ -275,7 +299,8 @@ def evaluate_finite_automaton_primitive(node_id: NodeId[FiniteAutomaton],
             elif isinstance(node, AutCallFirst):
 
                 if first_match == pos:
-                    current_step_next_conf, acceptance_result = evaluate_finite_automaton_primitive(successor_init, container, trace, pos)
+                    current_step_next_conf, acceptance_result = evaluate_finite_automaton_primitive(
+                        successor_init, container, trace, pos, bool_results, finite_results)
                     result_set = current_step_next_conf
                 else:
                     result_set = frozenset([frozenset([(successor_init, first_match)])])
@@ -289,7 +314,7 @@ def evaluate_finite_automaton_primitive(node_id: NodeId[FiniteAutomaton],
         raise NotImplementedError
 
     logger.debug('--> Return at pos %s acceptance %s with result_set %s', pos, acceptance_result, result_set)
-
+    finite_results[node_repr, trace, pos, True] = (result_set, acceptance_result)
     return result_set, acceptance_result
 
 
@@ -309,7 +334,9 @@ def remove_pos_from_current_states(conf: Configuration, pos: FencepostPosition) 
 def evaluate_finite_automaton_conf(conf: Configuration,
     container: IrContainer,
     trace: Trace,
-    pos: FencepostPosition) -> tuple[Configuration, bool]:
+    pos: FencepostPosition,
+    bool_results: BoolMemoDict,
+    finite_results: FiniteMemoDict) -> tuple[Configuration, bool]:
     """Evaluate a configuration on a trace starting at FencepostPosition pos.
     Returns a representation of the new configuration after reading one symbol
     as a frozenset of frozensets (disjunction of conjunctions).
@@ -322,6 +349,12 @@ def evaluate_finite_automaton_conf(conf: Configuration,
     logger.debug('Evaluate configuration %s at pos %s', conf, pos)
     logger.debug('Updated configuration: %s', updated_conf)
 
+    if (updated_conf, trace, pos, False) in finite_results:
+        memo_result = finite_results[updated_conf, trace, pos, False]
+        assert(type(memo_result) is tuple)
+        logger.debug('Found result in finite_results: %s', memo_result)
+        return memo_result
+
     conjunction_conf_results: set[Configuration] = set()
     conjunction_acc_results: set[bool] = set()
     for conjunction in updated_conf:
@@ -330,7 +363,8 @@ def evaluate_finite_automaton_conf(conf: Configuration,
         delayed_states: set[NodeIdWithPos] = {state for state in conjunction if isinstance(state, tuple)}
 
         result_pairs: set[tuple[Configuration, bool]] = {
-            evaluate_finite_automaton_primitive(node_id, container, trace, pos) for node_id in now_states}
+            evaluate_finite_automaton_primitive(node_id, container, trace, pos,
+                bool_results, finite_results) for node_id in now_states}
         conf_results: set[Configuration] = {pair[0] for pair in result_pairs}
         acc_results: set[bool] = {pair[1] for pair in result_pairs}
 
@@ -340,13 +374,17 @@ def evaluate_finite_automaton_conf(conf: Configuration,
 
     disjunction_conf_result: Configuration = conf_or(conjunction_conf_results, container)
     disjunction_acc_result: bool = any(conjunction_acc_results)
+
+    finite_results[updated_conf, trace, pos, False] = (disjunction_conf_result, disjunction_acc_result)
     return (disjunction_conf_result, disjunction_acc_result)
 
 
 
 def evaluate_finite_automaton_conf_infinite_suffix(conf: Configuration,
         container: IrContainer,
-        trace: Trace) -> MaybeBool:
+        trace: Trace,
+        bool_results: BoolMemoDict,
+        finite_results: FiniteMemoDict) -> MaybeBool:
     """Evaluate the finite automaton on the infinite suffix. If the automaton
     accepts at any position in the infinite suffix, True is returned. If a loop
     of the configuration is detected without accepting, False is returned.
@@ -359,6 +397,12 @@ def evaluate_finite_automaton_conf_infinite_suffix(conf: Configuration,
     next_configuration: Configuration = conf
     seen_configurations: set[Configuration] = set()
     unknown_seen: bool = False
+
+    if (conf, trace, FencepostPosition('within_infinite_suffix'), False) in finite_results:
+        memo_result = finite_results[conf, trace, FencepostPosition('within_infinite_suffix'), False]
+        assert(type(memo_result) is bool or memo_result in ['top', 'bot', 'unknown'])
+        logger.debug('Found result in finite_results: %s', memo_result)
+        return memo_result
 
     while next_configuration not in seen_configurations:
 
@@ -377,7 +421,8 @@ def evaluate_finite_automaton_conf_infinite_suffix(conf: Configuration,
             delayed_states: set[NodeIdWithPos] = {state for state in conjunction if isinstance(state, tuple)}
 
             result_pairs: set[tuple[Configuration, bool]] = {
-                evaluate_finite_automaton_primitive(node_id, container, trace, FencepostPosition('within_infinite_suffix')) for node_id in now_states}
+                evaluate_finite_automaton_primitive(node_id, container, trace,
+                    FencepostPosition('within_infinite_suffix'), bool_results, finite_results) for node_id in now_states}
             conf_results: set[Configuration] = {pair[0] for pair in result_pairs}
             acc_results: set[MaybeBool] = {pair[1] for pair in result_pairs}
 
@@ -391,6 +436,7 @@ def evaluate_finite_automaton_conf_infinite_suffix(conf: Configuration,
         disjunction_acc_result: MaybeBool = eval_or(conjunction_acc_results)
 
         if disjunction_acc_result == True:
+            finite_results[conf, trace, FencepostPosition('within_infinite_suffix'), False] = True
             return True
         elif disjunction_acc_result == 'unknown':
             unknown_seen = True
@@ -398,8 +444,10 @@ def evaluate_finite_automaton_conf_infinite_suffix(conf: Configuration,
         next_configuration = disjunction_conf_result
 
     if unknown_seen:
+        finite_results[conf, trace, FencepostPosition('within_infinite_suffix'), False] = 'unknown'
         return 'unknown'
 
+    finite_results[conf, trace, FencepostPosition('within_infinite_suffix'), False] = False
     return False
 
 
@@ -407,7 +455,9 @@ def evaluate_finite_automaton_conf_infinite_suffix(conf: Configuration,
 def evaluate_finite_automaton(node_id: NodeId[FiniteAutomaton],
     container: IrContainer,
     trace: Trace,
-    pos: FencepostPosition) -> list[FencepostPosition]:
+    pos: FencepostPosition,
+    bool_results: BoolMemoDict,
+    finite_results: FiniteMemoDict) -> list[FencepostPosition]:
     """Evaluate a single FiniteAutomaton node on a trace starting at
     FencepostPosition pos. Returns a list of FencepostPositions
     where the automaton accepts."""
@@ -417,6 +467,12 @@ def evaluate_finite_automaton(node_id: NodeId[FiniteAutomaton],
     node_repr: NodeId = container.merged_nodes.find(node_id)
 
     logger.debug('---- START of evaluation %s on trace %s at pos %s', node, trace, pos)
+
+    if (node_repr, trace, pos, False) in finite_results:
+        memo_result = finite_results[node_repr, trace, pos, False]
+        assert isinstance(memo_result, list)
+        logger.debug('Found result in finite_results: %s', memo_result)
+        return memo_result
 
     acc_pos: list[FencepostPosition] = []
 
@@ -428,7 +484,8 @@ def evaluate_finite_automaton(node_id: NodeId[FiniteAutomaton],
 
         logger.debug('Evaluate %s on trace %s at pos %s', node, trace, pos)
         logger.debug('CONFIGURATION: %s', next_conf)
-        next_conf, acc_result = evaluate_finite_automaton_conf(next_conf, container, trace, next_pos)
+        next_conf, acc_result = evaluate_finite_automaton_conf(next_conf, container,
+            trace, next_pos, bool_results, finite_results)
         if acc_result:
             acc_pos.append(next_pos)
             logger.debug('Add pos %s to accepting positions', next_pos)
@@ -436,7 +493,8 @@ def evaluate_finite_automaton(node_id: NodeId[FiniteAutomaton],
 
     # we assume that we can have only matches in the infinite suffix if it is top_omega
     if next_conf != EMPTY_CONF and trace.suffix == 'top_omega':
-        suffix_result: MaybeBool = evaluate_finite_automaton_conf_infinite_suffix(next_conf, container, trace)
+        suffix_result: MaybeBool = evaluate_finite_automaton_conf_infinite_suffix(
+            next_conf, container, trace, bool_results, finite_results)
         if suffix_result == True:
             acc_pos.append(FencepostPosition('within_infinite_suffix'))
             logger.debug('Add pos within_infinite_suffix to accepting positions')
@@ -446,7 +504,8 @@ def evaluate_finite_automaton(node_id: NodeId[FiniteAutomaton],
 
     logger.debug('---- RETURN of evaluation %s on trace %s at pos %s', node, trace, pos)
     logger.debug('acc_pos: %s', acc_pos)
-
+    logger.debug('Set finite_results to %s', acc_pos)
+    finite_results[node_repr, trace, pos, False] = acc_pos
     return acc_pos
 
 
@@ -592,7 +651,10 @@ def evaluate_omega_automaton_primitive(node_id: NodeId[OmegaAutomaton],
     container: IrContainer,
     trace: Trace,
     pos: FencepostPosition,
-    abort_condition_nodes: set[NodeId]) -> OmegaConfiguration:
+    abort_condition_nodes: frozenset[NodeId],
+    bool_results: BoolMemoDict,
+    finite_results: FiniteMemoDict,
+    omega_results: OmegaMemoDict) -> OmegaConfiguration:
     """Evaluate a single OmegaAutomaton node on a trace starting at
     FencepostPosition pos. Returns a representation of the new configuration
     after reading one symbol (disjunction of conjunction-obligations pairs)."""
@@ -609,6 +671,24 @@ def evaluate_omega_automaton_primitive(node_id: NodeId[OmegaAutomaton],
 
     logger.debug('Evaluate node %s on %s at %s', node, trace, pos)
 
+    # if the node has already been evaluated on the whole trace, immediately return the result of that
+    if (node_repr, trace, pos, abort_condition_nodes, False) in omega_results:
+        memo_result = omega_results[node_repr, trace, pos, abort_condition_nodes, False]
+        assert type(memo_result) is bool or memo_result in ['top', 'bot', 'unknown']
+        logger.debug('Found result in omega_results (whole trace)')
+        if memo_result == True:
+            logger.debug('return EMPTY_OMEGA_CONJUNCTION')
+            return EMPTY_OMEGA_CONJUNCTION # true
+        elif memo_result == False:
+            logger.debug('return EMPTY_OMEGA_DISJUNCTION')
+            return EMPTY_OMEGA_DISJUNCTION # false
+        else:
+            raise ValueError('Encountered unknown result %s in OmegaMemoDict', memo_result)
+    elif (node_repr, trace, pos, abort_condition_nodes, True) in omega_results:
+        memo_result = omega_results[node_repr, trace, pos, abort_condition_nodes, True]
+        assert type(memo_result) is frozenset
+        logger.debug('Found result in omega_results (single step)')
+        return memo_result
 
     #---- SINKS
 
@@ -628,9 +708,9 @@ def evaluate_omega_automaton_primitive(node_id: NodeId[OmegaAutomaton],
 
         if isinstance(node, (OmegaWeakConsume, OmegaWeakConsumeAcc)) and trace.suffix == 'end':
             modified_trace: Trace = trace.replace_from(FencepostPosition('within_infinite_suffix'), 'top_omega')
-            bool_result: MaybeBool = evaluate_bool(node.child1, container, modified_trace, pos, {})
+            bool_result: MaybeBool = evaluate_bool(node.child1, container, modified_trace, pos, bool_results)
         else:
-            bool_result: MaybeBool = evaluate_bool(node.child1, container, trace, pos, {})
+            bool_result: MaybeBool = evaluate_bool(node.child1, container, trace, pos, bool_results)
 
         if bool_result == 'top':
             conjunction1 = frozenset([container.merged_nodes.find(node.child2)])
@@ -655,20 +735,24 @@ def evaluate_omega_automaton_primitive(node_id: NodeId[OmegaAutomaton],
 
         if isinstance(node, OmegaWeakRead) and trace.suffix == 'end':
             modified_trace: Trace = trace.replace_from(FencepostPosition('within_infinite_suffix'), 'top_omega')
-            bool_result: MaybeBool = evaluate_bool(node.child1, container, modified_trace, pos, {})
+            bool_result: MaybeBool = evaluate_bool(node.child1, container, modified_trace, pos, bool_results)
         else:
-            bool_result: MaybeBool = evaluate_bool(node.child1, container, trace, pos, {})
+            bool_result: MaybeBool = evaluate_bool(node.child1, container, trace, pos, bool_results)
 
         if bool_result == 'top':
-            child1_result = evaluate_omega_automaton_primitive(node.child2, container, trace, pos, abort_condition_nodes)
-            child2_result = evaluate_omega_automaton_primitive(node.child3, container, trace, pos, abort_condition_nodes)
+            child1_result = evaluate_omega_automaton_primitive(node.child2, container, trace, pos, abort_condition_nodes,
+                bool_results, finite_results, omega_results)
+            child2_result = evaluate_omega_automaton_primitive(node.child3, container, trace, pos, abort_condition_nodes,
+                bool_results, finite_results, omega_results)
             result_configuration = omega_conf_or({child1_result, child2_result}, container)
         elif bool_result == 'bot':
             result_configuration = frozenset() # empty disjunction
         elif bool_result == True:
-            result_configuration = evaluate_omega_automaton_primitive(node.child2, container, trace, pos, abort_condition_nodes)
+            result_configuration = evaluate_omega_automaton_primitive(node.child2,
+                container, trace, pos, abort_condition_nodes, bool_results, finite_results, omega_results)
         elif bool_result == False:
-            result_configuration = evaluate_omega_automaton_primitive(node.child3, container, trace, pos, abort_condition_nodes)
+            result_configuration = evaluate_omega_automaton_primitive(node.child3,
+                container, trace, pos, abort_condition_nodes, bool_results, finite_results, omega_results)
         else:
             raise ValueError('Encountered unknown bool result in %s evaluation with trace %s at position %s', node.node_type(), trace, pos)
 
@@ -678,7 +762,8 @@ def evaluate_omega_automaton_primitive(node_id: NodeId[OmegaAutomaton],
 
         child_results: set[OmegaConfiguration] = set()
         for child in node.children:
-            child_results.add(evaluate_omega_automaton_primitive(child, container, trace, pos, abort_condition_nodes))
+            child_results.add(evaluate_omega_automaton_primitive(child, container,
+                trace, pos, abort_condition_nodes, bool_results, finite_results, omega_results))
 
         if isinstance(node, OmegaAnd):
             result_configuration = omega_conf_and(child_results, container)
@@ -693,14 +778,16 @@ def evaluate_omega_automaton_primitive(node_id: NodeId[OmegaAutomaton],
         # it has already been taken into account and can be ignored
         if node_repr in abort_condition_nodes:
             logger.debug('Skip abort property node %s because already encountered', node)
-            result_configuration = evaluate_omega_automaton_primitive(node.child2, container, trace, pos, abort_condition_nodes)
+            result_configuration = evaluate_omega_automaton_primitive(node.child2, container,
+                trace, pos, abort_condition_nodes, bool_results, finite_results, omega_results)
 
         else:
 
             # create copy because only recursive calls from here should be affected
             # but not disjunctive/conjunctive runs
-            abort_nodes_copy = abort_condition_nodes.copy()
-            abort_nodes_copy.add(node_repr)
+            abort_nodes_set: set[NodeId] = set(abort_condition_nodes)
+            abort_nodes_set.add(node_repr)
+            abort_nodes_modified: frozenset[NodeId] = frozenset(abort_nodes_set)
 
             if isinstance(node, OmegaAcceptOn):
                 suffix: Literal['top_omega', 'bot_omega'] = 'top_omega'
@@ -709,7 +796,8 @@ def evaluate_omega_automaton_primitive(node_id: NodeId[OmegaAutomaton],
 
             # find earliest position where the bool holds, replace suffix from that position on
             # evaluate child property as-is and with replaced suffix
-            p_result: MaybeBool = evaluate_omega_automaton(node.child2, container, trace, pos, abort_nodes_copy)
+            p_result: MaybeBool = evaluate_omega_automaton(node.child2, container,
+                trace, pos, abort_nodes_modified, bool_results, finite_results, omega_results)
             earliest_bool_result: MaybeBool | None = None
             earliest_bool: int | None = None
 
@@ -722,7 +810,8 @@ def evaluate_omega_automaton_primitive(node_id: NodeId[OmegaAutomaton],
                 # assume that top/bot symbols do only appear as the suffix
                 # (else for reject-on, they must be inverted for the bool evaluation)
                 logger.debug('Evaluate bool %s at index %s', node.child1, index)
-                bool_result: MaybeBool = evaluate_bool(node.child1, container, trace, FencepostPosition(('at', index)), {})
+                bool_result: MaybeBool = evaluate_bool(node.child1, container, trace,
+                    FencepostPosition(('at', index)), bool_results)
                 if bool_result == True:
                     earliest_bool = index
                     break
@@ -733,7 +822,8 @@ def evaluate_omega_automaton_primitive(node_id: NodeId[OmegaAutomaton],
             if earliest_bool is not None:
                 logger.debug('earliest_bool: %s', earliest_bool)
                 earliest_bool_result = evaluate_omega_automaton(node.child2, container,
-                    trace.replace_from(FencepostPosition(('at', earliest_bool)), suffix), pos, abort_nodes_copy)
+                    trace.replace_from(FencepostPosition(('at', earliest_bool)), suffix),
+                    pos, abort_nodes_modified, bool_results, finite_results, omega_results)
 
             logger.debug('p_result: %s   earliest_bool_result: %s', p_result, earliest_bool_result)
 
@@ -778,6 +868,7 @@ def evaluate_omega_automaton_primitive(node_id: NodeId[OmegaAutomaton],
         raise ValueError('Unexpected primitive %s in omega automaton evaluation', node.node_type())
 
     logger.debug('result_configuration: %s', result_configuration)
+    omega_results[node_repr, trace, pos, abort_condition_nodes, True] = result_configuration
     return result_configuration
 
 
@@ -794,18 +885,25 @@ def evaluate_omega_automaton_conf(conf: OmegaConfiguration,
     pos: FencepostPosition,
     graph: ConjunctionGraph | None,
     empty_obligation_nodes: set[OmegaConjunction] | None,
-    abort_condition_nodes: set[NodeId]) -> OmegaConfiguration:
+    abort_condition_nodes: frozenset[NodeId],
+    bool_results: BoolMemoDict,
+    finite_results: FiniteMemoDict,
+    omega_results: OmegaMemoDict) -> OmegaConfiguration:
     """Evaluate an OmegaConfiguration on a trace starting at
     FencepostPosition pos. Returns a representation of the new configuration
     after reading one symbol (disjunction of conjunction-obligations pairs).
     If a ConjunctionGraph is given, it is updated with the new reachable
     OmegaConjunctions from each OmegaConjunction in conf."""
 
-    # TODO handle delayed states
-
     logger.debug('evaluate_omega_automaton_conf - conf: %s', print_conf(conf))
 
     conjunction_results: set[OmegaConfiguration] = set()
+
+    if (conf, trace, pos, abort_condition_nodes) in omega_results:
+        memo_result = omega_results[conf, trace, pos, abort_condition_nodes, False]
+        assert(type(memo_result) is frozenset)
+        logger.debug('Found result in omega_results')
+        return memo_result
 
     for conj_obl in conf:
         conjunction: Conjunction = conj_obl[0]
@@ -822,7 +920,8 @@ def evaluate_omega_automaton_conf(conf: OmegaConfiguration,
             assert(isinstance(state, NodeId))
             node_id: NodeId = state
 
-            child_result: OmegaConfiguration = evaluate_omega_automaton_primitive(node_id, container, trace, pos, abort_condition_nodes)
+            child_result: OmegaConfiguration = evaluate_omega_automaton_primitive(
+                node_id, container, trace, pos, abort_condition_nodes, bool_results, finite_results, omega_results)
 
             if state not in obligations and not reset_obligations:
                 child_result = remove_obligations(child_result)
@@ -844,7 +943,9 @@ def evaluate_omega_automaton_conf(conf: OmegaConfiguration,
             logger.debug('Conjunction graph: %s', graph)
             logger.debug('Empty obligation nodes: %s', empty_obligation_nodes)
 
-    return omega_conf_or(conjunction_results, container)
+    result: OmegaConfiguration = omega_conf_or(conjunction_results, container)
+    omega_results[conf, trace, pos, abort_condition_nodes, False] = result
+    return result
 
 
 
@@ -852,7 +953,10 @@ def evaluate_omega_automaton_conf(conf: OmegaConfiguration,
 def evaluate_omega_automaton_conf_infinite_suffix(conf: OmegaConfiguration,
     container: IrContainer,
     trace: Trace,
-    abort_condition_nodes: set[NodeId],
+    abort_condition_nodes: frozenset[NodeId],
+    bool_results: BoolMemoDict,
+    finite_results: FiniteMemoDict,
+    omega_results: OmegaMemoDict,
     abort_point: int = 2000) -> MaybeBool:
     """Evaluate the omega automaton on the infinite suffix.
     Build a graph of conjunction-obligation pairs and check every 2^n steps
@@ -867,6 +971,12 @@ def evaluate_omega_automaton_conf_infinite_suffix(conf: OmegaConfiguration,
     graph: ConjunctionGraph = {}
     empty_obligation_nodes: set[OmegaConjunction] = set()
 
+    if (conf, trace, FencepostPosition('within_infinite_suffix'), abort_condition_nodes) in omega_results:
+        memo_result = omega_results[conf, trace, FencepostPosition('within_infinite_suffix'), abort_condition_nodes, False]
+        assert(type(memo_result) is bool or memo_result in ['top', 'bot', 'unknown'])
+        logger.debug('Found result in omega_results')
+        return memo_result
+
     next_checkpoint: int = 4
     counter: int = 0
 
@@ -880,30 +990,38 @@ def evaluate_omega_automaton_conf_infinite_suffix(conf: OmegaConfiguration,
 
         seen_configurations.add(next_conf)
         next_conf = evaluate_omega_automaton_conf(next_conf, container, trace,
-            FencepostPosition('within_infinite_suffix'), graph, empty_obligation_nodes, abort_condition_nodes)
+            FencepostPosition('within_infinite_suffix'), graph, empty_obligation_nodes, abort_condition_nodes,
+            bool_results, finite_results, omega_results)
         counter += 1
 
         if counter == next_checkpoint:
             logger.debug('checkpoint reached, check for productive cycle')
             result: bool = has_productive_cycle(graph, empty_obligation_nodes)
             if result:
+                omega_results[conf, trace, FencepostPosition('within_infinite_suffix'), abort_condition_nodes, False] = True
                 return True
             next_checkpoint *= 2
 
     if has_productive_cycle(graph, empty_obligation_nodes):
-        return True
+        final_result: MaybeBool = True
     elif next_conf in seen_configurations or next_conf == EMPTY_OMEGA_CONF:
-        return False
+        final_result: MaybeBool = False
+    else:
+        final_result: MaybeBool = 'unknown'
 
-    return 'unknown'
+    omega_results[conf, trace, FencepostPosition('within_infinite_suffix'), abort_condition_nodes, False] = final_result
+    return final_result
 
 
 
 def evaluate_omega_automaton(node_id: NodeId[OmegaAutomaton],
     container: IrContainer,
     trace: Trace,
-    pos: FencepostPosition | None = None,
-    abort_condition_nodes: set[NodeId] | None = None) -> MaybeBool:
+    pos: FencepostPosition,
+    abort_condition_nodes: frozenset[NodeId],
+    bool_results: BoolMemoDict,
+    finite_results: FiniteMemoDict,
+    omega_results: OmegaMemoDict) -> MaybeBool:
     """Evaluate the omega automaton by first evaluating the finite part,
     and then starting from the configuration at the beginning of the suffix,
     detecting an accepting cycle in the infinite suffix.
@@ -914,31 +1032,41 @@ def evaluate_omega_automaton(node_id: NodeId[OmegaAutomaton],
     therefore not trigger one again, as their abort condition has already been
     taken into account."""
 
-    if abort_condition_nodes is None:
-        abort_condition_nodes = set()
-
     node: PropertyIrNode = container[node_id]
     assert(isinstance(node, OmegaAutomaton))
     node_repr: NodeId = container.merged_nodes.find(node_id)
 
+    if (node_repr, trace, pos, abort_condition_nodes) in omega_results:
+        memo_result = omega_results[node_repr, trace, pos, abort_condition_nodes, False]
+        assert(type(memo_result) is bool or memo_result in ['top', 'bot', 'unknown'])
+        logger.debug('Found result in omega_results')
+        return memo_result
+
     next_conf: OmegaConfiguration = frozenset([(frozenset([node_repr]), frozenset([node_repr]))])
-    if pos is not None:
-        next_pos: FencepostPosition = pos
-    else:
-        next_pos: FencepostPosition = FencepostPosition(('at', 0))
+    next_pos: FencepostPosition = pos
 
     # evaluate finite part
 
-    while next_conf != EMPTY_OMEGA_CONF and next_conf != EMPTY_OMEGA_CONJUNCTION and next_pos != FencepostPosition('within_infinite_suffix'):
+    while next_conf != EMPTY_OMEGA_CONF and \
+        next_conf != EMPTY_OMEGA_CONJUNCTION and \
+        next_pos != FencepostPosition('within_infinite_suffix'):
+
         assert isinstance(next_pos.value, tuple)
 
-        next_conf = evaluate_omega_automaton_conf(next_conf, container, trace, next_pos, None, None, abort_condition_nodes)
+        next_conf = evaluate_omega_automaton_conf(next_conf, container, trace, next_pos,
+            None, None, abort_condition_nodes, bool_results, finite_results, omega_results)
         next_pos = next_pos.next_pos(trace)
 
         result: bool | None = omega_conf_result(next_conf)
         if result is not None:
+            omega_results[node_repr, trace, pos, abort_condition_nodes, False] = result
             return result
 
     # evaluate infinite suffix
 
-    return evaluate_omega_automaton_conf_infinite_suffix(next_conf, container, trace, abort_condition_nodes)
+    suffix_result: MaybeBool = evaluate_omega_automaton_conf_infinite_suffix(next_conf, container, trace,
+        abort_condition_nodes, bool_results, finite_results, omega_results)
+
+    omega_results[node_repr, trace, pos, abort_condition_nodes, False] = suffix_result
+
+    return suffix_result

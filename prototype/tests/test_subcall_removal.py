@@ -55,7 +55,12 @@ from tests.evaluate import (
     evaluate_property,
     sequence_matches,
 )
-from tests.evaluate_automaton import evaluate_finite_automaton, evaluate_omega_automaton
+from tests.evaluate_automaton import (
+    FiniteMemoDict,
+    OmegaMemoDict,
+    evaluate_finite_automaton,
+    evaluate_omega_automaton,
+)
 from tests.strategies import random_ir_with_trace_simple
 
 logger = getLogger(__name__)
@@ -533,6 +538,10 @@ def check_remove_subcalls_random_property_evaluation(doc_and_trace: tuple[str, T
     seq_results1: SequenceMemoDict = {}
     prop_results1: PropertyMemoDict = {}
 
+    bool_results2: BoolMemoDict = {}
+    finite_results: FiniteMemoDict = {}
+    omega_results: OmegaMemoDict = {}
+
     input_container: IrContainer = IrContainer()
     parse_document(parse_raw_sexpr(doc), input_container)
 
@@ -571,7 +580,7 @@ def check_remove_subcalls_random_property_evaluation(doc_and_trace: tuple[str, T
     if isinstance(root_node2, ClkPropOmega):
         omega_root_id: NodeId = root_node2.child
         prop_result1: MaybeBool = evaluate_property(root_node_id1, input_container, trace, FencepostPosition(('at', 0)), bool_results1, seq_results1, prop_results1)
-        prop_result2: MaybeBool = evaluate_omega_automaton(omega_root_id, output_container, trace)
+        prop_result2: MaybeBool = evaluate_omega_automaton(omega_root_id, output_container, trace, FencepostPosition(('at', 0)), frozenset(), bool_results2, finite_results, omega_results)
 
         logger.debug('result1: %s', prop_result1)
         logger.debug('result2: %s', prop_result2)
@@ -581,7 +590,7 @@ def check_remove_subcalls_random_property_evaluation(doc_and_trace: tuple[str, T
     elif isinstance(root_node2, ClkSeqAut):
         omega_root_id: NodeId = root_node2.child
         seq_result1: frozenset[FencepostPosition] = sequence_matches(root_node_id1, input_container, trace, FencepostPosition(('at', 0)), bool_results1, seq_results1)
-        seq_result2: list[FencepostPosition] = evaluate_finite_automaton(omega_root_id, output_container, trace, FencepostPosition(('at', 0)))
+        seq_result2: list[FencepostPosition] = evaluate_finite_automaton(omega_root_id, output_container, trace, FencepostPosition(('at', 0)), bool_results2, finite_results)
         seq_result2_adjusted: frozenset[FencepostPosition] = frozenset([match.next_pos(trace) for match in seq_result2])
         # the automaton accepts 1 step earlier than the sequence match - adjust matches for that
 

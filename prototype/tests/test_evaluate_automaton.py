@@ -16,9 +16,11 @@ from ir.primitives.automata_primitives import (
     OmegaCallExWeak,
 )
 
-from tests.evaluate import FencepostPosition, MaybeBool, Trace
+from tests.evaluate import BoolMemoDict, FencepostPosition, MaybeBool, Trace
 from tests.evaluate_automaton import (
     Configuration,
+    FiniteMemoDict,
+    OmegaMemoDict,
     conf_and,
     conf_or,
     evaluate_finite_automaton,
@@ -106,36 +108,39 @@ def test_automaton_aut_consume():
         frozenset({'b'}),
     ), suffix='top_omega')
 
-    result1 = evaluate_finite_automaton_primitive(aut1, container, trace1, FencepostPosition(('at', 0)))
+    bool_results: BoolMemoDict = {}
+    finite_results: FiniteMemoDict = {}
+
+    result1 = evaluate_finite_automaton_primitive(aut1, container, trace1, FencepostPosition(('at', 0)), bool_results, finite_results)
     assert result1[0] == frozenset([frozenset([aut1])])
     assert result1[1] == True
 
-    result2 = evaluate_finite_automaton_primitive(aut2, container, trace1, FencepostPosition(('at', 0)))
+    result2 = evaluate_finite_automaton_primitive(aut2, container, trace1, FencepostPosition(('at', 0)), bool_results, finite_results)
     assert result2[0] == frozenset([frozenset([aut2])])
     assert result2[1] == False
 
-    result3 = evaluate_finite_automaton_primitive(aut3, container, trace1, FencepostPosition(('at', 0)))
+    result3 = evaluate_finite_automaton_primitive(aut3, container, trace1, FencepostPosition(('at', 0)), bool_results, finite_results)
     aut3_node = container[aut3]
     assert(isinstance(aut3_node, AutConsume))
     assert result3[0] == frozenset([frozenset([aut3_node.child2])])
     assert result3[1] == False
-    result3_2 = evaluate_finite_automaton_primitive(aut3_node.child2, container, trace1, FencepostPosition(('at', 1)))
+    result3_2 = evaluate_finite_automaton_primitive(aut3_node.child2, container, trace1, FencepostPosition(('at', 1)), bool_results, finite_results)
     assert result3_2[0] == frozenset([frozenset([aut3_node.child2])])
     assert result3_2[1] == True
 
-    result4 = evaluate_finite_automaton_primitive(aut4, container, trace1, FencepostPosition(('at', 0)))
+    result4 = evaluate_finite_automaton_primitive(aut4, container, trace1, FencepostPosition(('at', 0)), bool_results, finite_results)
     aut4_node = container[aut4]
     assert(isinstance(aut4_node, AutConsume))
     assert result4[0] == frozenset([frozenset([aut4_node.child3])])
     assert result4[1] == False
 
-    result5 = evaluate_finite_automaton_primitive(aut5, container, trace1, FencepostPosition(('at', 0)))
+    result5 = evaluate_finite_automaton_primitive(aut5, container, trace1, FencepostPosition(('at', 0)), bool_results, finite_results)
     aut5_node = container[aut5]
     assert(isinstance(aut5_node, AutAcc))
     assert result5[0] == frozenset([frozenset([aut5_node.child])])
     assert result5[1] == True
 
-    result6 = evaluate_finite_automaton_primitive(aut6, container, trace1, FencepostPosition(('at', 0)))
+    result6 = evaluate_finite_automaton_primitive(aut6, container, trace1, FencepostPosition(('at', 0)), bool_results, finite_results)
     aut6_node = container[aut6]
     assert(isinstance(aut6_node, AutRead))
     aut6_true_child = container[aut6_node.child2]
@@ -143,51 +148,51 @@ def test_automaton_aut_consume():
     assert result6[0] == frozenset([frozenset([aut6_true_child.child])])
     assert result6[1] == True
 
-    result7 = evaluate_finite_automaton_primitive(aut7, container, trace1, FencepostPosition(('at', 0)))
+    result7 = evaluate_finite_automaton_primitive(aut7, container, trace1, FencepostPosition(('at', 0)), bool_results, finite_results)
     assert result7[1] == False
 
-    assert evaluate_finite_automaton(aut1, container, trace1, FencepostPosition(('at', 0))) == [
+    assert evaluate_finite_automaton(aut1, container, trace1, FencepostPosition(('at', 0)), bool_results, finite_results) == [
         FencepostPosition(('at', 0)), FencepostPosition(('at', 1)), FencepostPosition(('at', 2)), FencepostPosition(('at', 3))]
-    assert evaluate_finite_automaton(aut1, container, trace1_top, FencepostPosition(('at', 0))) == [
+    assert evaluate_finite_automaton(aut1, container, trace1_top, FencepostPosition(('at', 0)), bool_results, finite_results) == [
         FencepostPosition(('at', 0)), FencepostPosition(('at', 1)), FencepostPosition(('at', 2)), FencepostPosition(('at', 3)), FencepostPosition('within_infinite_suffix')]
 
-    assert evaluate_finite_automaton(aut2, container, trace1, FencepostPosition(('at', 0))) == []
-    assert evaluate_finite_automaton(aut2, container, trace1_top, FencepostPosition(('at', 0))) == []
+    assert evaluate_finite_automaton(aut2, container, trace1, FencepostPosition(('at', 0)), bool_results, finite_results) == []
+    assert evaluate_finite_automaton(aut2, container, trace1_top, FencepostPosition(('at', 0)), bool_results, finite_results) == []
 
-    assert evaluate_finite_automaton(aut3, container, trace1, FencepostPosition(('at', 0))) == [
+    assert evaluate_finite_automaton(aut3, container, trace1, FencepostPosition(('at', 0)), bool_results, finite_results) == [
         FencepostPosition(('at', 1)), FencepostPosition(('at', 2)), FencepostPosition(('at', 3))]
-    assert evaluate_finite_automaton(aut3, container, trace1_top, FencepostPosition(('at', 0))) == [
+    assert evaluate_finite_automaton(aut3, container, trace1_top, FencepostPosition(('at', 0)), bool_results, finite_results) == [
         FencepostPosition(('at', 1)), FencepostPosition(('at', 2)), FencepostPosition(('at', 3)), FencepostPosition('within_infinite_suffix')]
 
-    assert evaluate_finite_automaton(aut4, container, trace1, FencepostPosition(('at', 0))) == []
+    assert evaluate_finite_automaton(aut4, container, trace1, FencepostPosition(('at', 0)), bool_results, finite_results) == []
 
-    assert evaluate_finite_automaton(aut5, container, trace1, FencepostPosition(('at', 0))) == [
+    assert evaluate_finite_automaton(aut5, container, trace1, FencepostPosition(('at', 0)), bool_results, finite_results) == [
         FencepostPosition(('at', 0))]
 
 
-    assert evaluate_finite_automaton(aut6, container, trace1, FencepostPosition(('at', 0))) == [
+    assert evaluate_finite_automaton(aut6, container, trace1, FencepostPosition(('at', 0)), bool_results, finite_results) == [
         FencepostPosition(('at', 0))]
 
-    assert evaluate_finite_automaton(aut7, container, trace1, FencepostPosition(('at', 0))) == []
+    assert evaluate_finite_automaton(aut7, container, trace1, FencepostPosition(('at', 0)), bool_results, finite_results) == []
 
-    assert evaluate_finite_automaton(aut8, container, trace1, FencepostPosition(('at', 0))) == [
+    assert evaluate_finite_automaton(aut8, container, trace1, FencepostPosition(('at', 0)), bool_results, finite_results) == [
         FencepostPosition(('at', 2)), FencepostPosition(('at', 3))]
-    assert evaluate_finite_automaton(aut8, container, trace1_top, FencepostPosition(('at', 0))) == [
+    assert evaluate_finite_automaton(aut8, container, trace1_top, FencepostPosition(('at', 0)), bool_results, finite_results) == [
         FencepostPosition(('at', 2)), FencepostPosition(('at', 3)), FencepostPosition('within_infinite_suffix')]
 
-    assert evaluate_finite_automaton(aut9, container, trace1, FencepostPosition(('at', 0))) == []
+    assert evaluate_finite_automaton(aut9, container, trace1, FencepostPosition(('at', 0)), bool_results, finite_results) == []
 
-    assert evaluate_finite_automaton(aut10, container, trace1, FencepostPosition(('at', 0))) == [
+    assert evaluate_finite_automaton(aut10, container, trace1, FencepostPosition(('at', 0)), bool_results, finite_results) == [
         FencepostPosition(('at', 2))]
-    assert evaluate_finite_automaton(aut10, container, trace1_top, FencepostPosition(('at', 0))) == [
+    assert evaluate_finite_automaton(aut10, container, trace1_top, FencepostPosition(('at', 0)), bool_results, finite_results) == [
         FencepostPosition(('at', 2))]
 
-    assert evaluate_finite_automaton(aut11, container, trace1, FencepostPosition(('at', 0))) == [
+    assert evaluate_finite_automaton(aut11, container, trace1, FencepostPosition(('at', 0)), bool_results, finite_results) == [
         FencepostPosition(('at', 3))]
 
-    assert evaluate_finite_automaton(aut12, container, trace1, FencepostPosition(('at', 0))) == [
+    assert evaluate_finite_automaton(aut12, container, trace1, FencepostPosition(('at', 0)), bool_results, finite_results) == [
         FencepostPosition(('at', 1))]
-    assert evaluate_finite_automaton(aut12, container, trace2, FencepostPosition(('at', 0))) == [
+    assert evaluate_finite_automaton(aut12, container, trace2, FencepostPosition(('at', 0)), bool_results, finite_results) == [
         FencepostPosition(('at', 1)), FencepostPosition(('at', 2)), FencepostPosition(('at', 3)), FencepostPosition(('at', 4))]
 
 
@@ -211,7 +216,7 @@ def test_automaton_simplify_conf():
     )"""
 
     container: IrContainer = IrContainer()
-    container.bypass_placeholders()
+    #container.bypass_placeholders()
     parse_document(parse_raw_sexpr(doc_str), container)
 
     n1: NodeId = container.get_node_id_by_name('n1')
@@ -301,7 +306,7 @@ def test_automaton_aut_or():
 
     container: IrContainer = IrContainer()
     parse_document(parse_raw_sexpr(doc_str), container)
-    container.bypass_placeholders()
+    #container.bypass_placeholders()
 
     #output_directory: Path = Path('./output')
     #container.show_graph(output_directory / 'aut_or.png')
@@ -331,24 +336,27 @@ def test_automaton_aut_or():
         frozenset({'b'}),
     ), suffix='end')
 
-    assert evaluate_finite_automaton(aut_or_1, container, trace1, FencepostPosition(('at', 0))) == [
+    bool_results: BoolMemoDict = {}
+    finite_results: FiniteMemoDict = {}
+
+    assert evaluate_finite_automaton(aut_or_1, container, trace1, FencepostPosition(('at', 0)), bool_results, finite_results) == [
         FencepostPosition(('at', 0))]
-    assert evaluate_finite_automaton(aut_or_1, container, trace1_top, FencepostPosition(('at', 0))) == [
+    assert evaluate_finite_automaton(aut_or_1, container, trace1_top, FencepostPosition(('at', 0)), bool_results, finite_results) == [
         FencepostPosition(('at', 0))]
 
-    assert evaluate_finite_automaton(aut_or_2, container, trace1, FencepostPosition(('at', 0))) == [
+    assert evaluate_finite_automaton(aut_or_2, container, trace1, FencepostPosition(('at', 0)), bool_results, finite_results) == [
         FencepostPosition(('at', 0)), FencepostPosition(('at', 2)), FencepostPosition(('at', 3))]
-    assert evaluate_finite_automaton(aut_or_2, container, trace1_top, FencepostPosition(('at', 0))) == [
+    assert evaluate_finite_automaton(aut_or_2, container, trace1_top, FencepostPosition(('at', 0)), bool_results, finite_results) == [
         FencepostPosition(('at', 0)), FencepostPosition(('at', 2)), FencepostPosition(('at', 3)), FencepostPosition('within_infinite_suffix')]
 
-    assert evaluate_finite_automaton(aut_or_3, container, trace1, FencepostPosition(('at', 0))) == [
+    assert evaluate_finite_automaton(aut_or_3, container, trace1, FencepostPosition(('at', 0)), bool_results, finite_results) == [
         FencepostPosition(('at', 2)), FencepostPosition(('at', 3))]
-    assert evaluate_finite_automaton(aut_or_3, container, trace1_top, FencepostPosition(('at', 0))) == [
+    assert evaluate_finite_automaton(aut_or_3, container, trace1_top, FencepostPosition(('at', 0)), bool_results, finite_results) == [
         FencepostPosition(('at', 2)), FencepostPosition(('at', 3)), FencepostPosition('within_infinite_suffix')]
 
-    assert evaluate_finite_automaton(aut_or_4, container, trace1, FencepostPosition(('at', 0))) == [
+    assert evaluate_finite_automaton(aut_or_4, container, trace1, FencepostPosition(('at', 0)), bool_results, finite_results) == [
         FencepostPosition(('at', 2))]
-    assert evaluate_finite_automaton(aut_or_4, container, trace2, FencepostPosition(('at', 0))) == [
+    assert evaluate_finite_automaton(aut_or_4, container, trace2, FencepostPosition(('at', 0)), bool_results, finite_results) == [
         FencepostPosition(('at', 2)), FencepostPosition(('at', 3)), FencepostPosition(('at', 4))]
 
 
@@ -399,7 +407,7 @@ def test_automaton_aut_and():
 
     container: IrContainer = IrContainer()
     parse_document(parse_raw_sexpr(doc_str), container)
-    container.bypass_placeholders()
+    #container.bypass_placeholders()
 
     #output_directory: Path = Path('./output')
     #container.show_graph(output_directory / 'aut_or.png')
@@ -432,21 +440,24 @@ def test_automaton_aut_and():
         frozenset({'b'}),
     ), suffix='end')
 
-    assert evaluate_finite_automaton(aut_and_1, container, trace1, FencepostPosition(('at', 0))) == []
-    assert evaluate_finite_automaton(aut_and_1, container, trace1_top, FencepostPosition(('at', 0))) == []
+    bool_results: BoolMemoDict = {}
+    finite_results: FiniteMemoDict = {}
 
-    assert evaluate_finite_automaton(aut_and_2, container, trace1, FencepostPosition(('at', 0))) == [
+    assert evaluate_finite_automaton(aut_and_1, container, trace1, FencepostPosition(('at', 0)), bool_results, finite_results) == []
+    assert evaluate_finite_automaton(aut_and_1, container, trace1_top, FencepostPosition(('at', 0)), bool_results, finite_results) == []
+
+    assert evaluate_finite_automaton(aut_and_2, container, trace1, FencepostPosition(('at', 0)), bool_results, finite_results) == [
         FencepostPosition(('at', 2)), FencepostPosition(('at', 3)), FencepostPosition(('at', 4))]
-    assert evaluate_finite_automaton(aut_and_2, container, trace1_top, FencepostPosition(('at', 0))) == [
+    assert evaluate_finite_automaton(aut_and_2, container, trace1_top, FencepostPosition(('at', 0)), bool_results, finite_results) == [
         FencepostPosition(('at', 2)), FencepostPosition(('at', 3)), FencepostPosition(('at', 4)), FencepostPosition('within_infinite_suffix')]
 
-    assert evaluate_finite_automaton(aut_and_3, container, trace1, FencepostPosition(('at', 0))) == [
+    assert evaluate_finite_automaton(aut_and_3, container, trace1, FencepostPosition(('at', 0)), bool_results, finite_results) == [
         FencepostPosition(('at', 2))]
 
-    assert evaluate_finite_automaton(aut_and_4, container, trace2, FencepostPosition(('at', 0))) == [
+    assert evaluate_finite_automaton(aut_and_4, container, trace2, FencepostPosition(('at', 0)), bool_results, finite_results) == [
         FencepostPosition(('at', 2))]
 
-    assert evaluate_finite_automaton(aut_and_5, container, trace2, FencepostPosition(('at', 0))) == [
+    assert evaluate_finite_automaton(aut_and_5, container, trace2, FencepostPosition(('at', 0)), bool_results, finite_results) == [
         FencepostPosition(('at', 2))]
 
 
@@ -507,7 +518,7 @@ def test_automaton_aut_subcall():
 
     container: IrContainer = IrContainer()
     parse_document(parse_raw_sexpr(doc_str), container)
-    container.bypass_placeholders()
+    #container.bypass_placeholders()
 
     visualize: bool = False
     if visualize:
@@ -596,60 +607,63 @@ def test_automaton_aut_subcall():
         frozenset({}),
     ), suffix='top_omega')
 
-    assert evaluate_finite_automaton(aut_first1, container, trace1, FencepostPosition(('at', 0))) == [FencepostPosition(('at', 1))]
-    assert evaluate_finite_automaton(aut_first2, container, trace1, FencepostPosition(('at', 0))) == [FencepostPosition(('at', 2))]
-    assert evaluate_finite_automaton(subcall_aut2, container, trace1, FencepostPosition(('at', 0))) == [FencepostPosition(('at', 2))]
-    assert evaluate_finite_automaton(aut_first3, container, trace1, FencepostPosition(('at', 0))) == [FencepostPosition(('at', 2))]
-    assert evaluate_finite_automaton(aut_first4, container, trace1, FencepostPosition(('at', 0))) == [FencepostPosition(('at', 0))]
-    assert evaluate_finite_automaton(aut_first5, container, trace1, FencepostPosition(('at', 0))) == [FencepostPosition(('at', 0))]
-    assert evaluate_finite_automaton(aut_first6, container, trace1, FencepostPosition(('at', 0))) == []
+    bool_results: BoolMemoDict = {}
+    finite_results: FiniteMemoDict = {}
 
-    assert evaluate_finite_automaton(aut_ex1, container, trace1, FencepostPosition(('at', 0))) == [
+    assert evaluate_finite_automaton(aut_first1, container, trace1, FencepostPosition(('at', 0)), bool_results, finite_results) == [FencepostPosition(('at', 1))]
+    assert evaluate_finite_automaton(aut_first2, container, trace1, FencepostPosition(('at', 0)), bool_results, finite_results) == [FencepostPosition(('at', 2))]
+    assert evaluate_finite_automaton(subcall_aut2, container, trace1, FencepostPosition(('at', 0)), bool_results, finite_results) == [FencepostPosition(('at', 2))]
+    assert evaluate_finite_automaton(aut_first3, container, trace1, FencepostPosition(('at', 0)), bool_results, finite_results) == [FencepostPosition(('at', 2))]
+    assert evaluate_finite_automaton(aut_first4, container, trace1, FencepostPosition(('at', 0)), bool_results, finite_results) == [FencepostPosition(('at', 0))]
+    assert evaluate_finite_automaton(aut_first5, container, trace1, FencepostPosition(('at', 0)), bool_results, finite_results) == [FencepostPosition(('at', 0))]
+    assert evaluate_finite_automaton(aut_first6, container, trace1, FencepostPosition(('at', 0)), bool_results, finite_results) == []
+
+    assert evaluate_finite_automaton(aut_ex1, container, trace1, FencepostPosition(('at', 0)), bool_results, finite_results) == [
         FencepostPosition(('at', 1)), FencepostPosition(('at', 2)), FencepostPosition(('at', 3)), FencepostPosition(('at', 4))]
-    assert evaluate_finite_automaton(aut_ex1, container, trace1_top, FencepostPosition(('at', 0))) == [
+    assert evaluate_finite_automaton(aut_ex1, container, trace1_top, FencepostPosition(('at', 0)), bool_results, finite_results) == [
         FencepostPosition(('at', 1)), FencepostPosition(('at', 2)), FencepostPosition(('at', 3)), FencepostPosition(('at', 4)), FencepostPosition('unknown')]
 
-    assert evaluate_finite_automaton(aut_ex2, container, trace1, FencepostPosition(('at', 0))) == [FencepostPosition(('at', 2))]
-    assert evaluate_finite_automaton(aut_ex2, container, trace1_top, FencepostPosition(('at', 0))) == [FencepostPosition(('at', 2)), FencepostPosition('within_infinite_suffix')]
+    assert evaluate_finite_automaton(aut_ex2, container, trace1, FencepostPosition(('at', 0)), bool_results, finite_results) == [FencepostPosition(('at', 2))]
+    assert evaluate_finite_automaton(aut_ex2, container, trace1_top, FencepostPosition(('at', 0)), bool_results, finite_results) == [FencepostPosition(('at', 2)), FencepostPosition('within_infinite_suffix')]
 
-    assert evaluate_finite_automaton(aut_ex3, container, trace1, FencepostPosition(('at', 0))) == [FencepostPosition(('at', 2))]
-    assert evaluate_finite_automaton(aut_ex3, container, trace1_top, FencepostPosition(('at', 0))) == [FencepostPosition(('at', 2))]
+    assert evaluate_finite_automaton(aut_ex3, container, trace1, FencepostPosition(('at', 0)), bool_results, finite_results) == [FencepostPosition(('at', 2))]
+    assert evaluate_finite_automaton(aut_ex3, container, trace1_top, FencepostPosition(('at', 0)), bool_results, finite_results) == [FencepostPosition(('at', 2))]
 
-    assert evaluate_finite_automaton(aut_ex4, container, trace1, FencepostPosition(('at', 0))) == [
+    assert evaluate_finite_automaton(aut_ex4, container, trace1, FencepostPosition(('at', 0)), bool_results, finite_results) == [
         FencepostPosition(('at', 0)), FencepostPosition(('at', 1)), FencepostPosition(('at', 2)), FencepostPosition(('at', 3)), FencepostPosition(('at', 4))]
-    assert evaluate_finite_automaton(aut_ex4, container, trace1_top, FencepostPosition(('at', 0))) == [
+    assert evaluate_finite_automaton(aut_ex4, container, trace1_top, FencepostPosition(('at', 0)), bool_results, finite_results) == [
         FencepostPosition(('at', 0)), FencepostPosition(('at', 1)), FencepostPosition(('at', 2)), FencepostPosition(('at', 3)), FencepostPosition(('at', 4)), FencepostPosition('unknown')]
 
-    assert evaluate_finite_automaton(aut_ex5, container, trace1, FencepostPosition(('at', 0))) == [FencepostPosition(('at', 0))]
-    assert evaluate_finite_automaton(aut_ex5, container, trace1_top, FencepostPosition(('at', 0))) == [FencepostPosition(('at', 0)), FencepostPosition(('at', 4)), FencepostPosition('unknown')]
+    assert evaluate_finite_automaton(aut_ex5, container, trace1, FencepostPosition(('at', 0)), bool_results, finite_results) == [FencepostPosition(('at', 0))]
+    assert evaluate_finite_automaton(aut_ex5, container, trace1_top, FencepostPosition(('at', 0)), bool_results, finite_results) == [FencepostPosition(('at', 0)), FencepostPosition(('at', 4)), FencepostPosition('unknown')]
 
-    assert evaluate_finite_automaton(aut_ex6, container, trace1, FencepostPosition(('at', 0))) == [FencepostPosition(('at', 1))]
-    assert evaluate_finite_automaton(aut_ex6, container, trace1_top, FencepostPosition(('at', 0))) == [FencepostPosition(('at', 1)), FencepostPosition(('at', 4)), FencepostPosition('unknown')]
+    assert evaluate_finite_automaton(aut_ex6, container, trace1, FencepostPosition(('at', 0)), bool_results, finite_results) == [FencepostPosition(('at', 1))]
+    assert evaluate_finite_automaton(aut_ex6, container, trace1_top, FencepostPosition(('at', 0)), bool_results, finite_results) == [FencepostPosition(('at', 1)), FencepostPosition(('at', 4)), FencepostPosition('unknown')]
 
-    assert evaluate_finite_automaton(aut_ex7, container, trace1, FencepostPosition(('at', 0))) == []
-    assert evaluate_finite_automaton(aut_ex7, container, trace1_top, FencepostPosition(('at', 0))) == []
+    assert evaluate_finite_automaton(aut_ex7, container, trace1, FencepostPosition(('at', 0)), bool_results, finite_results) == []
+    assert evaluate_finite_automaton(aut_ex7, container, trace1_top, FencepostPosition(('at', 0)), bool_results, finite_results) == []
 
-    assert evaluate_finite_automaton(aut_ex8, container, trace1, FencepostPosition(('at', 0))) == []
-    assert evaluate_finite_automaton(aut_ex8, container, trace1_top, FencepostPosition(('at', 0))) == []
+    assert evaluate_finite_automaton(aut_ex8, container, trace1, FencepostPosition(('at', 0)), bool_results, finite_results) == []
+    assert evaluate_finite_automaton(aut_ex8, container, trace1_top, FencepostPosition(('at', 0)), bool_results, finite_results) == []
 
-    assert evaluate_finite_automaton(nested_call1, container, trace1, FencepostPosition(('at', 0))) == [FencepostPosition(('at', 1))]
-    assert evaluate_finite_automaton(nested_call2, container, trace1, FencepostPosition(('at', 0))) == [FencepostPosition(('at', 2))]
+    assert evaluate_finite_automaton(nested_call1, container, trace1, FencepostPosition(('at', 0)), bool_results, finite_results) == [FencepostPosition(('at', 1))]
+    assert evaluate_finite_automaton(nested_call2, container, trace1, FencepostPosition(('at', 0)), bool_results, finite_results) == [FencepostPosition(('at', 2))]
 
-    assert evaluate_finite_automaton(call_in_or, container, trace2, FencepostPosition(('at', 0))) == [
+    assert evaluate_finite_automaton(call_in_or, container, trace2, FencepostPosition(('at', 0)), bool_results, finite_results) == [
         FencepostPosition(('at', 3)), FencepostPosition(('at', 5)), FencepostPosition(('at', 7))]
-    assert evaluate_finite_automaton(call_in_or, container, trace2_top, FencepostPosition(('at', 0))) == [
+    assert evaluate_finite_automaton(call_in_or, container, trace2_top, FencepostPosition(('at', 0)), bool_results, finite_results) == [
         FencepostPosition(('at', 3)), FencepostPosition(('at', 5)), FencepostPosition(('at', 7)), FencepostPosition('within_infinite_suffix')]
 
-    assert evaluate_finite_automaton(aut_ex2, container, trace2, FencepostPosition(('at', 0))) == [FencepostPosition(('at', 3)), FencepostPosition(('at', 5))]
-    assert evaluate_finite_automaton(aut_ex2, container, trace3, FencepostPosition(('at', 0))) == [FencepostPosition(('at', 3)), FencepostPosition(('at', 5))]
-    assert evaluate_finite_automaton(other_aut, container, trace2, FencepostPosition(('at', 0))) == [FencepostPosition(('at', 7))]
-    assert evaluate_finite_automaton(other_aut, container, trace3, FencepostPosition(('at', 0))) == [FencepostPosition(('at', 5)), FencepostPosition(('at', 7))]
+    assert evaluate_finite_automaton(aut_ex2, container, trace2, FencepostPosition(('at', 0)), bool_results, finite_results) == [FencepostPosition(('at', 3)), FencepostPosition(('at', 5))]
+    assert evaluate_finite_automaton(aut_ex2, container, trace3, FencepostPosition(('at', 0)), bool_results, finite_results) == [FencepostPosition(('at', 3)), FencepostPosition(('at', 5))]
+    assert evaluate_finite_automaton(other_aut, container, trace2, FencepostPosition(('at', 0)), bool_results, finite_results) == [FencepostPosition(('at', 7))]
+    assert evaluate_finite_automaton(other_aut, container, trace3, FencepostPosition(('at', 0)), bool_results, finite_results) == [FencepostPosition(('at', 5)), FencepostPosition(('at', 7))]
 
-    assert evaluate_finite_automaton(call_in_and, container, trace2, FencepostPosition(('at', 0))) == []
-    assert evaluate_finite_automaton(call_in_and, container, trace3, FencepostPosition(('at', 0))) == [FencepostPosition(('at', 5))]
+    assert evaluate_finite_automaton(call_in_and, container, trace2, FencepostPosition(('at', 0)), bool_results, finite_results) == []
+    assert evaluate_finite_automaton(call_in_and, container, trace3, FencepostPosition(('at', 0)), bool_results, finite_results) == [FencepostPosition(('at', 5))]
 
-    assert evaluate_finite_automaton(call_in_and, container, trace2_top, FencepostPosition(('at', 0))) == [FencepostPosition('within_infinite_suffix')]
-    assert evaluate_finite_automaton(call_in_and, container, trace3_top, FencepostPosition(('at', 0))) == [FencepostPosition(('at', 5)), FencepostPosition('within_infinite_suffix')]
+    assert evaluate_finite_automaton(call_in_and, container, trace2_top, FencepostPosition(('at', 0)), bool_results, finite_results) == [FencepostPosition('within_infinite_suffix')]
+    assert evaluate_finite_automaton(call_in_and, container, trace3_top, FencepostPosition(('at', 0)), bool_results, finite_results) == [FencepostPosition(('at', 5)), FencepostPosition('within_infinite_suffix')]
 
 
 def test_automaton_aut_suffix():
@@ -712,7 +726,7 @@ def test_automaton_aut_suffix():
 
     container: IrContainer = IrContainer()
     parse_document(parse_raw_sexpr(doc_str), container)
-    container.bypass_placeholders()
+    #container.bypass_placeholders()
 
     #output_directory: Path = Path('./output')
     #container.show_graph(output_directory / 'aut_or.png')
@@ -742,27 +756,30 @@ def test_automaton_aut_suffix():
         frozenset({'a'}),
     ), suffix='top_omega')
 
-    assert evaluate_finite_automaton(aut_and_1, container, trace1, FencepostPosition(('at', 0))) == [FencepostPosition('within_infinite_suffix')]
-    assert evaluate_finite_automaton(aut_and_2, container, trace1, FencepostPosition(('at', 0))) == []
+    bool_results: BoolMemoDict = {}
+    finite_results: FiniteMemoDict = {}
 
-    assert evaluate_finite_automaton(aut_and_3, container, trace1, FencepostPosition(('at', 0))) == [FencepostPosition('unknown')]
-    assert evaluate_finite_automaton(aut_and_4, container, trace1, FencepostPosition(('at', 0))) == [FencepostPosition('unknown')]
-    assert evaluate_finite_automaton(aut_and_5, container, trace1, FencepostPosition(('at', 0))) == [FencepostPosition('unknown')]
-    assert evaluate_finite_automaton(aut_and_6, container, trace1, FencepostPosition(('at', 0))) == [FencepostPosition('unknown')]
-    assert evaluate_finite_automaton(aut_and_7, container, trace1, FencepostPosition(('at', 0))) == [FencepostPosition('unknown')]
-    assert evaluate_finite_automaton(aut_and_8, container, trace1, FencepostPosition(('at', 0))) == [FencepostPosition('unknown')]
-    assert evaluate_finite_automaton(aut_and_8, container, trace2, FencepostPosition(('at', 0))) == [FencepostPosition('unknown')]
+    assert evaluate_finite_automaton(aut_and_1, container, trace1, FencepostPosition(('at', 0)), bool_results, finite_results) == [FencepostPosition('within_infinite_suffix')]
+    assert evaluate_finite_automaton(aut_and_2, container, trace1, FencepostPosition(('at', 0)), bool_results, finite_results) == []
 
-    assert evaluate_finite_automaton(aut_or_1, container, trace1, FencepostPosition(('at', 0))) == [FencepostPosition('within_infinite_suffix')]
-    assert evaluate_finite_automaton(aut_or_2, container, trace1, FencepostPosition(('at', 0))) == [FencepostPosition('within_infinite_suffix')]
+    assert evaluate_finite_automaton(aut_and_3, container, trace1, FencepostPosition(('at', 0)), bool_results, finite_results) == [FencepostPosition('unknown')]
+    assert evaluate_finite_automaton(aut_and_4, container, trace1, FencepostPosition(('at', 0)), bool_results, finite_results) == [FencepostPosition('unknown')]
+    assert evaluate_finite_automaton(aut_and_5, container, trace1, FencepostPosition(('at', 0)), bool_results, finite_results) == [FencepostPosition('unknown')]
+    assert evaluate_finite_automaton(aut_and_6, container, trace1, FencepostPosition(('at', 0)), bool_results, finite_results) == [FencepostPosition('unknown')]
+    assert evaluate_finite_automaton(aut_and_7, container, trace1, FencepostPosition(('at', 0)), bool_results, finite_results) == [FencepostPosition('unknown')]
+    assert evaluate_finite_automaton(aut_and_8, container, trace1, FencepostPosition(('at', 0)), bool_results, finite_results) == [FencepostPosition('unknown')]
+    assert evaluate_finite_automaton(aut_and_8, container, trace2, FencepostPosition(('at', 0)), bool_results, finite_results) == [FencepostPosition('unknown')]
 
-    assert evaluate_finite_automaton(aut_or_3, container, trace1, FencepostPosition(('at', 0))) == [FencepostPosition('unknown')]
-    assert evaluate_finite_automaton(aut_or_4, container, trace1, FencepostPosition(('at', 0))) == [FencepostPosition('unknown')]
-    assert evaluate_finite_automaton(aut_or_5, container, trace1, FencepostPosition(('at', 0))) == [FencepostPosition('within_infinite_suffix')]
-    assert evaluate_finite_automaton(aut_or_6, container, trace1, FencepostPosition(('at', 0))) == [FencepostPosition('within_infinite_suffix')]
-    assert evaluate_finite_automaton(aut_or_7, container, trace1, FencepostPosition(('at', 0))) == [FencepostPosition('within_infinite_suffix')]
-    assert evaluate_finite_automaton(aut_or_8, container, trace1, FencepostPosition(('at', 0))) == [FencepostPosition('within_infinite_suffix')]
-    assert evaluate_finite_automaton(aut_or_8, container, trace2, FencepostPosition(('at', 0))) == [FencepostPosition(('at', 1)), FencepostPosition('within_infinite_suffix')]
+    assert evaluate_finite_automaton(aut_or_1, container, trace1, FencepostPosition(('at', 0)), bool_results, finite_results) == [FencepostPosition('within_infinite_suffix')]
+    assert evaluate_finite_automaton(aut_or_2, container, trace1, FencepostPosition(('at', 0)), bool_results, finite_results) == [FencepostPosition('within_infinite_suffix')]
+
+    assert evaluate_finite_automaton(aut_or_3, container, trace1, FencepostPosition(('at', 0)), bool_results, finite_results) == [FencepostPosition('unknown')]
+    assert evaluate_finite_automaton(aut_or_4, container, trace1, FencepostPosition(('at', 0)), bool_results, finite_results) == [FencepostPosition('unknown')]
+    assert evaluate_finite_automaton(aut_or_5, container, trace1, FencepostPosition(('at', 0)), bool_results, finite_results) == [FencepostPosition('within_infinite_suffix')]
+    assert evaluate_finite_automaton(aut_or_6, container, trace1, FencepostPosition(('at', 0)), bool_results, finite_results) == [FencepostPosition('within_infinite_suffix')]
+    assert evaluate_finite_automaton(aut_or_7, container, trace1, FencepostPosition(('at', 0)), bool_results, finite_results) == [FencepostPosition('within_infinite_suffix')]
+    assert evaluate_finite_automaton(aut_or_8, container, trace1, FencepostPosition(('at', 0)), bool_results, finite_results) == [FencepostPosition('within_infinite_suffix')]
+    assert evaluate_finite_automaton(aut_or_8, container, trace2, FencepostPosition(('at', 0)), bool_results, finite_results) == [FencepostPosition(('at', 1)), FencepostPosition('within_infinite_suffix')]
 
 
 
@@ -841,37 +858,41 @@ def test_automaton_omega_finite_part_linear():
     container: IrContainer = IrContainer()
     parse_document(parse_raw_sexpr(doc_str), container)
 
+    bool_results: BoolMemoDict = {}
+    finite_results: FiniteMemoDict = {}
+    omega_results: OmegaMemoDict = {}
+
     #container.bypass_placeholders()
     #output_directory: Path = Path('./output')
     #container.show_graph(output_directory / 'aut_or.png')
 
-    assert evaluate_omega_automaton(omega1, container, trace1) == True
-    assert evaluate_omega_automaton(omega2, container, trace1) == False
+    assert evaluate_omega_automaton(omega1, container, trace1, FencepostPosition(('at', 0)), frozenset(), bool_results, finite_results, omega_results) == True
+    assert evaluate_omega_automaton(omega2, container, trace1, FencepostPosition(('at', 0)), frozenset(), bool_results, finite_results, omega_results) == False
 
-    assert evaluate_omega_automaton(omega3, container, trace1) == True
-    assert evaluate_omega_automaton(omega3, container, trace1_top) == True
-    assert evaluate_omega_automaton(omega3, container, trace1_bot) == True
+    assert evaluate_omega_automaton(omega3, container, trace1, FencepostPosition(('at', 0)), frozenset(), bool_results, finite_results, omega_results) == True
+    assert evaluate_omega_automaton(omega3, container, trace1_top, FencepostPosition(('at', 0)), frozenset(), bool_results, finite_results, omega_results) == True
+    assert evaluate_omega_automaton(omega3, container, trace1_bot, FencepostPosition(('at', 0)), frozenset(), bool_results, finite_results, omega_results) == True
 
-    assert evaluate_omega_automaton(omega4, container, trace1) == False
-    assert evaluate_omega_automaton(omega5, container, trace1) == True
-    assert evaluate_omega_automaton(omega6, container, trace1) == False
-    assert evaluate_omega_automaton(omega7, container, trace1) == True
+    assert evaluate_omega_automaton(omega4, container, trace1, FencepostPosition(('at', 0)), frozenset(), bool_results, finite_results, omega_results) == False
+    assert evaluate_omega_automaton(omega5, container, trace1, FencepostPosition(('at', 0)), frozenset(), bool_results, finite_results, omega_results) == True
+    assert evaluate_omega_automaton(omega6, container, trace1, FencepostPosition(('at', 0)), frozenset(), bool_results, finite_results, omega_results) == False
+    assert evaluate_omega_automaton(omega7, container, trace1, FencepostPosition(('at', 0)), frozenset(), bool_results, finite_results, omega_results) == True
 
-    assert evaluate_omega_automaton(omega8, container, trace1) == False
-    assert evaluate_omega_automaton(omega8, container, trace1_top) == False
-    assert evaluate_omega_automaton(omega8, container, trace1_bot) == False
+    assert evaluate_omega_automaton(omega8, container, trace1, FencepostPosition(('at', 0)), frozenset(), bool_results, finite_results, omega_results) == False
+    assert evaluate_omega_automaton(omega8, container, trace1_top, FencepostPosition(('at', 0)), frozenset(), bool_results, finite_results, omega_results) == False
+    assert evaluate_omega_automaton(omega8, container, trace1_bot, FencepostPosition(('at', 0)), frozenset(), bool_results, finite_results, omega_results) == False
 
-    assert evaluate_omega_automaton(omega9, container, trace2) == False
-    assert evaluate_omega_automaton(omega9, container, trace2_top) == True
-    assert evaluate_omega_automaton(omega9, container, trace2_bot) == False
+    assert evaluate_omega_automaton(omega9, container, trace2, FencepostPosition(('at', 0)), frozenset(), bool_results, finite_results, omega_results) == False
+    assert evaluate_omega_automaton(omega9, container, trace2_top, FencepostPosition(('at', 0)), frozenset(), bool_results, finite_results, omega_results) == True
+    assert evaluate_omega_automaton(omega9, container, trace2_bot, FencepostPosition(('at', 0)), frozenset(), bool_results, finite_results, omega_results) == False
 
-    assert evaluate_omega_automaton(omega10, container, trace2) == True
-    assert evaluate_omega_automaton(omega10, container, trace2_top) == True
-    assert evaluate_omega_automaton(omega10, container, trace2_bot) == False
+    assert evaluate_omega_automaton(omega10, container, trace2, FencepostPosition(('at', 0)), frozenset(), bool_results, finite_results, omega_results) == True
+    assert evaluate_omega_automaton(omega10, container, trace2_top, FencepostPosition(('at', 0)), frozenset(), bool_results, finite_results, omega_results) == True
+    assert evaluate_omega_automaton(omega10, container, trace2_bot, FencepostPosition(('at', 0)), frozenset(), bool_results, finite_results, omega_results) == False
 
-    assert evaluate_omega_automaton(omega11, container, trace2) == True
-    assert evaluate_omega_automaton(omega11, container, trace2_top) == True
-    assert evaluate_omega_automaton(omega11, container, trace2_bot) == False
+    assert evaluate_omega_automaton(omega11, container, trace2, FencepostPosition(('at', 0)), frozenset(), bool_results, finite_results, omega_results) == True
+    assert evaluate_omega_automaton(omega11, container, trace2_top, FencepostPosition(('at', 0)), frozenset(), bool_results, finite_results, omega_results) == True
+    assert evaluate_omega_automaton(omega11, container, trace2_bot, FencepostPosition(('at', 0)), frozenset(), bool_results, finite_results, omega_results) == False
 
 
 def test_automaton_omega_finite_part_alternation():
@@ -927,16 +948,20 @@ def test_automaton_omega_finite_part_alternation():
     both3: NodeId = container.get_node_id_by_name('both3')
     both4: NodeId = container.get_node_id_by_name('both4')
 
-    assert evaluate_omega_automaton(or1, container, trace1) == True
-    assert evaluate_omega_automaton(or2, container, trace1) == True
+    bool_results: BoolMemoDict = {}
+    finite_results: FiniteMemoDict = {}
+    omega_results: OmegaMemoDict = {}
 
-    assert evaluate_omega_automaton(and1, container, trace1) == False
-    assert evaluate_omega_automaton(and2, container, trace1) == False
+    assert evaluate_omega_automaton(or1, container, trace1, FencepostPosition(('at', 0)), frozenset(), bool_results, finite_results, omega_results) == True
+    assert evaluate_omega_automaton(or2, container, trace1, FencepostPosition(('at', 0)), frozenset(), bool_results, finite_results, omega_results) == True
 
-    assert evaluate_omega_automaton(both1, container, trace1) == True
-    assert evaluate_omega_automaton(both2, container, trace1) == False
-    assert evaluate_omega_automaton(both3, container, trace1) == True
-    assert evaluate_omega_automaton(both4, container, trace1) == False
+    assert evaluate_omega_automaton(and1, container, trace1, FencepostPosition(('at', 0)), frozenset(), bool_results, finite_results, omega_results) == False
+    assert evaluate_omega_automaton(and2, container, trace1, FencepostPosition(('at', 0)), frozenset(), bool_results, finite_results, omega_results) == False
+
+    assert evaluate_omega_automaton(both1, container, trace1, FencepostPosition(('at', 0)), frozenset(), bool_results, finite_results, omega_results) == True
+    assert evaluate_omega_automaton(both2, container, trace1, FencepostPosition(('at', 0)), frozenset(), bool_results, finite_results, omega_results) == False
+    assert evaluate_omega_automaton(both3, container, trace1, FencepostPosition(('at', 0)), frozenset(), bool_results, finite_results, omega_results) == True
+    assert evaluate_omega_automaton(both4, container, trace1, FencepostPosition(('at', 0)), frozenset(), bool_results, finite_results, omega_results) == False
 
 
 def test_automaton_omega_infinite_suffix_cycle():
@@ -990,18 +1015,22 @@ def test_automaton_omega_infinite_suffix_cycle():
     or1: NodeId = container.get_node_id_by_name('or1')
     and1: NodeId = container.get_node_id_by_name('and1')
 
-    assert evaluate_omega_automaton(omega1, container, trace1) == False
-    assert evaluate_omega_automaton(omega1, container, trace2) == True
-    assert evaluate_omega_automaton(omega1, container, trace2_bot) == False
+    bool_results: BoolMemoDict = {}
+    finite_results: FiniteMemoDict = {}
+    omega_results: OmegaMemoDict = {}
 
-    assert evaluate_omega_automaton(omega2, container, trace1) == False
-    assert evaluate_omega_automaton(omega2, container, trace2) == False
-    assert evaluate_omega_automaton(omega2, container, trace2_bot) == False
-    assert evaluate_omega_automaton(omega2, container, trace2_top) == False
+    assert evaluate_omega_automaton(omega1, container, trace1, FencepostPosition(('at', 0)), frozenset(), bool_results, finite_results, omega_results) == False
+    assert evaluate_omega_automaton(omega1, container, trace2, FencepostPosition(('at', 0)), frozenset(), bool_results, finite_results, omega_results) == True
+    assert evaluate_omega_automaton(omega1, container, trace2_bot, FencepostPosition(('at', 0)), frozenset(), bool_results, finite_results, omega_results) == False
 
-    assert evaluate_omega_automaton(or1, container, trace1) == False
-    assert evaluate_omega_automaton(or1, container, trace2) == True
-    assert evaluate_omega_automaton(and1, container, trace2) == False
+    assert evaluate_omega_automaton(omega2, container, trace1, FencepostPosition(('at', 0)), frozenset(), bool_results, finite_results, omega_results) == False
+    assert evaluate_omega_automaton(omega2, container, trace2, FencepostPosition(('at', 0)), frozenset(), bool_results, finite_results, omega_results) == False
+    assert evaluate_omega_automaton(omega2, container, trace2_bot, FencepostPosition(('at', 0)), frozenset(), bool_results, finite_results, omega_results) == False
+    assert evaluate_omega_automaton(omega2, container, trace2_top, FencepostPosition(('at', 0)), frozenset(), bool_results, finite_results, omega_results) == False
+
+    assert evaluate_omega_automaton(or1, container, trace1, FencepostPosition(('at', 0)), frozenset(), bool_results, finite_results, omega_results) == False
+    assert evaluate_omega_automaton(or1, container, trace2, FencepostPosition(('at', 0)), frozenset(), bool_results, finite_results, omega_results) == True
+    assert evaluate_omega_automaton(and1, container, trace2, FencepostPosition(('at', 0)), frozenset(), bool_results, finite_results, omega_results) == False
 
 
 def test_automaton_omega_cycle_and_or():
@@ -1130,35 +1159,39 @@ def test_automaton_omega_cycle_and_or():
     a_until_b_read_2: NodeId = container.get_node_id_by_name('a_until_b_read_2')
     b_until_always_a: NodeId = container.get_node_id_by_name('b_until_always_a')
 
-    assert evaluate_omega_automaton(a_until_b, container, trace1) == True
-    assert evaluate_omega_automaton(a_until_b, container, trace1_bot) == True
-    assert evaluate_omega_automaton(a_until_b, container, trace2) == False
-    assert evaluate_omega_automaton(a_until_b, container, trace2_top) == False
-    assert evaluate_omega_automaton(a_until_b, container, trace3) == True
-    assert evaluate_omega_automaton(a_until_b, container, trace3_bot) == False
+    bool_results: BoolMemoDict = {}
+    finite_results: FiniteMemoDict = {}
+    omega_results: OmegaMemoDict = {}
 
-    assert evaluate_omega_automaton(a_strong_until_with_b, container, trace1) == False
-    assert evaluate_omega_automaton(a_strong_until_with_b, container, trace1_bot) == False
-    assert evaluate_omega_automaton(a_strong_until_with_b, container, trace2) == False
-    assert evaluate_omega_automaton(a_strong_until_with_b, container, trace2_top) == False
-    assert evaluate_omega_automaton(a_strong_until_with_b, container, trace3) == False
-    assert evaluate_omega_automaton(a_strong_until_with_b, container, trace3_top) == True
-    assert evaluate_omega_automaton(a_strong_until_with_b, container, trace3_bot) == False
-    assert evaluate_omega_automaton(a_strong_until_with_b, container, trace4) == True
+    assert evaluate_omega_automaton(a_until_b, container, trace1, FencepostPosition(('at', 0)), frozenset(), bool_results, finite_results, omega_results) == True
+    assert evaluate_omega_automaton(a_until_b, container, trace1_bot, FencepostPosition(('at', 0)), frozenset(), bool_results, finite_results, omega_results) == True
+    assert evaluate_omega_automaton(a_until_b, container, trace2, FencepostPosition(('at', 0)), frozenset(), bool_results, finite_results, omega_results) == False
+    assert evaluate_omega_automaton(a_until_b, container, trace2_top, FencepostPosition(('at', 0)), frozenset(), bool_results, finite_results, omega_results) == False
+    assert evaluate_omega_automaton(a_until_b, container, trace3, FencepostPosition(('at', 0)), frozenset(), bool_results, finite_results, omega_results) == True
+    assert evaluate_omega_automaton(a_until_b, container, trace3_bot, FencepostPosition(('at', 0)), frozenset(), bool_results, finite_results, omega_results) == False
 
-    assert evaluate_omega_automaton(a_until_b_read, container, trace1) == True
-    assert evaluate_omega_automaton(a_until_b_read, container, trace1_bot) == True
-    assert evaluate_omega_automaton(a_until_b_read, container, trace3) == False
+    assert evaluate_omega_automaton(a_strong_until_with_b, container, trace1, FencepostPosition(('at', 0)), frozenset(), bool_results, finite_results, omega_results) == False
+    assert evaluate_omega_automaton(a_strong_until_with_b, container, trace1_bot, FencepostPosition(('at', 0)), frozenset(), bool_results, finite_results, omega_results) == False
+    assert evaluate_omega_automaton(a_strong_until_with_b, container, trace2, FencepostPosition(('at', 0)), frozenset(), bool_results, finite_results, omega_results) == False
+    assert evaluate_omega_automaton(a_strong_until_with_b, container, trace2_top, FencepostPosition(('at', 0)), frozenset(), bool_results, finite_results, omega_results) == False
+    assert evaluate_omega_automaton(a_strong_until_with_b, container, trace3, FencepostPosition(('at', 0)), frozenset(), bool_results, finite_results, omega_results) == False
+    assert evaluate_omega_automaton(a_strong_until_with_b, container, trace3_top, FencepostPosition(('at', 0)), frozenset(), bool_results, finite_results, omega_results) == True
+    assert evaluate_omega_automaton(a_strong_until_with_b, container, trace3_bot, FencepostPosition(('at', 0)), frozenset(), bool_results, finite_results, omega_results) == False
+    assert evaluate_omega_automaton(a_strong_until_with_b, container, trace4, FencepostPosition(('at', 0)), frozenset(), bool_results, finite_results, omega_results) == True
 
-    assert evaluate_omega_automaton(a_until_b_read_2, container, trace1) == True
-    assert evaluate_omega_automaton(a_until_b_read_2, container, trace1_bot) == True
-    assert evaluate_omega_automaton(a_until_b_read_2, container, trace3) == False
+    assert evaluate_omega_automaton(a_until_b_read, container, trace1, FencepostPosition(('at', 0)), frozenset(), bool_results, finite_results, omega_results) == True
+    assert evaluate_omega_automaton(a_until_b_read, container, trace1_bot, FencepostPosition(('at', 0)), frozenset(), bool_results, finite_results, omega_results) == True
+    assert evaluate_omega_automaton(a_until_b_read, container, trace3, FencepostPosition(('at', 0)), frozenset(), bool_results, finite_results, omega_results) == False
 
-    assert evaluate_omega_automaton(b_until_always_a, container, trace1) == False
-    assert evaluate_omega_automaton(b_until_always_a, container, trace3) == True
-    assert evaluate_omega_automaton(b_until_always_a, container, trace3_top) == True
-    assert evaluate_omega_automaton(b_until_always_a, container, trace3_bot) == False
-    assert evaluate_omega_automaton(b_until_always_a, container, trace5) == False
+    assert evaluate_omega_automaton(a_until_b_read_2, container, trace1, FencepostPosition(('at', 0)), frozenset(), bool_results, finite_results, omega_results) == True
+    assert evaluate_omega_automaton(a_until_b_read_2, container, trace1_bot, FencepostPosition(('at', 0)), frozenset(), bool_results, finite_results, omega_results) == True
+    assert evaluate_omega_automaton(a_until_b_read_2, container, trace3, FencepostPosition(('at', 0)), frozenset(), bool_results, finite_results, omega_results) == False
+
+    assert evaluate_omega_automaton(b_until_always_a, container, trace1, FencepostPosition(('at', 0)), frozenset(), bool_results, finite_results, omega_results) == False
+    assert evaluate_omega_automaton(b_until_always_a, container, trace3, FencepostPosition(('at', 0)), frozenset(), bool_results, finite_results, omega_results) == True
+    assert evaluate_omega_automaton(b_until_always_a, container, trace3_top, FencepostPosition(('at', 0)), frozenset(), bool_results, finite_results, omega_results) == True
+    assert evaluate_omega_automaton(b_until_always_a, container, trace3_bot, FencepostPosition(('at', 0)), frozenset(), bool_results, finite_results, omega_results) == False
+    assert evaluate_omega_automaton(b_until_always_a, container, trace5, FencepostPosition(('at', 0)), frozenset(), bool_results, finite_results, omega_results) == False
 
 
 
@@ -1247,18 +1280,22 @@ def test_automaton_omega_conflicting_obligations():
     start6: NodeId = container.get_node_id_by_name('start6')
     start7: NodeId = container.get_node_id_by_name('start7')
 
-    container.bypass_placeholders()
+    #container.bypass_placeholders()
 
     #output_directory: Path = Path('./output')
     #container.show_graph(output_directory / 'omega_conflicting.png')
 
-    assert evaluate_omega_automaton(start1, container, trace1) == False
-    assert evaluate_omega_automaton(start2, container, trace1) == True
-    assert evaluate_omega_automaton(start3, container, trace1) == False
-    assert evaluate_omega_automaton(start4, container, trace1) == False
-    assert evaluate_omega_automaton(start5, container, trace1) == False
-    assert evaluate_omega_automaton(start6, container, trace1) == True
-    assert evaluate_omega_automaton(start7, container, trace1) == True
+    bool_results: BoolMemoDict = {}
+    finite_results: FiniteMemoDict = {}
+    omega_results: OmegaMemoDict = {}
+
+    assert evaluate_omega_automaton(start1, container, trace1, FencepostPosition(('at', 0)), frozenset(), bool_results, finite_results, omega_results) == False
+    assert evaluate_omega_automaton(start2, container, trace1, FencepostPosition(('at', 0)), frozenset(), bool_results, finite_results, omega_results) == True
+    assert evaluate_omega_automaton(start3, container, trace1, FencepostPosition(('at', 0)), frozenset(), bool_results, finite_results, omega_results) == False
+    assert evaluate_omega_automaton(start4, container, trace1, FencepostPosition(('at', 0)), frozenset(), bool_results, finite_results, omega_results) == False
+    assert evaluate_omega_automaton(start5, container, trace1, FencepostPosition(('at', 0)), frozenset(), bool_results, finite_results, omega_results) == False
+    assert evaluate_omega_automaton(start6, container, trace1, FencepostPosition(('at', 0)), frozenset(), bool_results, finite_results, omega_results) == True
+    assert evaluate_omega_automaton(start7, container, trace1, FencepostPosition(('at', 0)), frozenset(), bool_results, finite_results, omega_results) == True
 
 
 
@@ -1380,34 +1417,38 @@ def test_automaton_omega_accept_reject_on():
     omega_reject_cycle: NodeId = container.get_node_id_by_name('omega_reject_cycle')
     omega_disjunction: NodeId = container.get_node_id_by_name('omega_disjunction')
 
-    assert evaluate_omega_automaton(omega_acc, container, trace1) == True
-    assert evaluate_omega_automaton(omega_acc, container, trace2) == True
-    assert evaluate_omega_automaton(omega_acc, container, trace3) == True
-    assert evaluate_omega_automaton(omega_acc, container, trace4) == False
-    assert evaluate_omega_automaton(omega_acc, container, trace5) == True
+    bool_results: BoolMemoDict = {}
+    finite_results: FiniteMemoDict = {}
+    omega_results: OmegaMemoDict = {}
 
-    assert evaluate_omega_automaton(omega_rej, container, trace1) == True
-    assert evaluate_omega_automaton(omega_rej, container, trace2) == False
-    assert evaluate_omega_automaton(omega_rej, container, trace3) == False
-    assert evaluate_omega_automaton(omega_rej, container, trace4) == False
-    assert evaluate_omega_automaton(omega_rej, container, trace5) == True
+    assert evaluate_omega_automaton(omega_acc, container, trace1, FencepostPosition(('at', 0)), frozenset(), bool_results, finite_results, omega_results) == True
+    assert evaluate_omega_automaton(omega_acc, container, trace2, FencepostPosition(('at', 0)), frozenset(), bool_results, finite_results, omega_results) == True
+    assert evaluate_omega_automaton(omega_acc, container, trace3, FencepostPosition(('at', 0)), frozenset(), bool_results, finite_results, omega_results) == True
+    assert evaluate_omega_automaton(omega_acc, container, trace4, FencepostPosition(('at', 0)), frozenset(), bool_results, finite_results, omega_results) == False
+    assert evaluate_omega_automaton(omega_acc, container, trace5, FencepostPosition(('at', 0)), frozenset(), bool_results, finite_results, omega_results) == True
 
-    assert evaluate_omega_automaton(omega_acc_rec_acc, container, trace3) == True
-    assert evaluate_omega_automaton(omega_acc_rec_no_acc, container, trace3) == False
+    assert evaluate_omega_automaton(omega_rej, container, trace1, FencepostPosition(('at', 0)), frozenset(), bool_results, finite_results, omega_results) == True
+    assert evaluate_omega_automaton(omega_rej, container, trace2, FencepostPosition(('at', 0)), frozenset(), bool_results, finite_results, omega_results) == False
+    assert evaluate_omega_automaton(omega_rej, container, trace3, FencepostPosition(('at', 0)), frozenset(), bool_results, finite_results, omega_results) == False
+    assert evaluate_omega_automaton(omega_rej, container, trace4, FencepostPosition(('at', 0)), frozenset(), bool_results, finite_results, omega_results) == False
+    assert evaluate_omega_automaton(omega_rej, container, trace5, FencepostPosition(('at', 0)), frozenset(), bool_results, finite_results, omega_results) == True
 
-    assert evaluate_omega_automaton(omega_rej_rec_acc, container, trace6) == False
-    assert evaluate_omega_automaton(omega_rej_rec_no_acc, container, trace6) == False
+    assert evaluate_omega_automaton(omega_acc_rec_acc, container, trace3, FencepostPosition(('at', 0)), frozenset(), bool_results, finite_results, omega_results) == True
+    assert evaluate_omega_automaton(omega_acc_rec_no_acc, container, trace3, FencepostPosition(('at', 0)), frozenset(), bool_results, finite_results, omega_results) == False
 
-    assert evaluate_omega_automaton(omega_acc_until, container, trace3) == True
-    assert evaluate_omega_automaton(omega_rej_until, container, trace6) == False
+    assert evaluate_omega_automaton(omega_rej_rec_acc, container, trace6, FencepostPosition(('at', 0)), frozenset(), bool_results, finite_results, omega_results) == False
+    assert evaluate_omega_automaton(omega_rej_rec_no_acc, container, trace6, FencepostPosition(('at', 0)), frozenset(), bool_results, finite_results, omega_results) == False
 
-    assert evaluate_omega_automaton(omega_acc_until_nested, container, trace3) == True
-    assert evaluate_omega_automaton(omega_rej_until_nested, container, trace6) == False
+    assert evaluate_omega_automaton(omega_acc_until, container, trace3, FencepostPosition(('at', 0)), frozenset(), bool_results, finite_results, omega_results) == True
+    assert evaluate_omega_automaton(omega_rej_until, container, trace6, FencepostPosition(('at', 0)), frozenset(), bool_results, finite_results, omega_results) == False
 
-    assert evaluate_omega_automaton(omega_accept_cycle, container, trace3) == True
-    assert evaluate_omega_automaton(omega_reject_cycle, container, trace6) == False
-    assert evaluate_omega_automaton(omega_disjunction, container, trace3) == True
-    assert evaluate_omega_automaton(omega_disjunction, container, trace6) == True
+    assert evaluate_omega_automaton(omega_acc_until_nested, container, trace3, FencepostPosition(('at', 0)), frozenset(), bool_results, finite_results, omega_results) == True
+    assert evaluate_omega_automaton(omega_rej_until_nested, container, trace6, FencepostPosition(('at', 0)), frozenset(), bool_results, finite_results, omega_results) == False
+
+    assert evaluate_omega_automaton(omega_accept_cycle, container, trace3, FencepostPosition(('at', 0)), frozenset(), bool_results, finite_results, omega_results) == True
+    assert evaluate_omega_automaton(omega_reject_cycle, container, trace6, FencepostPosition(('at', 0)), frozenset(), bool_results, finite_results, omega_results) == False
+    assert evaluate_omega_automaton(omega_disjunction, container, trace3, FencepostPosition(('at', 0)), frozenset(), bool_results, finite_results, omega_results) == True
+    assert evaluate_omega_automaton(omega_disjunction, container, trace6, FencepostPosition(('at', 0)), frozenset(), bool_results, finite_results, omega_results) == True
 
 
 
@@ -1427,8 +1468,11 @@ def test_automaton_aut_random_no_error(doc_and_trace):
 
     root_node_id: NodeId = container.get_sink_nodes()[0]
 
+    bool_results: BoolMemoDict = {}
+    finite_results: FiniteMemoDict = {}
+
     result: list[FencepostPosition] = evaluate_finite_automaton(root_node_id,
-        container, trace, FencepostPosition(('at', 0)))
+        container, trace, FencepostPosition(('at', 0)), bool_results, finite_results)
 
     logger.debug('doc: %s', doc)
     logger.debug('trace: %s', trace)
@@ -1451,7 +1495,12 @@ def test_automaton_omega_random_no_error(doc_and_trace):
 
     root_node_id: NodeId = container.get_sink_nodes()[0]
 
-    result: MaybeBool = evaluate_omega_automaton(root_node_id, container, trace)
+    bool_results: BoolMemoDict = {}
+    finite_results: FiniteMemoDict = {}
+    omega_results: OmegaMemoDict = {}
+
+    result: MaybeBool = evaluate_omega_automaton(root_node_id, container, trace,
+        FencepostPosition(('at', 0)), frozenset(), bool_results, finite_results, omega_results)
 
     logger.debug('doc: %s', doc)
     logger.debug('trace: %s', trace)
