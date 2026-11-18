@@ -272,7 +272,7 @@ def evaluate_finite_automaton_primitive(node_id: NodeId[FiniteAutomaton],
         subcall_init: NodeId = node.child1
         successor_init: NodeId = container.merged_nodes.find(node.child2)
         subcall_matches: list[FencepostPosition] = evaluate_finite_automaton(
-            subcall_init, container, trace, pos, bool_results, finite_results)
+            subcall_init, container, trace, pos, bool_results, finite_results).copy()
 
         logger.debug('-- subcall_matches: %s', subcall_matches)
 
@@ -471,7 +471,7 @@ def evaluate_finite_automaton(node_id: NodeId[FiniteAutomaton],
     if (node_repr, trace, pos, False) in finite_results:
         memo_result = finite_results[node_repr, trace, pos, False]
         assert isinstance(memo_result, list)
-        logger.debug('Found result in finite_results: %s', memo_result)
+        logger.debug('Found result for %s in finite_results: %s', node_repr, memo_result)
         return memo_result
 
     acc_pos: list[FencepostPosition] = []
@@ -504,10 +504,9 @@ def evaluate_finite_automaton(node_id: NodeId[FiniteAutomaton],
 
     logger.debug('---- RETURN of evaluation %s on trace %s at pos %s', node, trace, pos)
     logger.debug('acc_pos: %s', acc_pos)
-    logger.debug('Set finite_results to %s', acc_pos)
-    finite_results[node_repr, trace, pos, False] = acc_pos
+    logger.debug('Set finite_results of %s to %s', node_repr, acc_pos)
+    finite_results[node_repr, trace, pos, False] = acc_pos.copy()
     return acc_pos
-
 
 
 

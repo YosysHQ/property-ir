@@ -67,6 +67,8 @@ def test_automaton_aut_consume():
             )
         ))
 
+        (declare aut13 (aut-read a (aut-true) (aut-false) ))
+
 
     )"""
 
@@ -87,6 +89,8 @@ def test_automaton_aut_consume():
 
     aut11: NodeId = container.get_node_id_by_name('aut11')
     aut12: NodeId = container.get_node_id_by_name('aut12')
+
+    aut13: NodeId = container.get_node_id_by_name('aut13')
 
     trace1 = Trace(finite_part=(
         frozenset({'a'}),
@@ -194,6 +198,9 @@ def test_automaton_aut_consume():
         FencepostPosition(('at', 1))]
     assert evaluate_finite_automaton(aut12, container, trace2, FencepostPosition(('at', 0)), bool_results, finite_results) == [
         FencepostPosition(('at', 1)), FencepostPosition(('at', 2)), FencepostPosition(('at', 3)), FencepostPosition(('at', 4))]
+
+    assert evaluate_finite_automaton(aut13, container, trace1, FencepostPosition(('at', 0)), bool_results, finite_results) == [
+        FencepostPosition(('at', 0)), FencepostPosition(('at', 1)), FencepostPosition(('at', 2)), FencepostPosition(('at', 3))]
 
 
 def test_automaton_simplify_conf():
@@ -525,6 +532,8 @@ def test_automaton_aut_subcall():
         output_directory: Path = Path('./output')
         container.show_graph(output_directory / 'aut_or.png')
 
+    subcall_aut3: NodeId = container.get_node_id_by_name('subcall_aut3')
+
     aut_first1: NodeId = container.get_node_id_by_name('aut_first1')
     aut_first2: NodeId = container.get_node_id_by_name('aut_first2')
     aut_first3: NodeId = container.get_node_id_by_name('aut_first3')
@@ -609,6 +618,9 @@ def test_automaton_aut_subcall():
 
     bool_results: BoolMemoDict = {}
     finite_results: FiniteMemoDict = {}
+
+    assert evaluate_finite_automaton(subcall_aut3, container, trace1, FencepostPosition(('at', 0)), bool_results, finite_results) == [
+        FencepostPosition(('at', 0)), FencepostPosition(('at', 1)), FencepostPosition(('at', 2)), FencepostPosition(('at', 3)), FencepostPosition(('at', 4))]
 
     assert evaluate_finite_automaton(aut_first1, container, trace1, FencepostPosition(('at', 0)), bool_results, finite_results) == [FencepostPosition(('at', 1))]
     assert evaluate_finite_automaton(aut_first2, container, trace1, FencepostPosition(('at', 0)), bool_results, finite_results) == [FencepostPosition(('at', 2))]
