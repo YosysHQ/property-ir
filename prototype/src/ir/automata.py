@@ -1,5 +1,14 @@
+from collections import deque
+from enum import Enum
 from logging import getLogger
 from typing import Literal
+
+from tests.evaluate import BoolMemoDict, FencepostPosition, MaybeBool, Trace
+from tests.evaluate_automaton import (
+    FiniteMemoDict,
+    OmegaMemoDict,
+    evaluate_omega_automaton,
+)
 
 from .base import IrContainer, PlaceholderNode, PropertyIrNode, RawSExpr, RawSExprList
 from .primitives.automata_primitives import *
@@ -537,3 +546,107 @@ def unroll_aut_repeat_primitives(container: IrContainer):
     }
 
     apply_rules(container, rules)
+
+
+
+
+#----------------------+
+# COMPUTE OUTPUT BITS  |
+#----------------------+
+
+
+class EvaluationResult(Enum):
+    # fails: not weak satisfaction
+    FAILS = 'fails'
+    # pending: weak satisfaction & not neutral satisfaction
+    PENDING = 'pending'
+    # holds: neutral satisfaction & not strong satisfaction
+    HOLDS = 'holds'
+    # holds strongly: strong satisfaction
+    HOLDS_STRONGLY = 'holds_strongly'
+
+
+def compute_output_bits_omega(container: IrContainer):
+    """For each omega-state of the automaton, compute whether the property
+    holds, holds strongly, fails, or is pending, if the input trace ends in that
+    state. The input must be an ABA, but omega-accept-on and omega-reject-on
+    primitives are allowed.
+    For this, use semantic evaluation to compute the results with different
+    suffixes."""
+
+    # weak satisfaction: suffix top_omega
+    trace_weak: Trace = Trace((),  'top_omega')
+    # neutral satisfaction: suffix end
+    trace_neutral: Trace = Trace((),  'end')
+    # strong satisfaction: suffix bot_omega
+    trace_strong: Trace = Trace((),  'bot_omega')
+
+    evaluation_results: dict[NodeId, EvaluationResult] = {}
+
+    # TODO question: what about finite automata output bits?
+    # there should be an output bit that is high in every step where the
+    # sequence matches (aut-acc in this step?)
+    # if the automaton is an omega-automaton, there are no fin-states left
+    # only if the automaton as a whole as a finite auotmaton
+    # the accepting states must be marked
+
+    bool_results: BoolMemoDict = {}
+    finite_results: FiniteMemoDict = {}
+    omega_results: OmegaMemoDict = {}
+
+    nodes_to_process: deque[NodeId] = deque(container.get_sink_nodes())
+    explored_nodes: set[NodeId] = set()
+
+    # perform DFS through the automaton
+    while len(nodes_to_process) > 0:
+
+        current_id: NodeId = nodes_to_process.popleft()
+        current_repr: NodeId = container.merged_nodes.find(current_id)
+
+        if current_repr in evaluation_results:
+            continue
+
+        for child_id in container[current_id].get_child_ids():
+            child_repr: NodeId = container.merged_nodes.find(child_id)
+            if child_repr not in explored_nodes and isinstance(container[child_repr], OmegaAutomaton):
+                nodes_to_process.appendleft(child_repr)
+                explored_nodes.add(child_repr)
+
+        # compute evaluation results
+        weak_result: MaybeBool = evaluate_omega_automaton(
+            current_repr, container, trace_weak, FencepostPosition('within_infinite_suffix'),
+            frozenset(), bool_results, finite_results, omega_results)
+
+        if weak_result == False:
+            evaluation_results[current_repr] = EvaluationResult.FAILS
+        elif weak_result == True:
+
+            neutral_result: MaybeBool = evaluate_omega_automaton(
+                current_repr, container, trace_neutral, FencepostPosition('within_infinite_suffix'),
+                frozenset(), bool_results, finite_results, omega_results)
+
+            if neutral_result == False:
+                evaluation_results[current_repr] = EvaluationResult.PENDING
+            elif neutral_result == True:
+
+                strong_result: MaybeBool = evaluate_omega_automaton(
+                    current_repr, container, trace_strong, FencepostPosition('within_infinite_suffix'),
+                    frozenset(), bool_results, finite_results, omega_results)
+
+                if strong_result == False:
+                    evaluation_results[current_repr] = EvaluationResult.HOLDS
+                elif strong_result == True:
+                    evaluation_results[current_repr] = EvaluationResult.HOLDS_STRONGLY
+
+        if current_repr not in evaluation_results:
+            raise RuntimeError('Failed to compute output bits for node %s', container[current_id])
+
+    return evaluation_results
+
+
+
+def compute_output_bits_finite(container: IrContainer):
+    # TODO
+
+    match_results: dict[NodeId, bool] = {}
+    return match_results
