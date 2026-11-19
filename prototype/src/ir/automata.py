@@ -603,7 +603,7 @@ def compute_output_bits_omega(container: IrContainer):
         current_id: NodeId = nodes_to_process.popleft()
         current_repr: NodeId = container.merged_nodes.find(current_id)
 
-        if current_repr in evaluation_results:
+        if current_repr in evaluation_results or not isinstance(container[current_repr], OmegaAutomaton):
             continue
 
         for child_id in container[current_id].get_child_ids():

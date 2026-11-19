@@ -1,11 +1,16 @@
 from logging import getLogger
 
-from ir.automata import (
-    EvaluationResult,
-    compute_output_bits_omega,
-)
-from ir.base import IrContainer, NodeId
+from hypothesis import Verbosity, given, settings
+from ir.automata import EvaluationResult, compute_output_bits_omega
+from ir.base import Bool, FiniteAutomaton, IrContainer, NodeId, OmegaAutomaton
 from ir.parsing import parse_document, parse_raw_sexpr
+from ir.primitives.automata_primitives import (
+    OmegaCallAll,
+    OmegaCallExStrong,
+    OmegaCallExWeak,
+)
+
+from tests.strategies import random_ir
 
 logger = getLogger(__name__)
 
@@ -282,7 +287,6 @@ def test_output_bits_omega_cycle_and_or():
                     omega_b_read
                     (omega-weak-consume-acc (true) b_until_always_a (omega-false))))))
 
-
         (parse-sexpr a_until_b)
         (parse-sexpr a_strong_until_with_b)
         (parse-sexpr a_until_b_read)
@@ -307,3 +311,138 @@ def test_output_bits_omega_cycle_and_or():
     assert evaluation_results[a_until_b_read] == EvaluationResult.HOLDS
     assert evaluation_results[a_until_b_read_2] == EvaluationResult.HOLDS
     assert evaluation_results[b_until_always_a] == EvaluationResult.HOLDS
+
+
+
+def test_output_bits_omega_conflicting_obligations():
+
+    doc_str: str = """(document
+        (declare-input a)
+        (declare-input b)
+        (declare-input c)
+        (declare-input d)
+
+        (declare-rec
+            (declare start1 (omega-or and1 and2))
+            (and1 (omega-and path1 path2))
+            (and2 (omega-and path3 path4))
+            (path1 (omega-weak-consume a start1 (omega-false)))
+            (path2 (omega-weak-consume-acc b start1 (omega-false)))
+            (path3 (omega-weak-consume c start1 (omega-false)))
+            (path4 (omega-weak-consume-acc d start1 (omega-false)))
+        )
+
+        (declare-rec
+            (declare start6 (omega-or and1 and2))
+            (and1 (omega-and path1 path2))
+            (and2 (omega-and path3 path4))
+            (path1 (omega-weak-consume-acc a branch1 (omega-false)))
+            (path2 (omega-weak-consume-acc b branch2 (omega-false)))
+            (path3 (omega-weak-consume c branch1 (omega-false)))
+            (path4 (omega-weak-consume-acc d branch2 (omega-false)))
+            (branch1 (omega-weak-consume a start6 (omega-false)))
+            (branch2 (omega-weak-consume b start6 (omega-false)))
+        )
+
+        (parse-sexpr start1)
+        (parse-sexpr start6)
+
+    )"""
+
+    container: IrContainer = IrContainer()
+    parse_document(parse_raw_sexpr(doc_str), container)
+
+    start1: NodeId = container.get_node_id_by_name('start1')
+    start6: NodeId = container.get_node_id_by_name('start6')
+
+    evaluation_results: dict[NodeId, EvaluationResult] = compute_output_bits_omega(container)
+
+    assert evaluation_results[start1] == EvaluationResult.FAILS
+    assert evaluation_results[start6] == EvaluationResult.HOLDS
+
+
+
+def test_output_bits_omega_accept_reject_on():
+
+    doc_str: str = """(document
+
+        (declare-input a)
+        (declare-input b)
+        (declare-input c)
+
+        (declare omega_a (omega-weak-consume a (omega-true) (omega-false)))
+        (declare omega_b (omega-weak-consume b (omega-true) (omega-false)))
+
+        (declare-rec
+            (declare a_until_b (omega-or omega_b
+                (omega-and
+                    omega_a
+                    (omega-weak-consume-acc (true) a_until_b (omega-false))))))
+
+        (declare omega_acc_until (omega-accept-on c a_until_b))
+        (declare omega_rej_until (omega-reject-on c a_until_b))
+
+        (declare omega_acc_until_nested (omega-accept-on c (omega-reject-on c a_until_b)))
+        (declare omega_rej_until_nested (omega-reject-on c (omega-accept-on c a_until_b)))
+
+        (declare-rec (declare omega_accept_cycle
+            (omega-accept-on c
+                (omega-strong-consume-acc a
+                    omega_accept_cycle
+                    (omega-false)
+                )
+            )
+        ))
+
+        (declare-rec (declare omega_reject_cycle
+            (omega-reject-on c
+                (omega-strong-consume-acc a
+                    omega_reject_cycle
+                    (omega-false)
+                )
+            )
+        ))
+
+        (parse-sexpr omega_acc_until)
+        (parse-sexpr omega_rej_until)
+        (parse-sexpr omega_acc_until_nested)
+        (parse-sexpr omega_rej_until_nested)
+        (parse-sexpr omega_accept_cycle)
+        (parse-sexpr omega_reject_cycle)
+
+    )"""
+
+    container: IrContainer = IrContainer()
+    parse_document(parse_raw_sexpr(doc_str), container)
+
+    omega_acc_until: NodeId = container.get_node_id_by_name('omega_acc_until')
+    omega_rej_until: NodeId = container.get_node_id_by_name('omega_rej_until')
+    omega_acc_until_nested: NodeId = container.get_node_id_by_name('omega_acc_until_nested')
+    omega_rej_until_nested: NodeId = container.get_node_id_by_name('omega_rej_until_nested')
+    omega_accept_cycle: NodeId = container.get_node_id_by_name('omega_accept_cycle')
+    omega_reject_cycle: NodeId = container.get_node_id_by_name('omega_reject_cycle')
+
+    evaluation_results: dict[NodeId, EvaluationResult] = compute_output_bits_omega(container)
+
+    assert evaluation_results[omega_acc_until] == EvaluationResult.HOLDS
+    assert evaluation_results[omega_rej_until] == EvaluationResult.HOLDS
+    assert evaluation_results[omega_acc_until_nested] == EvaluationResult.HOLDS
+    assert evaluation_results[omega_rej_until_nested] == EvaluationResult.HOLDS
+    assert evaluation_results[omega_accept_cycle] == EvaluationResult.PENDING
+    assert evaluation_results[omega_reject_cycle] == EvaluationResult.PENDING
+
+
+@settings(verbosity=Verbosity.verbose, max_examples=100, deadline=500)
+@given(random_ir(
+    final_node_type=OmegaAutomaton,
+    primitive_filter=lambda node_type:
+        issubclass(node_type, (OmegaAutomaton, FiniteAutomaton, Bool)) and
+        not issubclass(node_type, (OmegaCallAll, OmegaCallExStrong, OmegaCallExWeak))))
+def test_output_bits_omega_random_no_error(doc):
+
+    container: IrContainer = IrContainer()
+    parse_document(parse_raw_sexpr(doc), container)
+    root_node_id: NodeId = container.get_sink_nodes()[0]
+    root_node_repr: NodeId = container.merged_nodes.find(root_node_id)
+    evaluation_results: dict[NodeId, EvaluationResult] = compute_output_bits_omega(container)
+    assert root_node_repr in evaluation_results
