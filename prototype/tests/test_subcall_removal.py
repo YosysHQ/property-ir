@@ -44,8 +44,13 @@ from ir.primitives.simple_primitives import (
     SeqOr,
     SeqRepeat,
 )
-
-from tests.evaluate import (
+from ir.semantic_evaluation.evaluate_automaton import (
+    FiniteMemoDict,
+    OmegaMemoDict,
+    evaluate_finite_automaton,
+    evaluate_omega_automaton,
+)
+from ir.semantic_evaluation.evaluate_simple import (
     BoolMemoDict,
     FencepostPosition,
     MaybeBool,
@@ -55,12 +60,7 @@ from tests.evaluate import (
     evaluate_property,
     sequence_matches,
 )
-from tests.evaluate_automaton import (
-    FiniteMemoDict,
-    OmegaMemoDict,
-    evaluate_finite_automaton,
-    evaluate_omega_automaton,
-)
+
 from tests.strategies import random_ir_with_trace_simple
 
 logger = getLogger(__name__)

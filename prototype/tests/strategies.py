@@ -1,7 +1,7 @@
-import logging
-import string
 from collections import defaultdict
 from collections.abc import Callable
+from logging import DEBUG, basicConfig, getLogger
+from string import ascii_letters, digits
 from typing import Any, Literal, get_args, get_origin
 
 from hypothesis import strategies as st
@@ -25,11 +25,11 @@ from ir.base import (
 )
 from ir.parsing import parse_document, parse_raw_sexpr
 from ir.primitives.clocked_primitives import ClkPropOmega, ClkSeqAut
+from ir.semantic_evaluation.evaluate_simple import Trace
 
-from tests.evaluate import Trace
 from tests.helpers import wrap_signals_and_expr_in_document
 
-logger = logging.getLogger(__name__)
+logger = getLogger(__name__)
 
 
 # (primitive_name, primitive_type, signature, random_numbers_to_choose_argument)
@@ -307,7 +307,7 @@ def build_ir_from_random_data(strategy_drawn_data: tuple[list[IrGeneratingType],
 
 
 def identifier() -> st.SearchStrategy:
-    return st.text(alphabet=string.ascii_letters + string.digits + "_", min_size=1, max_size=3)
+    return st.text(alphabet=ascii_letters + digits + "_", min_size=1, max_size=3)
 
 identifier_list: st.SearchStrategy = st.lists(elements=identifier(), min_size=1, max_size=5, unique=True)
 
@@ -474,10 +474,9 @@ def parsable_document(draw) -> RawSExprList:
 
 def main():
 
-    logging.basicConfig(
-        level=logging.DEBUG,
+    basicConfig(
+        level=DEBUG,
         format="%(asctime)s | %(levelname)s | %(name)s | %(message)s")
-
 
     #document: str = random_ir(Bool, primitive_filter=lambda node_type: False if not issubclass(node_type, Bool) else True).example()
     #document: str = random_ir(Sequence, primitive_filter=lambda node_type: False if issubclass(node_type, Property) else True).example()

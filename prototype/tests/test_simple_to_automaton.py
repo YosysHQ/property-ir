@@ -1,4 +1,4 @@
-import logging
+from logging import getLogger
 from pathlib import Path
 
 from hypothesis import Verbosity, example, given, settings
@@ -39,8 +39,12 @@ from ir.primitives.simple_primitives import (
     SeqFusion,
     SeqRepeat,
 )
-
-from tests.evaluate import (
+from ir.semantic_evaluation.evaluate_automaton import (
+    FiniteMemoDict,
+    OmegaMemoDict,
+    evaluate_omega_automaton,
+)
+from ir.semantic_evaluation.evaluate_simple import (
     BoolMemoDict,
     FencepostPosition,
     MaybeBool,
@@ -49,14 +53,10 @@ from tests.evaluate import (
     Trace,
     evaluate_property,
 )
-from tests.evaluate_automaton import (
-    FiniteMemoDict,
-    OmegaMemoDict,
-    evaluate_omega_automaton,
-)
+
 from tests.strategies import random_ir_simple, random_ir_with_trace_simple
 
-logger = logging.getLogger(__name__)
+logger = getLogger(__name__)
 
 
 def check_simple_to_automaton(input_document_str: str, expected_output_document_str: str, only_preprocessing: bool = False, visualize: bool = False) -> IrContainer:

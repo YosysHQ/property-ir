@@ -3,13 +3,6 @@ from enum import Enum
 from logging import getLogger
 from typing import Literal
 
-from tests.evaluate import BoolMemoDict, FencepostPosition, MaybeBool, Trace
-from tests.evaluate_automaton import (
-    FiniteMemoDict,
-    OmegaMemoDict,
-    evaluate_omega_automaton,
-)
-
 from .base import IrContainer, PlaceholderNode, PropertyIrNode, RawSExpr, RawSExprList
 from .primitives.automata_primitives import *
 from .primitives.clocked_primitives import ClkPropProp, ClkSeqSeq
@@ -20,6 +13,17 @@ from .rewriting import (
     apply_rules,
     construct_rewritten_container,
     construct_rewritten_container_process_node,
+)
+from .semantic_evaluation.evaluate_automaton import (
+    FiniteMemoDict,
+    OmegaMemoDict,
+    evaluate_omega_automaton,
+)
+from .semantic_evaluation.evaluate_simple import (
+    BoolMemoDict,
+    FencepostPosition,
+    MaybeBool,
+    Trace,
 )
 
 logger = getLogger(__name__)

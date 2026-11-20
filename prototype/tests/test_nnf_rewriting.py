@@ -1,7 +1,6 @@
-import logging
+from logging import getLogger
 from pathlib import Path
 
-import pytest
 from hypothesis import example, given, settings
 from ir import IrContainer, nnf
 from ir.base import FiniteAutomaton, NodeId, OmegaAutomaton, RawSExprList
@@ -15,8 +14,7 @@ from ir.primitives.bool_primitives import (
     Xor,
 )
 from ir.primitives.simple_primitives import PropNot, PropRefuted
-
-from tests.evaluate import (
+from ir.semantic_evaluation.evaluate_simple import (
     BoolMemoDict,
     FencepostPosition,
     MaybeBool,
@@ -25,13 +23,15 @@ from tests.evaluate import (
     Trace,
     evaluate_property,
 )
+from pytest import raises
+
 from tests.helpers import (
     wrap_multiple_statements_in_document,
     wrap_statement_in_document,
 )
 from tests.strategies import random_ir_with_trace_simple
 
-logger = logging.getLogger(__name__)
+logger = getLogger(__name__)
 
 
 
@@ -144,7 +144,7 @@ def test_nnf_boolean_even_cycle():
 
 
 def test_nnf_boolean_odd_cycle():
-    with pytest.raises(ValueError, match='odd number of negations'):
+    with raises(ValueError, match='odd number of negations'):
         input_raw_sexpr: RawSExprList = ['declare-rec', ['declare', 'q', ['not', ['and', ['or', ['not', 'a'], 'b'], 'q']]]]
         expected_output_raw_sexpr: RawSExprList = ['declare-rec', ['declare', 'q', ['or', 'c', 'q']]] # arbitrary, since never tested
         root_node_statement1: RawSExprList = ['parse-sexpr', 'q']
@@ -387,7 +387,7 @@ def test_nnf_property_even_cycle():
 
 
 def test_nnf_property_odd_cycle():
-    with pytest.raises(ValueError, match='odd number of negations'):
+    with raises(ValueError, match='odd number of negations'):
         input_statement_str1: str = """(declare-rec (declare p
             (prop-not (prop-overlapped-implication
                 (seq-concat (seq-bool a) (seq-bool (constant true)))

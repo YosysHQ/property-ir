@@ -4,8 +4,7 @@ from logging import getLogger
 from hypothesis import Verbosity, given, settings
 from ir.base import IrContainer, NodeId, Property, RawSExpr
 from ir.parsing import parse_document, parse_raw_sexpr
-
-from tests.evaluate import (
+from ir.semantic_evaluation.evaluate_simple import (
     BoolMemoDict,
     FencepostPosition,
     MaybeBool,
@@ -16,6 +15,7 @@ from tests.evaluate import (
     evaluate_property,
     sequence_matches,
 )
+
 from tests.strategies import random_ir_with_trace_simple
 
 logger = getLogger(__name__)

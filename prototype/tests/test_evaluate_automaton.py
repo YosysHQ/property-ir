@@ -15,9 +15,7 @@ from ir.primitives.automata_primitives import (
     OmegaCallExStrong,
     OmegaCallExWeak,
 )
-
-from tests.evaluate import BoolMemoDict, FencepostPosition, MaybeBool, Trace
-from tests.evaluate_automaton import (
+from ir.semantic_evaluation.evaluate_automaton import (
     Configuration,
     FiniteMemoDict,
     OmegaMemoDict,
@@ -28,6 +26,13 @@ from tests.evaluate_automaton import (
     evaluate_omega_automaton,
     simplify_conf,
 )
+from ir.semantic_evaluation.evaluate_simple import (
+    BoolMemoDict,
+    FencepostPosition,
+    MaybeBool,
+    Trace,
+)
+
 from tests.strategies import random_ir_with_trace
 
 logger = getLogger(__name__)

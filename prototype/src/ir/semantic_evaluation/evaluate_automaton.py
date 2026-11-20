@@ -35,9 +35,7 @@ from ir.primitives.automata_primitives import (
     OmegaWeakConsumeAcc,
     OmegaWeakRead,
 )
-from ir.utils import has_productive_cycle
-
-from tests.evaluate import (
+from ir.semantic_evaluation.evaluate_simple import (
     BoolMemoDict,
     FencepostPosition,
     MaybeBool,
@@ -46,6 +44,7 @@ from tests.evaluate import (
     eval_or,
     evaluate_bool,
 )
+from ir.utils import has_productive_cycle
 
 logger = getLogger(__name__)
 
