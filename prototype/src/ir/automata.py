@@ -1,9 +1,15 @@
 from collections import deque
-from enum import Enum
 from logging import getLogger
 from typing import Literal
 
-from .base import IrContainer, PlaceholderNode, PropertyIrNode, RawSExpr, RawSExprList
+from .base import (
+    EvaluationResult,
+    IrContainer,
+    PlaceholderNode,
+    PropertyIrNode,
+    RawSExpr,
+    RawSExprList,
+)
 from .primitives.automata_primitives import *
 from .primitives.clocked_primitives import ClkPropProp, ClkSeqSeq
 from .primitives.simple_primitives import *
@@ -559,16 +565,6 @@ def unroll_aut_repeat_primitives(container: IrContainer):
 #----------------------+
 
 
-class EvaluationResult(Enum):
-    # fails: not weak satisfaction
-    FAILS = 'fails'
-    # pending: weak satisfaction & not neutral satisfaction
-    PENDING = 'pending'
-    # holds: neutral satisfaction & not strong satisfaction
-    HOLDS = 'holds'
-    # holds strongly: strong satisfaction
-    HOLDS_STRONGLY = 'holds_strongly'
-
 
 def compute_output_bits_omega(container: IrContainer):
     """For each omega-state of the automaton, compute whether the property
@@ -587,12 +583,10 @@ def compute_output_bits_omega(container: IrContainer):
 
     evaluation_results: dict[NodeId, EvaluationResult] = {}
 
-    # TODO question: what about finite automata output bits?
-    # there should be an output bit that is high in every step where the
-    # sequence matches (aut-acc in this step?)
-    # if the automaton is an omega-automaton, there are no fin-states left
-    # only if the automaton as a whole as a finite auotmaton
-    # the accepting states must be marked
+    # fails: not weak satisfaction
+    # pending: weak satisfaction & not neutral satisfaction
+    # holds: neutral satisfaction & not strong satisfaction
+    # holds strongly: strong satisfaction
 
     bool_results: BoolMemoDict = {}
     finite_results: FiniteMemoDict = {}
@@ -645,12 +639,5 @@ def compute_output_bits_omega(container: IrContainer):
         if current_repr not in evaluation_results:
             raise RuntimeError('Failed to compute output bits for node %s', container[current_id])
 
+    container.evaluation_results = evaluation_results
     return evaluation_results
-
-
-
-def compute_output_bits_finite(container: IrContainer):
-    # TODO
-
-    match_results: dict[NodeId, bool] = {}
-    return match_results

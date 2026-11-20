@@ -377,6 +377,19 @@ class NamedRecursiveDeclaration(Declaration):
 
 
 
+
+class EvaluationResult(Enum):
+    # fails: not weak satisfaction
+    FAILS = 'fails'
+    # pending: weak satisfaction & not neutral satisfaction
+    PENDING = 'pending'
+    # holds: neutral satisfaction & not strong satisfaction
+    HOLDS = 'holds'
+    # holds strongly: strong satisfaction
+    HOLDS_STRONGLY = 'holds_strongly'
+
+
+
 # @typechecked  # TODO doesn't seem to support add_node_by_kwargs signature
 class IrContainer:
 
@@ -396,6 +409,10 @@ class IrContainer:
     # this is computed by rewriting.precompute_node_info
     admits_empty_sink_nodes: dict[NodeId, bool] # ClkSeq type sink nodes might admit empty matches
 
+    # semantic evaluation results for omega-automaton states
+    # this is computed by automata.compute_output_bits_omega
+    evaluation_results: dict[NodeId, EvaluationResult] | None
+
     next_raw_node_id: int
 
     def __init__(self):
@@ -408,6 +425,7 @@ class IrContainer:
         self.inner_nodes = {}
         self.next_raw_node_id = 1
         self.admits_empty_sink_nodes = {}
+        self.evaluation_results = None
 
     def __eq__(self, other):
         """Two containers are only considered equivalent if they have the same types of nodes with the same node ids
@@ -1015,7 +1033,6 @@ class IrContainer:
         node_repr_id: NodeId = self.merged_nodes.find(node_id)
         self.nodes[node_repr_id] = value
 
-    # TODO this is not used, do we need it at all?
     def get_node_id_by_name(self, node_name: str):
         if node_name in self.node_names:
             node_id: NodeId = self.node_names[node_name]

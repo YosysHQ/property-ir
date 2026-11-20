@@ -16,85 +16,6 @@ logger = getLogger(__name__)
 
 
 
-def test_output_bits_finite():
-
-    doc_str: str = """(document
-        (declare-input a)
-        (declare-input b)
-
-        (declare aut1 (aut-true))
-        (declare aut2 (aut-false))
-        (declare aut3 (aut-consume a (aut-true) (aut-false)))
-        (declare aut4 (aut-consume b (aut-true) (aut-false)))
-        (declare aut5 (aut-acc (aut-false)))
-        (declare aut6 (aut-read a (aut-acc (aut-false)) (aut-false) ))
-        (declare aut7 (aut-read b (aut-acc (aut-false)) (aut-false) ))
-
-        (declare aut8 (aut-consume a (aut-consume b (aut-true) (aut-false)) (aut-false)))
-        (declare aut9 (aut-consume a (aut-consume b (aut-false) (aut-false)) (aut-false)))
-        (declare aut10 (aut-consume a (aut-consume b (aut-acc (aut-false)) (aut-false)) (aut-false)))
-
-        (declare aut11 (aut-consume a
-            (aut-consume b
-                (aut-consume b
-                    (aut-acc (aut-false))
-                    (aut-false))
-                (aut-false))
-            (aut-false))
-        )
-
-        (declare-rec (declare aut12
-            (aut-consume a
-                (aut-acc aut12)
-                (aut-false)
-            )
-        ))
-
-        (declare aut13 (aut-read a (aut-true) (aut-false) ))
-
-        (parse-sexpr aut1)
-        (parse-sexpr aut2)
-        (parse-sexpr aut3)
-        (parse-sexpr aut4)
-        (parse-sexpr aut5)
-        (parse-sexpr aut6)
-        (parse-sexpr aut7)
-        (parse-sexpr aut8)
-        (parse-sexpr aut9)
-        (parse-sexpr aut10)
-        (parse-sexpr aut11)
-        (parse-sexpr aut12)
-        (parse-sexpr aut13)
-
-    )"""
-
-    container: IrContainer = IrContainer()
-    parse_document(parse_raw_sexpr(doc_str), container)
-
-    #aut1: NodeId = container.get_node_id_by_name('aut1')
-    #aut2: NodeId = container.get_node_id_by_name('aut2')
-    #aut3: NodeId = container.get_node_id_by_name('aut3')
-    #aut4: NodeId = container.get_node_id_by_name('aut4')
-    #aut5: NodeId = container.get_node_id_by_name('aut5')
-    #aut6: NodeId = container.get_node_id_by_name('aut6')
-    #aut7: NodeId = container.get_node_id_by_name('aut7')
-
-    #aut8: NodeId = container.get_node_id_by_name('aut8')
-    #aut9: NodeId = container.get_node_id_by_name('aut9')
-    #aut10: NodeId = container.get_node_id_by_name('aut10')
-
-    #aut11: NodeId = container.get_node_id_by_name('aut11')
-    #aut12: NodeId = container.get_node_id_by_name('aut12')
-
-    #aut13: NodeId = container.get_node_id_by_name('aut13')
-
-    #evaluation_results: dict[NodeId, bool] = compute_output_bits_finite(container)
-
-    # TODO
-
-
-
-
 def test_output_bits_omega_finite_part_linear():
 
     doc_str: str = """(document
@@ -138,17 +59,18 @@ def test_output_bits_omega_finite_part_linear():
     omega9: NodeId = container.get_node_id_by_name('omega9')
     omega10: NodeId = container.get_node_id_by_name('omega10')
 
-    evaluation_results: dict[NodeId, EvaluationResult] = compute_output_bits_omega(container)
+    compute_output_bits_omega(container)
+    assert container.evaluation_results is not None
 
-    assert evaluation_results[omega1] == EvaluationResult.HOLDS_STRONGLY
-    assert evaluation_results[omega2] == EvaluationResult.FAILS
-    assert evaluation_results[omega3] == EvaluationResult.HOLDS
-    assert evaluation_results[omega4] == EvaluationResult.HOLDS
-    assert evaluation_results[omega5] == EvaluationResult.PENDING
-    assert evaluation_results[omega7] == EvaluationResult.HOLDS
-    assert evaluation_results[omega8] == EvaluationResult.FAILS
-    assert evaluation_results[omega9] == EvaluationResult.PENDING
-    assert evaluation_results[omega10] == EvaluationResult.PENDING
+    assert container.evaluation_results[omega1] == EvaluationResult.HOLDS_STRONGLY
+    assert container.evaluation_results[omega2] == EvaluationResult.FAILS
+    assert container.evaluation_results[omega3] == EvaluationResult.HOLDS
+    assert container.evaluation_results[omega4] == EvaluationResult.HOLDS
+    assert container.evaluation_results[omega5] == EvaluationResult.PENDING
+    assert container.evaluation_results[omega7] == EvaluationResult.HOLDS
+    assert container.evaluation_results[omega8] == EvaluationResult.FAILS
+    assert container.evaluation_results[omega9] == EvaluationResult.PENDING
+    assert container.evaluation_results[omega10] == EvaluationResult.PENDING
 
 
 
@@ -216,16 +138,17 @@ def test_output_bits_omega_infinite_suffix_cycle():
     or_strong1: NodeId = container.get_node_id_by_name('or_strong1')
     and_strong1: NodeId = container.get_node_id_by_name('and_strong1')
 
-    evaluation_results: dict[NodeId, EvaluationResult] = compute_output_bits_omega(container)
+    compute_output_bits_omega(container)
+    assert container.evaluation_results is not None
 
-    assert evaluation_results[omega1] == EvaluationResult.HOLDS
-    assert evaluation_results[omega2] == EvaluationResult.FAILS
-    assert evaluation_results[or1] == EvaluationResult.HOLDS
-    assert evaluation_results[and1] == EvaluationResult.FAILS
-    assert evaluation_results[omega1_strong] == EvaluationResult.PENDING
-    assert evaluation_results[omega2_strong] == EvaluationResult.FAILS
-    assert evaluation_results[or_strong1] == EvaluationResult.HOLDS
-    assert evaluation_results[and_strong1] == EvaluationResult.PENDING
+    assert container.evaluation_results[omega1] == EvaluationResult.HOLDS
+    assert container.evaluation_results[omega2] == EvaluationResult.FAILS
+    assert container.evaluation_results[or1] == EvaluationResult.HOLDS
+    assert container.evaluation_results[and1] == EvaluationResult.FAILS
+    assert container.evaluation_results[omega1_strong] == EvaluationResult.PENDING
+    assert container.evaluation_results[omega2_strong] == EvaluationResult.FAILS
+    assert container.evaluation_results[or_strong1] == EvaluationResult.HOLDS
+    assert container.evaluation_results[and_strong1] == EvaluationResult.PENDING
 
 
 def test_output_bits_omega_cycle_and_or():
@@ -304,13 +227,14 @@ def test_output_bits_omega_cycle_and_or():
     a_until_b_read_2: NodeId = container.get_node_id_by_name('a_until_b_read_2')
     b_until_always_a: NodeId = container.get_node_id_by_name('b_until_always_a')
 
-    evaluation_results: dict[NodeId, EvaluationResult] = compute_output_bits_omega(container)
+    compute_output_bits_omega(container)
+    assert container.evaluation_results is not None
 
-    assert evaluation_results[a_until_b] == EvaluationResult.HOLDS
-    assert evaluation_results[a_strong_until_with_b] == EvaluationResult.PENDING
-    assert evaluation_results[a_until_b_read] == EvaluationResult.HOLDS
-    assert evaluation_results[a_until_b_read_2] == EvaluationResult.HOLDS
-    assert evaluation_results[b_until_always_a] == EvaluationResult.HOLDS
+    assert container.evaluation_results[a_until_b] == EvaluationResult.HOLDS
+    assert container.evaluation_results[a_strong_until_with_b] == EvaluationResult.PENDING
+    assert container.evaluation_results[a_until_b_read] == EvaluationResult.HOLDS
+    assert container.evaluation_results[a_until_b_read_2] == EvaluationResult.HOLDS
+    assert container.evaluation_results[b_until_always_a] == EvaluationResult.HOLDS
 
 
 
@@ -355,10 +279,11 @@ def test_output_bits_omega_conflicting_obligations():
     start1: NodeId = container.get_node_id_by_name('start1')
     start6: NodeId = container.get_node_id_by_name('start6')
 
-    evaluation_results: dict[NodeId, EvaluationResult] = compute_output_bits_omega(container)
+    compute_output_bits_omega(container)
+    assert container.evaluation_results is not None
 
-    assert evaluation_results[start1] == EvaluationResult.FAILS
-    assert evaluation_results[start6] == EvaluationResult.HOLDS
+    assert container.evaluation_results[start1] == EvaluationResult.FAILS
+    assert container.evaluation_results[start6] == EvaluationResult.HOLDS
 
 
 
@@ -422,14 +347,15 @@ def test_output_bits_omega_accept_reject_on():
     omega_accept_cycle: NodeId = container.get_node_id_by_name('omega_accept_cycle')
     omega_reject_cycle: NodeId = container.get_node_id_by_name('omega_reject_cycle')
 
-    evaluation_results: dict[NodeId, EvaluationResult] = compute_output_bits_omega(container)
+    compute_output_bits_omega(container)
+    assert container.evaluation_results is not None
 
-    assert evaluation_results[omega_acc_until] == EvaluationResult.HOLDS
-    assert evaluation_results[omega_rej_until] == EvaluationResult.HOLDS
-    assert evaluation_results[omega_acc_until_nested] == EvaluationResult.HOLDS
-    assert evaluation_results[omega_rej_until_nested] == EvaluationResult.HOLDS
-    assert evaluation_results[omega_accept_cycle] == EvaluationResult.PENDING
-    assert evaluation_results[omega_reject_cycle] == EvaluationResult.PENDING
+    assert container.evaluation_results[omega_acc_until] == EvaluationResult.HOLDS
+    assert container.evaluation_results[omega_rej_until] == EvaluationResult.HOLDS
+    assert container.evaluation_results[omega_acc_until_nested] == EvaluationResult.HOLDS
+    assert container.evaluation_results[omega_rej_until_nested] == EvaluationResult.HOLDS
+    assert container.evaluation_results[omega_accept_cycle] == EvaluationResult.PENDING
+    assert container.evaluation_results[omega_reject_cycle] == EvaluationResult.PENDING
 
 
 @settings(verbosity=Verbosity.verbose, max_examples=100, deadline=500)
@@ -444,5 +370,6 @@ def test_output_bits_omega_random_no_error(doc):
     parse_document(parse_raw_sexpr(doc), container)
     root_node_id: NodeId = container.get_sink_nodes()[0]
     root_node_repr: NodeId = container.merged_nodes.find(root_node_id)
-    evaluation_results: dict[NodeId, EvaluationResult] = compute_output_bits_omega(container)
-    assert root_node_repr in evaluation_results
+    compute_output_bits_omega(container)
+    assert container.evaluation_results is not None
+    assert root_node_repr in container.evaluation_results
